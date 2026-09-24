@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
 
 :root {
   --background: #f7f5ff;
@@ -16,8 +17,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: 'Inter', Arial, Helvetica, sans-serif;
+  --font-mono: 'Courier New', Courier, monospace;
 }
 
 * {
@@ -33,7 +34,7 @@ body {
     radial-gradient(circle at top left, rgba(101, 87, 217, 0.14), transparent 27%),
     linear-gradient(180deg, #faf9ff 0%, #f0f4fb 100%);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
 }
 
 button,
