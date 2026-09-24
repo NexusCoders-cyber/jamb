@@ -67,8 +67,11 @@ export default function JambCentralPage() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20)
-      .then(({ data }) => setNotifications((data as Notification[]) ?? []))
-      .finally(() => setLoading(false));
+      .then(({ data }) => {
+        setNotifications((data as Notification[]) ?? []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [user, authLoading]);
 
   const unread = notifications.filter((n) => !n.read_at);
