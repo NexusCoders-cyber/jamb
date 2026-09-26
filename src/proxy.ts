@@ -19,6 +19,9 @@ const PUBLIC_BYPASS = ["/reset-password"];
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Never intercept API routes — they handle auth themselves
+  if (pathname.startsWith("/api/")) return NextResponse.next({ request });
+
   // Skip Next.js internal RSC / prefetch requests
   const isRSC =
     request.nextUrl.searchParams.has("_rsc") ||
@@ -78,6 +81,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$|api/).*)",
+    /*
+     * Match all paths EXCEPT:
+     * - _next/static, _next/image (Next.js internals)
+     * - favicon.ico and static asset extensions
+     * - /api/* routes (API routes never need auth proxy)
+     */
+    "/((?!_next/static|_next/image|favicon\\.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)",
   ],
 };
