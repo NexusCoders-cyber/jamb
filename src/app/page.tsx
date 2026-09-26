@@ -41,7 +41,12 @@ export default function Home() {
         data?.user?.email?.split("@")[0]?.replace(/[._-]/g, " ") ||
         "Candidate";
       localStorage.setItem("jamb_user", JSON.stringify({ email: data?.user?.email ?? email, fullName: safeName }));
-      router.push("/dashboard");
+
+      // Redirect to ?next= destination if present, otherwise dashboard
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next");
+      const destination = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      router.push(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");
     } finally {

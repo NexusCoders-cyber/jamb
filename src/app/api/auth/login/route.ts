@@ -34,5 +34,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unable to sign in right now. Please try again." }, { status: 401 });
   }
 
-  return NextResponse.json({ user: data.user, session: data.session });
+  return NextResponse.json({
+    user: { email: data.user.email, user_metadata: data.user.user_metadata },
+  });
 }

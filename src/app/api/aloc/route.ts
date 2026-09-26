@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { productCatalog } from "@/lib/catalog";
 import {
   ALOC_SUBJECTS,
@@ -21,12 +22,12 @@ export async function GET(request: Request) {
   const count = Number(searchParams.get("count") ?? 40);
   const apiKey = getApiKey();
 
-  // ── Health check ──────────────────────────────────────────────────────────
+  // ── Health check — public, no auth needed ─────────────────────────────────
   if (endpoint === "health") {
     return NextResponse.json({ ok: true, provider: "ALOC", timestamp: new Date().toISOString() });
   }
 
-  // ── Subjects list (served locally — ALOC has no subjects endpoint) ─────────
+  // ── Subjects list — public, no auth needed ────────────────────────────────
   if (endpoint === "subjects") {
     return NextResponse.json({
       ok: true,
@@ -36,7 +37,7 @@ export async function GET(request: Request) {
     });
   }
 
-  // ── Products (served locally, ALOC has no products endpoint) ──────────────
+  // ── Products — public, no auth needed ─────────────────────────────────────
   if (endpoint === "products") {
     return NextResponse.json({
       ok: true,
@@ -44,6 +45,13 @@ export async function GET(request: Request) {
       source: "local-fallback",
       data: productCatalog,
     });
+  }
+
+  // ── All question endpoints require an authenticated session ───────────────
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
   }
 
   // ── Questions — bulk (default) ─────────────────────────────────────────────
@@ -95,6 +103,13 @@ export async function GET(request: Request) {
 
 // ─── POST /api/aloc (passthrough for any direct ALOC call) ────────────────────
 export async function POST(request: Request) {
+  // Require authentication
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+  }
+
   const body = await request.json().catch(() => null);
   const endpoint = typeof body?.endpoint === "string" ? body.endpoint : "";
   const subject = typeof body?.subject === "string" ? body.subject : "";

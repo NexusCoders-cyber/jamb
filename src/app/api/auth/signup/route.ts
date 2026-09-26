@@ -48,5 +48,7 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ user: data.user, session: data.session });
+  return NextResponse.json({
+    user: { email: data.user?.email, user_metadata: data.user?.user_metadata },
+  });
 }

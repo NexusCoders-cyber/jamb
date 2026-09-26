@@ -40,7 +40,7 @@ function calcExpr(input: string): string | number {
 function ExamPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
 
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(["English Language", "Biology", "Chemistry", "Physics"]);
   const [selectedSubject, setSelectedSubject] = useState(searchParams.get("subject") ?? "English Language");
@@ -78,6 +78,9 @@ function ExamPageContent() {
 
   // Load questions from ALOC
   useEffect(() => {
+    // Wait for auth to resolve — question endpoints require a session
+    if (authLoading) return;
+
     const cached = questionCache.current.get(selectedSubject);
     if (cached) { startTransition(() => setQuestions(cached)); return; }
     let mounted = true;
@@ -96,7 +99,7 @@ function ExamPageContent() {
       .catch(() => { if (mounted) setQError("Network error — showing sample questions."); })
       .finally(() => { if (mounted) setLoadingQ(false); });
     return () => { mounted = false; };
-  }, [selectedSubject]);
+  }, [selectedSubject, authLoading]);
 
   // Create attempt on first real question load
   useEffect(() => {
@@ -114,7 +117,11 @@ function ExamPageContent() {
     return () => clearInterval(id);
   }, [timeLeft]);
 
-  useEffect(() => { if (timeLeft === 0) void doSubmit(); }, [timeLeft]); // eslint-disable-line
+  const doSubmitRef = useRef<() => Promise<void>>();
+
+  useEffect(() => {
+    if (timeLeft === 0) void doSubmitRef.current?.();
+  }, [timeLeft]);
 
   async function doSubmit() {
     if (submitting) return;
@@ -134,6 +141,10 @@ function ExamPageContent() {
     } catch { /* ignore DB errors, still navigate */ }
     router.push(`/results?score=${correct}&total=${questionTotal}&subject=${encodeURIComponent(selectedSubject)}&answered=${answeredCount}&wrong=${Math.max(answeredCount - correct, 0)}${attemptIdRef.current ? `&attemptId=${attemptIdRef.current}` : ""}`);
   }
+
+  // Keep the ref pointing to the latest closure so the timer effect always
+  // calls the version of doSubmit that has up-to-date state.
+  doSubmitRef.current = doSubmit;
 
   function toggleSubject(name: string) {
     if (name === "English Language") return;

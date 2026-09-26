@@ -30,7 +30,7 @@ const FALLBACK: Q[] = [
 ];
 
 export default function DailyChallengePage() {
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
   const todaySubject = getTodaySubject();
   const todayLabel = new Intl.DateTimeFormat("en-NG", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
 
@@ -44,6 +44,11 @@ export default function DailyChallengePage() {
   const [showExpl, setShowExpl] = useState(false);
 
   useEffect(() => {
+    // Wait for auth to resolve before calling the gated /api/aloc endpoint
+    if (authLoading) return;
+    // Guests fall back to sample questions immediately
+    if (!user) { setQuestions(FALLBACK); setLoading(false); return; }
+
     fetch(`/api/aloc?endpoint=questions-count&subject=${encodeURIComponent(todaySubject)}&count=${DAILY_COUNT}&type=utme`)
       .then((r) => r.json())
       .then((res: { ok: boolean; data?: Q[] }) => {
@@ -53,7 +58,7 @@ export default function DailyChallengePage() {
       })
       .catch(() => setQuestions(FALLBACK))
       .finally(() => setLoading(false));
-  }, [todaySubject]);
+  }, [authLoading, user, todaySubject]);
 
   const q = questions[current];
   const correct = Object.entries(answers).filter(([i, a]) => questions[Number(i)]?.answer === a).length;

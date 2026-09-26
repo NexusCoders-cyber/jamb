@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "questions.aloc.com.ng" },
+      { protocol: "https", hostname: "res.cloudinary.com" },
     ],
   },
 
@@ -26,7 +27,7 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "img-src 'self' data: blob: https://*.supabase.co",
+              "img-src 'self' data: blob: https://*.supabase.co https://questions.aloc.com.ng https://res.cloudinary.com",
               "connect-src 'self' https://*.supabase.co https://api.paystack.co https://questions.aloc.com.ng wss://*.supabase.co",
               "frame-ancestors 'none'",
             ].join("; "),

@@ -5,8 +5,8 @@ import { useEffect, useState, startTransition } from "react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getProfile, getUserAttempts } from "@/lib/queries";
-import type { ExamAttempt } from "@/lib/queries";
+import { getProfile, getUserAttempts, getSubjectStats } from "@/lib/queries";
+import type { ExamAttempt, SubjectStats } from "@/lib/queries";
 
 const navigation = [
   { label: "Home", href: "/dashboard", active: true },
@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [products, setProducts] = useState<Product[]>(productCatalog);
   const [productSource, setProductSource] = useState("local-fallback");
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
+  const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
   const [todayLabel] = useState(() =>
@@ -60,8 +61,8 @@ export default function DashboardPage() {
     }
 
     const supabase = createSupabaseBrowserClient();
-    Promise.all([getProfile(supabase, user.id), getUserAttempts(supabase, user.id, 20)])
-      .then(([profile, userAttempts]) => {
+    Promise.all([getProfile(supabase, user.id), getUserAttempts(supabase, user.id, 20), getSubjectStats(supabase, user.id)])
+      .then(([profile, userAttempts, stats]) => {
         if (profile) {
           startTransition(() => {
             setUserName(profile.full_name || user.email?.split("@")[0] || "Student");
@@ -69,7 +70,10 @@ export default function DashboardPage() {
             setStreakDays(profile.streak_days);
           });
         }
-        startTransition(() => setAttempts(userAttempts));
+        startTransition(() => {
+          setAttempts(userAttempts);
+          setSubjectStats(stats);
+        });
       })
       .finally(() => setDataLoading(false));
   }, [user, authLoading]);
@@ -108,12 +112,18 @@ export default function DashboardPage() {
     .filter((a) => a.question_count > 0 && (a.score / a.question_count) * 100 < 60)
     .slice(0, 3);
 
-  // Per-subject colour map for progress bars (top 4 unique subjects from attempts)
-  const subjectProgressItems = ["Use of English", "Biology", "Chemistry", "Physics"].map((name, i) => ({
-    name,
-    progress: Math.max(0, overallAccuracy - i * 8),
-    color: SUBJECT_COLORS[i],
-  }));
+  // Per-subject colour map — derived from real stats, capped at 4 subjects
+  const subjectProgressItems = subjectStats.length > 0
+    ? subjectStats.slice(0, 4).map((s, i) => ({
+        name: s.subjectName,
+        progress: s.accuracy,
+        color: SUBJECT_COLORS[i % SUBJECT_COLORS.length],
+      }))
+    : (["Use of English", "Biology", "Chemistry", "Physics"] as const).map((name, i) => ({
+        name,
+        progress: 0,
+        color: SUBJECT_COLORS[i],
+      }));
 
   const initials = userName.slice(0, 1).toUpperCase();
 

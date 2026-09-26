@@ -63,7 +63,7 @@ create table if not exists public.exam_attempts (
 create table if not exists public.attempt_answers (
   id uuid primary key default gen_random_uuid(),
   attempt_id uuid not null references public.exam_attempts(id) on delete cascade,
-  question_id uuid not null,  -- text id from ALOC, not a FK to questions table
+  question_id text not null,  -- ALOC question ID (string, not a UUID); no FK to questions table
   selected_option integer,
   is_correct boolean,
   marked_for_review boolean not null default false,
@@ -166,6 +166,14 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ── Indexes ───────────────────────────────────────────────────────────────────
+-- Core query patterns: filter attempts by user, answers by attempt, notifications by user.
+create index if not exists idx_exam_attempts_user_id      on public.exam_attempts(user_id);
+create index if not exists idx_exam_attempts_status       on public.exam_attempts(status);
+create index if not exists idx_attempt_answers_attempt_id on public.attempt_answers(attempt_id);
+create index if not exists idx_notifications_user_id      on public.notifications(user_id);
+create index if not exists idx_payments_user_id           on public.payments(user_id);
 
 -- ── Backfill: create profiles for any existing auth users that don't have one ──
 insert into public.profiles (id, full_name, email)
