@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import AuthGuard from "@/components/AuthGuard";
 import { getSubjectStats, getScoreHistory, getUserAttempts } from "@/lib/queries";
 import type { SubjectStats } from "@/lib/queries";
 
@@ -64,24 +66,10 @@ export default function AnalyticsPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Performance</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Analytics</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Dashboard
-          </Link>
-        </div>
-
-        {!user && !authLoading ? (
-          <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
-            <p className="font-bold text-slate-700">Sign in to see your analytics</p>
-            <Link href="/" className="mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Sign in</Link>
-          </div>
-        ) : (
+    <AppShell title="Analytics">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-5 text-2xl font-black text-slate-900 lg:text-3xl">Analytics</h1>
+        <AuthGuard user={user} loading={authLoading}>
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {analyticsCards.map((item) => (
@@ -151,8 +139,8 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </>
-        )}
+        </AuthGuard>
       </div>
-    </main>
+    </AppShell>
   );
 }

@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
+import AppShell from "@/components/AppShell";
 
 type ExamQuestion = { id: string; prompt: string; options: string[]; answer: number; explanation: string | null };
 type SubjectItem = { name: string; slug: string; count: number };
@@ -37,10 +38,155 @@ function calcExpr(input: string): string | number {
   return Number.isFinite(r) ? r : "-";
 }
 
+// ─── Inline review screen shown after submission ──────────────────────────────
+type ReviewEntry = { question: ExamQuestion; selectedIdx: number | null; questionIdx: number };
+
+function InlineReview({
+  entries,
+  score,
+  total,
+  subject,
+  onRetry,
+}: {
+  entries: ReviewEntry[];
+  score: number;
+  total: number;
+  subject: string;
+  onRetry: () => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "wrong" | "correct">("all");
+  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
+  const practiceScore = Math.round((score / total) * 400);
+
+  const visible = entries.filter((e) => {
+    if (filter === "wrong") return e.selectedIdx !== e.question.answer;
+    if (filter === "correct") return e.selectedIdx === e.question.answer;
+    return true;
+  });
+
+  return (
+    <AppShell title="Results" back="/practice">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+        {/* Score banner */}
+        <div className="mb-6 rounded-[28px] bg-gradient-to-br from-emerald-800 to-emerald-600 p-6 text-white shadow-xl">
+          <p className="text-xs uppercase tracking-[0.22em] text-emerald-100">Results · {subject}</p>
+          <div className="mt-3 flex items-end gap-4">
+            <h1 className="text-5xl font-black">{practiceScore}<span className="ml-1 text-2xl font-semibold text-emerald-200">/400</span></h1>
+            <div className="pb-1">
+              <p className="text-lg font-bold">{score} / {total} correct · {pct}%</p>
+              <p className="text-sm text-emerald-100">{pct >= 70 ? "Great performance! 🎉" : pct >= 50 ? "Keep pushing!" : "More practice needed 💪"}</p>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            {[
+              { label: "Correct", value: score, color: "bg-emerald-700/60" },
+              { label: "Wrong", value: total - score, color: "bg-rose-500/40" },
+              { label: "Skipped", value: entries.filter((e) => e.selectedIdx === null).length, color: "bg-slate-600/40" },
+            ].map((s) => (
+              <div key={s.label} className={`rounded-2xl ${s.color} p-3 text-center ring-1 ring-white/10`}>
+                <p className="text-2xl font-black">{s.value}</p>
+                <p className="text-xs uppercase tracking-[0.14em] text-emerald-100">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <button type="button" onClick={onRetry}
+              className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-emerald-800 hover:bg-emerald-50">
+              Try again
+            </button>
+            <Link href="/practice" className="rounded-full border border-white/30 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/10">
+              New session
+            </Link>
+            <Link href="/dashboard" className="rounded-full border border-white/30 px-5 py-2.5 text-sm font-bold text-white hover:bg-white/10">
+              Dashboard
+            </Link>
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="mb-4 flex gap-2">
+          {(["all", "wrong", "correct"] as const).map((f) => (
+            <button key={f} type="button" onClick={() => setFilter(f)}
+              className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${filter === f
+                ? f === "wrong" ? "bg-rose-600 text-white" : f === "correct" ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"
+                : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-slate-300"}`}>
+              {f === "all" ? `All (${entries.length})` : f === "wrong" ? `Wrong (${entries.filter((e) => e.selectedIdx !== e.question.answer).length})` : `Correct (${score})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Question list */}
+        <div className="space-y-4">
+          {visible.map((entry) => {
+            const { question: q, selectedIdx, questionIdx } = entry;
+            const isCorrect = selectedIdx === q.answer;
+            const isSkipped = selectedIdx === null;
+
+            return (
+              <div key={q.id}
+                className={`rounded-[24px] border p-5 ${isCorrect ? "border-emerald-200 bg-emerald-50" : isSkipped ? "border-slate-200 bg-white" : "border-rose-200 bg-rose-50"}`}>
+                {/* Question header */}
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
+                    Q{questionIdx + 1} · {isCorrect ? "✓ Correct" : isSkipped ? "Skipped" : "✗ Wrong"}
+                  </span>
+                </div>
+                <p className="text-base font-semibold leading-7 text-slate-800">{q.prompt}</p>
+
+                {/* Options */}
+                <div className="mt-4 grid gap-2">
+                  {q.options.map((opt, idx) => {
+                    const isCorrectOpt = idx === q.answer;
+                    const isYours = idx === selectedIdx;
+                    return (
+                      <div key={idx}
+                        className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium
+                          ${isCorrectOpt ? "border-emerald-400 bg-emerald-100 text-emerald-900"
+                            : isYours && !isCorrectOpt ? "border-rose-300 bg-rose-100 text-rose-800"
+                            : "border-slate-200 bg-white text-slate-600"}`}>
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black
+                          ${isCorrectOpt ? "bg-emerald-500 text-white"
+                            : isYours && !isCorrectOpt ? "bg-rose-400 text-white"
+                            : "bg-slate-100 text-slate-500"}`}>
+                          {String.fromCharCode(65 + idx)}
+                        </span>
+                        {opt}
+                        {isCorrectOpt && <span className="ml-auto text-xs font-bold text-emerald-700">✓ Correct answer</span>}
+                        {isYours && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">Your answer</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Explanation */}
+                {q.explanation && (
+                  <div className="mt-4 rounded-xl bg-white/80 p-4 ring-1 ring-emerald-200">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
+                    <p className="mt-1.5 text-sm leading-6 text-slate-700">{q.explanation}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {visible.length === 0 && (
+          <p className="py-10 text-center text-sm text-slate-400">No questions in this filter.</p>
+        )}
+      </div>
+    </AppShell>
+  );
+}
+
+// ─── Main exam content ────────────────────────────────────────────────────────
 function ExamPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
+
+  // mode=study → show answer immediately; mode=exam (default) → standard CBT
+  const mode = searchParams.get("mode") === "study" ? "study" : "exam";
+  const isStudyMode = mode === "study";
 
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(["English Language", "Biology", "Chemistry", "Physics"]);
   const [selectedSubject, setSelectedSubject] = useState(searchParams.get("subject") ?? "English Language");
@@ -56,14 +202,20 @@ function ExamPageContent() {
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
-  const [timeLeft, setTimeLeft] = useState(timerPref === "No timer" ? null : 120 * 60);
+  const [revealedInStudy, setRevealedInStudy] = useState<Set<number>>(new Set());
+  const [timeLeft, setTimeLeft] = useState(timerPref === "No timer" || isStudyMode ? null : 120 * 60);
   const [showCalc, setShowCalc] = useState(false);
   const [calcVal, setCalcVal] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const attemptIdRef = useRef<string | null>(null);
 
+  // Inline review state (replaces navigation to /results for practice/study modes)
+  const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
+  const [reviewScore, setReviewScore] = useState(0);
+
   const q = questions[currentQuestion % questions.length];
   const answeredCount = Object.keys(answers).length;
+  const isRevealed = isStudyMode && revealedInStudy.has(currentQuestion);
 
   // Restore saved subjects
   useEffect(() => {
@@ -73,14 +225,12 @@ function ExamPageContent() {
         const p = JSON.parse(s) as { subjects?: string[] };
         if (Array.isArray(p.subjects) && p.subjects.length === 4) startTransition(() => setSelectedSubjects(p.subjects!));
       }
-    } catch { /* ignore */ }
+    } catch (_e) { /* ignore */ }
   }, []);
 
   // Load questions from ALOC
   useEffect(() => {
-    // Wait for auth to resolve — question endpoints require a session
     if (authLoading) return;
-
     const cached = questionCache.current.get(selectedSubject);
     if (cached) { startTransition(() => setQuestions(cached)); return; }
     let mounted = true;
@@ -107,7 +257,7 @@ function ExamPageContent() {
     try {
       const supabase = createSupabaseBrowserClient();
       createAttempt(supabase, user.id, null, questionTotal).then((a) => { if (a) attemptIdRef.current = a.id; });
-    } catch { /* env not set */ }
+    } catch (_e) { /* env not set */ }
   }, [user, questions, questionTotal]);
 
   // Timer countdown
@@ -117,8 +267,7 @@ function ExamPageContent() {
     return () => clearInterval(id);
   }, [timeLeft]);
 
-  const doSubmitRef = useRef<() => Promise<void>>();
-
+  const doSubmitRef = useRef<(() => Promise<void>) | undefined>(undefined);
   useEffect(() => {
     if (timeLeft === 0) void doSubmitRef.current?.();
   }, [timeLeft]);
@@ -126,25 +275,56 @@ function ExamPageContent() {
   async function doSubmit() {
     if (submitting) return;
     setSubmitting(true);
-    const correct = Object.entries(answers).filter(([idx, ans]) => questions[Number(idx) % questions.length].answer === ans).length;
+
+    // Build review entries from all questions answered so far
+    const entries: ReviewEntry[] = questions.slice(0, questionTotal).map((qn, idx) => ({
+      question: qn,
+      selectedIdx: answers[idx] ?? null,
+      questionIdx: idx,
+    }));
+    const correct = entries.filter((e) => e.selectedIdx === e.question.answer).length;
+
     try {
       if (user && attemptIdRef.current) {
         const supabase = createSupabaseBrowserClient();
-        const rows = Object.entries(answers).map(([idx, sel]) => {
-          const qn = questions[Number(idx) % questions.length];
-          return { question_id: qn.id, selected_option: sel, is_correct: qn.answer === sel, marked_for_review: marked.has(Number(idx)) };
-        });
+        const rows = entries
+          .filter((e) => e.selectedIdx !== null)
+          .map((e) => ({
+            question_id: e.question.id,
+            selected_option: e.selectedIdx as number,
+            is_correct: e.question.answer === e.selectedIdx,
+            marked_for_review: marked.has(e.questionIdx),
+          }));
         await saveAnswers(supabase, attemptIdRef.current, rows);
         await submitAttempt(supabase, attemptIdRef.current, correct);
         await updateStreak(supabase, user.id);
       }
-    } catch { /* ignore DB errors, still navigate */ }
-    router.push(`/results?score=${correct}&total=${questionTotal}&subject=${encodeURIComponent(selectedSubject)}&answered=${answeredCount}&wrong=${Math.max(answeredCount - correct, 0)}${attemptIdRef.current ? `&attemptId=${attemptIdRef.current}` : ""}`);
+    } catch (_e) { /* ignore DB errors, still show review */ }
+
+    // For exam mode: navigate to /results. For study/practice: show inline review.
+    if (mode === "exam" && !isStudyMode) {
+      router.push(
+        `/results?score=${correct}&total=${questionTotal}&subject=${encodeURIComponent(selectedSubject)}&answered=${answeredCount}&wrong=${Math.max(answeredCount - correct, 0)}${attemptIdRef.current ? `&attemptId=${attemptIdRef.current}` : ""}`,
+      );
+    } else {
+      setReviewScore(correct);
+      setReviewEntries(entries);
+      setSubmitting(false);
+    }
   }
 
-  // Keep the ref pointing to the latest closure so the timer effect always
-  // calls the version of doSubmit that has up-to-date state.
   doSubmitRef.current = doSubmit;
+
+  function handleRetry() {
+    setReviewEntries(null);
+    setAnswers({});
+    setMarked(new Set());
+    setSkipped(new Set());
+    setRevealedInStudy(new Set());
+    setCurrentQuestion(0);
+    setSubmitting(false);
+    attemptIdRef.current = null;
+  }
 
   function toggleSubject(name: string) {
     if (name === "English Language") return;
@@ -153,129 +333,219 @@ function ExamPageContent() {
   function chooseAnswer(idx: number) {
     setAnswers((p) => ({ ...p, [currentQuestion]: idx }));
     setSkipped((p) => { const n = new Set(p); n.delete(currentQuestion); return n; });
+    // In study mode, reveal immediately after choosing
+    if (isStudyMode) {
+      setRevealedInStudy((p) => new Set(p).add(currentQuestion));
+    }
   }
   function moveNext() {
-    if (answers[currentQuestion] === undefined) setSkipped((p) => new Set(p).add(currentQuestion));
+    if (!isStudyMode && answers[currentQuestion] === undefined) setSkipped((p) => new Set(p).add(currentQuestion));
     setCurrentQuestion((v) => Math.min(v + 1, questionTotal - 1));
   }
   function toggleMark() {
     setMarked((p) => { const n = new Set(p); n.has(currentQuestion) ? n.delete(currentQuestion) : n.add(currentQuestion); return n; });
   }
 
-  const fmt = timeLeft === null ? "No timer"
+  const fmt = timeLeft === null ? (isStudyMode ? "Study mode" : "No timer")
     : `${String(Math.floor(timeLeft / 3600)).padStart(2, "0")}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
 
+  // ── Show inline review after submission ──────────────────────────────────
+  if (reviewEntries) {
+    return (
+      <InlineReview
+        entries={reviewEntries}
+        score={reviewScore}
+        total={questionTotal}
+        subject={selectedSubject}
+        onRetry={handleRetry}
+      />
+    );
+  }
+
   return (
-    <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
+    <AppShell hideTopBar>
+      <main className="px-2 py-4 sm:px-4 lg:px-6">
       <div className="mx-auto max-w-7xl">
         <header className="mb-6 flex items-center justify-between rounded-[24px] border border-slate-200 bg-white/90 p-4 shadow-sm">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Full exam simulation</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              {isStudyMode ? "Study mode — answers shown immediately" : "Full exam simulation"}
+            </p>
             <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Orbit CBT</h1>
           </div>
           <div className="flex items-center gap-2">
+            {isStudyMode && (
+              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700 ring-1 ring-violet-200">Study</span>
+            )}
             {qError && <span className="hidden rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200 sm:inline-flex">Sample Qs</span>}
-            <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700 ring-1 ring-emerald-100">{fmt}</div>
+            <div className={`rounded-full px-3 py-1 text-sm font-bold ring-1 ${isStudyMode ? "bg-violet-50 text-violet-700 ring-violet-100" : "bg-emerald-50 text-emerald-700 ring-emerald-100"}`}>{fmt}</div>
           </div>
         </header>
 
-        {/* All 17 ALOC subjects */}
-        <section className="mb-6 rounded-[28px] bg-violet-50 p-5 ring-1 ring-violet-100">
-          <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Choose your subjects</p>
-              <h2 className="mt-1 text-xl font-black text-slate-900">English + three subjects</h2>
+        {/* Subject picker — only shown in exam mode */}
+        {!isStudyMode && (
+          <section className="mb-6 rounded-[28px] bg-violet-50 p-5 ring-1 ring-violet-100">
+            <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Choose your subjects</p>
+                <h2 className="mt-1 text-xl font-black text-slate-900">English + three subjects</h2>
+              </div>
+              <span className="text-xs font-bold text-slate-600">{selectedSubjects.length - 1} of 3 selected</span>
             </div>
-            <span className="text-xs font-bold text-slate-600">{selectedSubjects.length - 1} of 3 selected</span>
-          </div>
-          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {ALL_SUBJECTS.map((s) => (
-              <button key={s.name} type="button" onClick={() => toggleSubject(s.name)}
-                className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${selectedSubjects.includes(s.name) ? "border-violet-400 bg-white text-violet-900" : "border-transparent bg-white/60 text-slate-600 hover:border-violet-200 hover:bg-white"}`}>
-                <span className="truncate">{s.name}</span>
-                {s.name === "English Language" && <span className="ml-1 shrink-0 text-[9px] text-violet-400">Req</span>}
-              </button>
-            ))}
-          </div>
-        </section>
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {ALL_SUBJECTS.map((s) => (
+                <button key={s.name} type="button" onClick={() => toggleSubject(s.name)}
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${selectedSubjects.includes(s.name) ? "border-violet-400 bg-white text-violet-900" : "border-transparent bg-white/60 text-slate-600 hover:border-violet-200 hover:bg-white"}`}>
+                  <span className="truncate">{s.name}</span>
+                  {s.name === "English Language" && <span className="ml-1 shrink-0 text-[9px] text-violet-400">Req</span>}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="grid gap-6 xl:grid-cols-[1.7fr_0.7fr]">
           <section className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">{currentQuestion + 1}</span>
+                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isStudyMode ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{currentQuestion + 1}</span>
                 <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
                   Q {currentQuestion + 1} / {questionTotal}{loadingQ ? " · Loading…" : ""}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">{selectedSubject}</div>
-                <button type="button" onClick={() => setShowCalc((v) => !v)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">Calc</button>
+                <div className={`rounded-full px-3 py-1 text-xs font-bold ${isStudyMode ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{selectedSubject}</div>
+                {!isStudyMode && (
+                  <button type="button" onClick={() => setShowCalc((v) => !v)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">Calc</button>
+                )}
               </div>
             </div>
 
-            <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
+            <div className={`rounded-[24px] p-5 ring-1 ${isStudyMode ? "bg-violet-50 ring-violet-100" : "bg-slate-50 ring-slate-200"}`}>
               <p className="text-lg leading-8 text-slate-800">{q.prompt}</p>
             </div>
 
             <div className="mt-6 grid gap-3">
-              {q.options.map((opt, idx) => (
-                <button key={`${q.id}-${idx}`} type="button" onClick={() => chooseAnswer(idx)}
-                  className={`flex items-center rounded-2xl border p-4 text-left text-sm font-medium transition ${answers[currentQuestion] === idx ? "border-emerald-500 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50"}`}>
-                  <span className="mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-bold">{String.fromCharCode(65 + idx)}</span>
-                  {String.fromCharCode(65 + idx)}. {opt}
-                </button>
-              ))}
+              {q.options.map((opt, idx) => {
+                const isSelected = answers[currentQuestion] === idx;
+                const isCorrectOpt = idx === q.answer;
+                const showResult = isStudyMode && isRevealed;
+
+                let cls = "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50";
+                if (showResult && isCorrectOpt) cls = "border-emerald-500 bg-emerald-50 text-emerald-900";
+                else if (showResult && isSelected && !isCorrectOpt) cls = "border-rose-400 bg-rose-50 text-rose-800";
+                else if (!showResult && isSelected) cls = "border-emerald-500 bg-emerald-50 text-emerald-900";
+
+                return (
+                  <button key={`${q.id}-${idx}`} type="button"
+                    onClick={() => !isRevealed && chooseAnswer(idx)}
+                    disabled={isStudyMode && isRevealed}
+                    className={`flex items-center rounded-2xl border p-4 text-left text-sm font-medium transition ${cls}`}>
+                    <span className={`mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold
+                      ${showResult && isCorrectOpt ? "bg-emerald-500 text-white"
+                        : showResult && isSelected && !isCorrectOpt ? "bg-rose-400 text-white"
+                        : "bg-slate-100 text-slate-600"}`}>
+                      {String.fromCharCode(65 + idx)}
+                    </span>
+                    {String.fromCharCode(65 + idx)}. {opt}
+                    {showResult && isCorrectOpt && <span className="ml-auto text-xs font-bold text-emerald-700">✓ Correct</span>}
+                    {showResult && isSelected && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">✗ Wrong</span>}
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Study mode explanation block */}
+            {isStudyMode && isRevealed && q.explanation && (
+              <div className="mt-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
+                <p className="mt-2 text-sm leading-6 text-emerald-900">{q.explanation}</p>
+              </div>
+            )}
+            {isStudyMode && isRevealed && !q.explanation && (
+              <p className="mt-4 text-xs text-slate-400">No explanation available for this question.</p>
+            )}
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
               <div className="flex gap-3">
-                <button type="button" disabled={currentQuestion === 0} onClick={() => setCurrentQuestion((v) => v - 1)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Prev</button>
-                <button type="button" onClick={toggleMark} className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${marked.has(currentQuestion) ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
-                  {marked.has(currentQuestion) ? "Marked ★" : "Mark"}
-                </button>
+                <button type="button" disabled={currentQuestion === 0} onClick={() => setCurrentQuestion((v) => v - 1)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Prev</button>
+                {!isStudyMode && (
+                  <button type="button" onClick={toggleMark}
+                    className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${marked.has(currentQuestion) ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
+                    {marked.has(currentQuestion) ? "Marked ★" : "Mark"}
+                  </button>
+                )}
               </div>
-              <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1} className="rounded-2xl bg-emerald-700 px-6 py-3 text-sm font-bold text-white disabled:opacity-40">Next</button>
+              <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
+                className={`rounded-2xl px-6 py-3 text-sm font-bold text-white disabled:opacity-40 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
+                {isStudyMode && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
+              </button>
             </div>
           </section>
 
           <aside className="space-y-5">
-            {/* Subject switcher */}
-            <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-base font-black text-slate-900">Subjects</h3>
-                <span className="text-xs font-semibold text-slate-500">{answeredCount} answered</span>
+            {/* Subject switcher — study mode only */}
+            {isStudyMode ? (
+              <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
+                <h3 className="mb-3 text-base font-black text-slate-900">Subject</h3>
+                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 200 }}>
+                  {ALL_SUBJECTS.map((s) => (
+                    <button key={s.name} type="button" onClick={() => { setSelectedSubject(s.name); setCurrentQuestion(0); setAnswers({}); setRevealedInStudy(new Set()); }}
+                      className={`flex w-full items-center justify-between rounded-2xl p-3 text-left text-xs transition ${s.name === selectedSubject ? "bg-violet-50 ring-1 ring-violet-200" : "bg-slate-50 hover:bg-slate-100"}`}>
+                      <span className="font-semibold text-slate-800">{s.name}</span>
+                      {s.name === selectedSubject && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">Active</span>}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 260 }}>
-                {ALL_SUBJECTS.map((s) => (
-                  <button key={s.name} type="button" onClick={() => setSelectedSubject(s.name)}
-                    className={`flex w-full items-center justify-between rounded-2xl p-3 text-left text-xs transition ${s.name === selectedSubject ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-slate-50 hover:bg-slate-100"}`}>
-                    <div>
-                      <p className="font-semibold text-slate-800">{s.name}</p>
-                      <p className="text-slate-400">{s.count} questions</p>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.name === selectedSubject ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                      {s.name === selectedSubject ? "Active" : "Ready"}
-                    </span>
-                  </button>
-                ))}
+            ) : (
+              <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-base font-black text-slate-900">Subjects</h3>
+                  <span className="text-xs font-semibold text-slate-500">{answeredCount} answered</span>
+                </div>
+                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 260 }}>
+                  {ALL_SUBJECTS.map((s) => (
+                    <button key={s.name} type="button" onClick={() => setSelectedSubject(s.name)}
+                      className={`flex w-full items-center justify-between rounded-2xl p-3 text-left text-xs transition ${s.name === selectedSubject ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-slate-50 hover:bg-slate-100"}`}>
+                      <div>
+                        <p className="font-semibold text-slate-800">{s.name}</p>
+                        <p className="text-slate-400">{s.count} questions</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.name === selectedSubject ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
+                        {s.name === selectedSubject ? "Active" : "Ready"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Navigator */}
             <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
               <h3 className="mb-4 text-base font-black text-slate-900">Navigator</h3>
               <div className="grid grid-cols-5 gap-1.5">
-                {Array.from({ length: Math.min(questionTotal, 60) }, (_, i) => (
-                  <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
-                    className={`flex h-9 items-center justify-center rounded-xl text-xs font-bold ${i === currentQuestion ? "bg-emerald-700 text-white" : skipped.has(i) ? "bg-rose-100 text-rose-700" : marked.has(i) ? "bg-amber-100 text-amber-800" : answers[i] !== undefined ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>{i + 1}</button>
-                ))}
+                {Array.from({ length: Math.min(questionTotal, 60) }, (_, i) => {
+                  let btn = "bg-slate-100 text-slate-700";
+                  if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
+                  else if (isStudyMode && revealedInStudy.has(i)) {
+                    btn = answers[i] === questions[i % questions.length]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+                  } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
+                  else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
+                  else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
+                  return (
+                    <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
+                      className={`flex h-9 items-center justify-center rounded-xl text-xs font-bold ${btn}`}>{i + 1}</button>
+                  );
+                })}
               </div>
               {questionTotal > 60 && <p className="mt-2 text-xs text-slate-400">Showing first 60 of {questionTotal}</p>}
             </div>
 
-            <button type="button" onClick={doSubmit} disabled={submitting} className="flex h-12 w-full items-center justify-center rounded-2xl bg-rose-500 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-60">
-              {submitting ? "Submitting…" : "Submit Exam"}
+            <button type="button" onClick={doSubmit} disabled={submitting}
+              className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
+              {submitting ? "Saving…" : isStudyMode ? "Finish & Review" : "Submit Exam"}
             </button>
             <Link href="/dashboard" className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
@@ -289,13 +559,14 @@ function ExamPageContent() {
           </aside>
         </div>
       </div>
-    </main>
+      </main>
+    </AppShell>
   );
 }
 
 export default function ExamPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen px-4 py-6" />}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
       <ExamPageContent />
     </Suspense>
   );

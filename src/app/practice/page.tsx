@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useState } from "react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 
-type StudyMode = "past-questions" | "mock-cbt" | "syllabus";
+import AppShell from "@/components/AppShell";
+
+type StudyMode = "past-questions" | "study" | "mock-cbt" | "syllabus";
 
 const modes: { id: StudyMode; label: string; detail: string }[] = [
-  { id: "past-questions", label: "Past questions", detail: "Study questions from previous UTME sessions." },
-  { id: "mock-cbt", label: "Mock CBT", detail: "Sit a timed exam with the real CBT rhythm." },
+  { id: "past-questions", label: "Past questions", detail: "Answer UTME questions, review all answers after." },
+  { id: "study", label: "Study mode", detail: "See the correct answer + explanation right after you answer." },
+  { id: "mock-cbt", label: "Mock CBT", detail: "Timed exam with the real CBT rhythm — no peeking." },
   { id: "syllabus", label: "Syllabus revision", detail: "Work through topics before attempting questions." },
 ];
 
@@ -46,7 +49,7 @@ export default function PracticePage() {
 
   const topics = SUBJECT_TOPICS[selectedSubject] ?? [];
 
-  const examHref = `/exam?subject=${encodeURIComponent(selectedSubject)}&count=${questionCount}&timer=${encodeURIComponent(timer)}&mode=${mode}&topic=${encodeURIComponent(selectedTopic)}${year !== "All years" ? `&year=${year}` : ""}`;
+  const examHref = `/exam?subject=${encodeURIComponent(selectedSubject)}&count=${questionCount}&timer=${encodeURIComponent(mode === "mock-cbt" ? timer : "No timer")}&mode=${mode === "study" ? "study" : mode === "mock-cbt" ? "exam" : "exam"}${year !== "All years" ? `&year=${year}` : ""}&topic=${encodeURIComponent(selectedTopic)}`;
 
   function changeSubject(name: string) {
     setSelectedSubject(name);
@@ -54,21 +57,13 @@ export default function PracticePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f2f7f3] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">Smart preparation</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">What are you studying today?</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Choose a subject, revise your syllabus, practise past questions, or sit a timed CBT simulation.
-            </p>
-          </div>
-          <Link href="/dashboard" className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:border-emerald-300">
-            Dashboard
-          </Link>
-        </header>
-
+    <AppShell title="Practice">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-5xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900 lg:hidden">What are you studying?</h1>
+        <div className="hidden lg:mb-6 lg:block">
+          <p className="text-xs font-bold uppercase tracking-widest text-emerald-700">Smart preparation</p>
+          <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">What are you studying today?</h1>
+        </div>
         <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
           <section className="space-y-6">
             {/* Mode selector */}
@@ -129,8 +124,7 @@ export default function PracticePage() {
                 <label className="block">
                   <span className="mb-2 block text-sm font-bold text-slate-700">Year</span>
                   <select value={year} onChange={(e) => setYear(e.target.value)} disabled={mode !== "past-questions"}
-                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-400">
-                    {years.map((y) => <option key={y}>{y}</option>)}
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-500 disabled:bg-slate-100 disabled:text-slate-400">                    {years.map((y) => <option key={y}>{y}</option>)}
                   </select>
                 </label>
               </div>
@@ -162,7 +156,7 @@ export default function PracticePage() {
           <aside className="h-fit rounded-2xl bg-[#102e27] p-5 text-white shadow-xl xl:sticky xl:top-6">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">Session summary</p>
             <h2 className="mt-3 text-2xl font-black">
-              {mode === "mock-cbt" ? "Timed mock CBT" : mode === "syllabus" ? "Syllabus revision" : "Past questions"}
+              {mode === "mock-cbt" ? "Timed mock CBT" : mode === "study" ? "Study mode" : mode === "syllabus" ? "Syllabus revision" : "Past questions"}
             </h2>
             <p className="mt-2 text-sm leading-6 text-emerald-50/80">
               {selectedSubject} · {selectedTopic.toLowerCase()}.
@@ -177,7 +171,7 @@ export default function PracticePage() {
             </div>
 
             <Link href={examHref} className="mt-6 flex w-full items-center justify-center rounded-xl bg-[#e8c96a] px-4 py-3 text-sm font-black text-[#172c26] transition hover:bg-[#f1d987]">
-              {mode === "syllabus" ? "Start revision" : mode === "mock-cbt" ? "Start mock CBT" : "Practise past questions"}
+              {mode === "study" ? "Start studying" : mode === "syllabus" ? "Start revision" : mode === "mock-cbt" ? "Start mock CBT" : "Practise past questions"}
             </Link>
             <Link href="/knowledge-hub" className="mt-3 flex h-11 w-full items-center justify-center rounded-xl border border-white/15 text-sm font-bold text-white hover:bg-white/10">
               Browse syllabus
@@ -185,6 +179,6 @@ export default function PracticePage() {
           </aside>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

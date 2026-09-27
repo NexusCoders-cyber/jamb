@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getSubjectStats } from "@/lib/queries";
+import AppShell from "@/components/AppShell";
 import type { SubjectStats } from "@/lib/queries";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -60,7 +61,7 @@ export default function StudyPlanPage() {
     try {
       const stored = localStorage.getItem(PLAN_STORAGE_KEY);
       if (stored) setCompleted(new Set(JSON.parse(stored) as string[]));
-    } catch { /* ignore */ }
+    } catch (_e) { /* ignore */ }
 
     if (!user) {
       setPlan(buildPlan([]));
@@ -78,7 +79,7 @@ export default function StudyPlanPage() {
     setCompleted((prev) => {
       const next = new Set(prev);
       next.has(key) ? next.delete(key) : next.add(key);
-      try { localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      try { localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify([...next])); } catch (_e) { /* ignore */ }
       return next;
     });
   }
@@ -91,33 +92,19 @@ export default function StudyPlanPage() {
   const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Study Plan</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Personalized schedule</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Dashboard
-          </Link>
-        </div>
+    <AppShell title="Study Plan">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900">Study Plan</h1>
 
         {/* Weekly progress bar */}
-        <div className="mb-6 rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
+        <div className="mb-5 rounded-[20px] bg-white p-4 ring-1 ring-slate-100 shadow-sm">
           <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
             <span>Weekly completion</span>
-            <span>{doneTasks}/{totalTasks} tasks · {pct}%</span>
+            <span className="text-violet-600">{doneTasks}/{totalTasks} · {pct}%</span>
           </div>
-          <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-violet-500 transition-all" style={{ width: `${pct}%` }} />
           </div>
-          {!user && (
-            <p className="mt-2 text-xs text-slate-400">
-              Sign in to get a plan tailored to your weak subjects.{" "}
-              <Link href="/" className="font-bold text-violet-600">Sign in</Link>
-            </p>
-          )}
         </div>
 
         {loading ? (
@@ -162,6 +149,6 @@ export default function StudyPlanPage() {
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

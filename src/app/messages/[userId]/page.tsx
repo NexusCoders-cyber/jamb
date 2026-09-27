@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AuthGuard from "@/components/AuthGuard";
 import {
   getDMThread, sendDM, markDMsRead, getProfile,
   type DirectMessage,
@@ -58,7 +59,7 @@ export default function DMConversationPage() {
   useEffect(() => {
     if (!user || !partnerId) return;
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
-    try { supabase = createSupabaseBrowserClient(); } catch { return; }
+    try { supabase = createSupabaseBrowserClient(); } catch (_e) { return; }
 
     const channel = supabase
       .channel(`dm-${[user.id, partnerId].sort().join("-")}`)
@@ -120,14 +121,11 @@ export default function DMConversationPage() {
 
   const myName = (user?.user_metadata?.full_name as string | undefined) ?? "You";
 
-  if (!user && !authLoading) {
+  if (authLoading || !user) {
     return (
-      <main className="min-h-screen bg-[#eef2ff] px-4 py-8 flex items-center justify-center">
-        <div className="rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200">
-          <p className="font-bold text-slate-700">Sign in to view messages</p>
-          <Link href="/" className="mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Sign in</Link>
-        </div>
-      </main>
+      <AuthGuard user={user} loading={authLoading}>
+        <></>
+      </AuthGuard>
     );
   }
 

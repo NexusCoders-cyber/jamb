@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AuthGuard from "@/components/AuthGuard";
+import AppShell from "@/components/AppShell";
 import { getUserAttempts } from "@/lib/queries";
 
 type Drill = { label: string; score: string };
@@ -61,25 +63,10 @@ export default function SpeedTrainingPage() {
   }, [user, authLoading]);
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_20px_70px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Speed Training</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Timed Drills</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Home
-          </Link>
-        </div>
-
-        {!user && !authLoading && (
-          <div className="mb-5 rounded-[20px] bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700 ring-1 ring-violet-100">
-            Sign in to see your personalized speed stats.{" "}
-            <Link href="/" className="underline">Sign in</Link>
-          </div>
-        )}
-
+    <AppShell title="Speed Training">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900">Timed Drills</h1>
+        <AuthGuard user={user} loading={authLoading}>
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="space-y-5">
             {loading
@@ -124,7 +111,8 @@ export default function SpeedTrainingPage() {
             </div>
           </aside>
         </div>
+        </AuthGuard>
       </div>
-    </main>
+    </AppShell>
   );
 }

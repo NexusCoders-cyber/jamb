@@ -18,7 +18,7 @@ export default function ResetPasswordPage() {
   // The SSR client automatically exchanges them for a session.
   useEffect(() => {
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
-    try { supabase = createSupabaseBrowserClient(); } catch { setStage("invalid"); return; }
+    try { supabase = createSupabaseBrowserClient(); } catch (_e) { setStage("invalid"); return; }
 
     // Listen for the PASSWORD_RECOVERY event Supabase fires on this page
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {

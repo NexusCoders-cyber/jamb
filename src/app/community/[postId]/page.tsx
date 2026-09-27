@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
 import { getPost, getReplies, createReply, type Post, type PostReply } from "@/lib/queries";
 
 function timeAgo(iso: string) {
@@ -48,7 +49,7 @@ export default function PostThreadPage() {
   useEffect(() => {
     if (!postId) return;
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
-    try { supabase = createSupabaseBrowserClient(); } catch { return; }
+    try { supabase = createSupabaseBrowserClient(); } catch (_e) { return; }
 
     const channel = supabase
       .channel(`replies-${postId}`)
@@ -99,34 +100,34 @@ export default function PostThreadPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#eef2ff] px-4 py-8">
-        <div className="mx-auto max-w-3xl space-y-4">
-          {[1, 2, 3].map((n) => <div key={n} className="animate-pulse rounded-[24px] bg-white h-20 ring-1 ring-slate-200" />)}
+      <AppShell title="Post" back="/community">
+        <div className="mx-auto max-w-2xl px-4 py-4 space-y-4">
+          {[1, 2, 3].map((n) => <div key={n} className="animate-pulse rounded-[20px] bg-white h-16 ring-1 ring-slate-100" />)}
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   if (!post) {
     return (
-      <main className="min-h-screen bg-[#eef2ff] px-4 py-8">
-        <div className="mx-auto max-w-3xl rounded-[28px] bg-white p-10 text-center ring-1 ring-slate-200">
+      <AppShell title="Not found" back="/community">
+        <div className="mx-auto max-w-2xl px-4 py-10 text-center">
           <p className="text-xl font-black text-slate-900">Post not found</p>
           <Link href="/community" className="mt-4 inline-block text-sm font-bold text-violet-600">← Back to community</Link>
         </div>
-      </main>
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
+    <AppShell title={post.title.slice(0, 40)} back="/community">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
         {/* Back nav */}
-        <div className="mb-5 flex items-center justify-between">
-          <Link href="/community" className="flex items-center gap-2 text-sm font-bold text-violet-600 hover:underline">
+        <div className="mb-4 flex items-center justify-between">
+          <Link href="/community" className="flex items-center gap-1.5 text-sm font-bold text-violet-600">
             ← {channelName}
           </Link>
-          <Link href="/messages" className="flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700">
+          <Link href="/messages" className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700">
             ✉ Messages
           </Link>
         </div>
@@ -210,6 +211,6 @@ export default function PostThreadPage() {
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

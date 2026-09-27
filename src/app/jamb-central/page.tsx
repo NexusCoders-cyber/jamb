@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
 import type { Notification } from "@/lib/queries";
 
 // Static content categories — always shown
@@ -61,7 +62,7 @@ export default function JambCentralPage() {
 
     // Fetch the user's notifications to show as a personalised bulletin feed
     const supabase = createSupabaseBrowserClient();
-    supabase
+    void supabase
       .from("notifications")
       .select("*")
       .eq("user_id", user.id)
@@ -71,27 +72,19 @@ export default function JambCentralPage() {
         setNotifications((data as Notification[]) ?? []);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .then(undefined, () => setLoading(false));
   }, [user, authLoading]);
 
   const unread = notifications.filter((n) => !n.read_at);
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Study Bulletin</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Information Centre</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/notifications" className="rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700">
-              All notifications {unread.length > 0 && <span className="ml-1 rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread.length}</span>}
-            </Link>
-            <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-              Dashboard
-            </Link>
-          </div>
+    <AppShell title="Info Centre">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-slate-900">Info Centre</h1>
+          <Link href="/notifications" className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
+            Notifications {unread.length > 0 && <span className="ml-1 rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{unread.length}</span>}
+          </Link>
         </div>
 
         {/* Category cards */}
@@ -125,13 +118,7 @@ export default function JambCentralPage() {
             )}
           </div>
 
-          {!user && !authLoading ? (
-            <div className="rounded-[24px] bg-slate-50 p-6 text-center ring-1 ring-slate-200">
-              <p className="text-sm font-semibold text-slate-700">
-                <Link href="/" className="text-violet-600 underline">Sign in</Link> to see personalised announcements.
-              </p>
-            </div>
-          ) : loading ? (
+          {loading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((n) => <div key={n} className="animate-pulse rounded-[20px] bg-slate-100 h-14" />)}
             </div>
@@ -164,6 +151,6 @@ export default function JambCentralPage() {
           )}
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

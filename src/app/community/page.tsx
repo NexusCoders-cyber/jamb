@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
 import {
   getChannels, getPosts, createPost,
   type Channel, type Post,
@@ -83,22 +84,13 @@ export default function CommunityPage() {
   const myName = user?.user_metadata?.full_name as string | undefined;
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Community</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Study Community</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link href="/messages" className="flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100">
-              <span>✉</span> Messages
-            </Link>
-            <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-              Dashboard
-            </Link>
-          </div>
+    <AppShell title="Community">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-5xl lg:px-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-slate-900">Community</h1>
+          <Link href="/messages" className="flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
+            ✉ Messages
+          </Link>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
@@ -192,7 +184,7 @@ export default function CommunityPage() {
               <div className="rounded-[24px] bg-white p-10 text-center ring-1 ring-slate-200">
                 <p className="text-2xl font-black text-slate-900">No posts yet</p>
                 <p className="mt-2 text-sm text-slate-500">
-                  {user ? "Be the first to start a discussion in this channel." : "Sign in to start a discussion."}
+                  Be the first to start a discussion in this channel.
                 </p>
                 {user && (
                   <button onClick={() => setShowForm(true)} className="mt-4 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">
@@ -235,6 +227,6 @@ export default function CommunityPage() {
           </div>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

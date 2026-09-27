@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 
@@ -82,7 +83,7 @@ export default function DailyChallengePage() {
           await updateStreak(supabase, user.id);
         }
       }
-    } catch { /* ignore */ }
+    } catch (_e) { /* ignore */ }
     setSubmitting(false);
   }
 
@@ -90,15 +91,13 @@ export default function DailyChallengePage() {
   function next() { setShowExpl(false); if (current < questions.length - 1) setCurrent((c) => c + 1); else void finish(); }
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
+    <AppShell title="Daily Challenge">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+        <div className="mb-4 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Daily Challenge</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Today&apos;s Challenge</h1>
-            <p className="mt-1 text-sm text-slate-400">{todayLabel} · {todaySubject}</p>
+            <h1 className="text-2xl font-black text-slate-900">Daily Challenge</h1>
+            <p className="text-xs text-slate-400">{todayLabel} · {todaySubject}</p>
           </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Dashboard</Link>
         </div>
 
         <section className="mb-6 rounded-[28px] bg-gradient-to-r from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
@@ -210,6 +209,6 @@ export default function DailyChallengePage() {
           </div>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

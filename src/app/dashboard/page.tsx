@@ -7,21 +7,13 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getProfile, getUserAttempts, getSubjectStats } from "@/lib/queries";
 import type { ExamAttempt, SubjectStats } from "@/lib/queries";
-
-const navigation = [
-  { label: "Home", href: "/dashboard", active: true },
-  { label: "Analytics", href: "/analytics" },
-  { label: "Syllabus", href: "/knowledge-hub" },
-  { label: "Community", href: "/community" },
-  { label: "Messages", href: "/messages" },
-  { label: "Settings", href: "/settings" },
-];
+import AppShell from "@/components/AppShell";
 
 const quickActions = [
-  { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: "01" },
-  { label: "Practice by topic", detail: "Build a focused set", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: "02" },
-  { label: "Ask Smart Coach", detail: "Get unstuck faster", href: "/smart-coach", tone: "bg-[#e8eef8] text-[#28527d]", icon: "03" },
-  { label: "Weekly leaderboard", detail: "See your position", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: "04" },
+  { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: "📝" },
+  { label: "Practice", detail: "Past questions, your pace", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: "✏️" },
+  { label: "Study mode", detail: "See answers as you go", href: "/practice?mode=study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: "📖" },
+  { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: "💬" },
 ];
 
 const SUBJECT_COLORS = ["bg-[#d7a62d]", "bg-[#2b9b6a]", "bg-[#4a78a8]", "bg-[#b9684a]"];
@@ -55,7 +47,7 @@ export default function DashboardPage() {
           if (parsed.fullName) startTransition(() => setUserName(parsed.fullName as string));
           if (typeof parsed.targetScore === "number") startTransition(() => setTargetScore(parsed.targetScore as number));
         }
-      } catch { /* ignore */ }
+      } catch (_e) { /* ignore */ }
       setDataLoading(false);
       return;
     }
@@ -128,254 +120,190 @@ export default function DashboardPage() {
   const initials = userName.slice(0, 1).toUpperCase();
 
   return (
-    <main className="min-h-screen px-4 py-5 sm:px-6 lg:px-10">
-      <div className="mx-auto max-w-[1440px] lg:grid lg:grid-cols-[230px_1fr] lg:gap-10">
-        {/* Sidebar */}
-        <aside className="mb-6 flex items-center justify-between lg:mb-0 lg:block">
-          <Link href="/dashboard" className="flex items-center gap-3 lg:mb-14">
-            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#6557d9] text-lg font-black text-white">O</span>
-            <span>
-              <span className="block text-[10px] font-bold uppercase tracking-[0.28em] text-[#6557d9]">ORBIT</span>
-              <span className="text-lg font-black text-[#211b3d]">Orbit Prep</span>
-            </span>
-          </Link>
-          <nav className="hidden space-y-2 lg:block" aria-label="Main navigation">
-            {navigation.map((item) => (
-              <Link
-                key={item.label}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${item.active ? "bg-[#e2f3eb] text-[#0d6b3f]" : "text-slate-500 hover:bg-white hover:text-[#0d6b3f]"}`}
-              >
-                <span className="w-5 text-center text-xs font-black">{item.label.slice(0, 1)}</span>
-                {item.label}
+    <AppShell title={`Hi, ${userName.split(" ")[0]}`}>
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+
+        {/* Mobile greeting */}
+        <header className="mb-5 flex items-center justify-between lg:hidden">
+          <div>
+            <p className="text-xs font-semibold text-slate-400">{todayLabel}</p>
+            <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-900">
+              Hi, {userName.split(" ")[0]} 👋
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/notifications" className="flex h-10 w-10 items-center justify-center rounded-full bg-white ring-1 ring-slate-200 text-base">🔔</Link>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6557d9] font-black text-white text-sm">{initials}</div>
+          </div>
+        </header>
+
+        {/* Desktop greeting */}
+        <header className="mb-6 hidden items-center justify-between lg:flex">
+          <div>
+            <p className="text-sm font-semibold text-slate-400">{todayLabel}</p>
+            <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">
+              Good to see you, {userName.split(" ")[0]}.
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-white px-4 py-2 text-right shadow-sm ring-1 ring-slate-200">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Streak</p>
+              <p className="font-black text-[#6557d9]">{streakDays} {streakDays === 1 ? "day" : "days"}</p>
+            </div>
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#6557d9] font-black text-white">{initials}</div>
+          </div>
+        </header>
+
+        {/* Hero progress card */}
+        <section className="mb-5 overflow-hidden rounded-[28px] bg-[#6557d9] p-5 text-white shadow-lg shadow-violet-400/20">
+          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full border-[20px] border-white/10 pointer-events-none" />
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">Road to {targetScore}</p>
+          <h2 className="mt-1.5 text-2xl font-black leading-snug">
+            {dataLoading ? "Loading…"
+              : attempts.length === 0 ? "Complete your first exam"
+              : `${targetProgress}% to your target`}
+          </h2>
+          <div className="mt-4 h-2 rounded-full bg-white/15">
+            <div className="h-2 rounded-full bg-[#f6c978] transition-all" style={{ width: `${targetProgress}%` }} />
+          </div>
+          <div className="mt-2 flex justify-between text-xs font-semibold text-violet-200">
+            <span>{practiceLevel} current</span>
+            <span>{targetScore} target</span>
+          </div>
+          <div className="mt-4 flex gap-2">
+            <Link href="/exam" className="inline-flex h-10 items-center rounded-xl bg-[#f6c978] px-4 text-sm font-black text-[#211b3d]">
+              Take mock →
+            </Link>
+            <Link href="/analytics" className="inline-flex h-10 items-center rounded-xl bg-white/15 px-4 text-sm font-bold text-white">
+              Analytics
+            </Link>
+          </div>
+        </section>
+
+        {/* Stats row */}
+        <section className="mb-5 grid grid-cols-4 gap-2">
+          {[
+            { label: "Exams", value: attempts.length },
+            { label: "Questions", value: totalAnswered > 999 ? `${(totalAnswered / 1000).toFixed(1)}k` : totalAnswered },
+            { label: "Accuracy", value: `${overallAccuracy}%` },
+            { label: "Streak", value: `${streakDays}d` },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl bg-white p-3 text-center ring-1 ring-slate-100 shadow-sm">
+              <p className="text-lg font-black text-slate-900">{dataLoading ? "…" : s.value}</p>
+              <p className="text-[10px] font-semibold uppercase text-slate-400">{s.label}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* Quick actions */}
+        <section className="mb-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-black text-slate-800">Quick start</h2>
+            <Link href="/practice" className="text-xs font-bold text-violet-600">See all</Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {quickActions.map((action) => (
+              <Link key={action.label} href={action.href}
+                className="flex items-center gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-100 shadow-sm transition active:scale-95">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl ${action.tone}`}>{action.icon}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-slate-900">{action.label}</p>
+                  <p className="truncate text-[11px] text-slate-400">{action.detail}</p>
+                </div>
               </Link>
             ))}
-          </nav>
-          <div className="hidden rounded-3xl bg-[#211b3d] p-5 text-white lg:mt-24 lg:block">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#f6c978]">Need a nudge?</p>
-            <p className="mt-3 text-sm leading-6 text-slate-200">Your next 20 questions are waiting.</p>
-            <Link href="/practice" className="mt-4 inline-flex text-sm font-bold text-[#f6c978]">Start session -&gt;</Link>
           </div>
-        </aside>
+        </section>
 
-        <div>
-          {/* Header */}
-          <header className="mb-8 flex items-start justify-between gap-4">
+        {/* Daily goal */}
+        <section className="mb-5 rounded-[24px] bg-[#fffaf0] p-4 ring-1 ring-[#f2e4c4]">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#6557d9]">{todayLabel}</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-[#211b3d] sm:text-4xl">
-                Good morning, {userName.split(" ")[0]}.
-              </h1>
-              <p className="mt-2 text-sm text-slate-500">A little progress today keeps your target score in reach.</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-[#9a6814]">Daily goal</p>
+              <p className="mt-0.5 text-lg font-black text-slate-900">{dailyPct}% complete</p>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden rounded-2xl bg-white px-4 py-2 text-right shadow-sm ring-1 ring-slate-200 sm:block">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Streak</p>
-                <p className="font-black text-[#6557d9]">{streakDays} {streakDays === 1 ? "day" : "days"}</p>
-              </div>
-              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#6557d9] font-black text-white">
-                {initials}
-              </div>
-            </div>
-          </header>
-
-          {/* Hero progress banner */}
-          <section className="mb-7 grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-            <div className="relative overflow-hidden rounded-[30px] bg-[#6557d9] p-6 text-white sm:p-8">
-              <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[28px] border-white/10" />
-              <div className="relative">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#e5e1ff]">Road to {targetScore}</p>
-                    <h2 className="mt-3 max-w-md text-3xl font-black tracking-tight">
-                      {dataLoading
-                        ? "Loading your progress…"
-                        : attempts.length === 0
-                          ? "Complete your first exam to see your progress."
-                          : `You are ${targetProgress}% of the way to your target.`}
-                    </h2>
-                  </div>
-                  <div className="hidden text-right sm:block">
-                    <p className="text-4xl font-black">{practiceLevel}</p>
-                    <p className="text-sm text-[#e5e1ff]">practice level / 400</p>
-                  </div>
-                </div>
-                <div className="mt-7 h-2 rounded-full bg-white/15">
-                  <div className="h-2 rounded-full bg-[#f6c978]" style={{ width: `${targetProgress}%` }} />
-                </div>
-                <div className="mt-3 flex justify-between text-xs font-semibold text-[#e5e1ff]">
-                  <span>{practiceLevel} current</span>
-                  <span>{targetScore} target</span>
-                </div>
-                <Link href="/exam" className="mt-7 inline-flex h-11 items-center rounded-xl bg-[#f6c978] px-5 text-sm font-black text-[#211b3d] transition hover:bg-white">
-                  Take a full mock -&gt;
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-[30px] bg-[#211b3d] p-6 text-white sm:p-8">
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#f6c978]">Your stats</p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-white/10 p-3 text-center">
-                  <p className="text-2xl font-black">{attempts.length}</p>
-                  <p className="text-[10px] uppercase text-slate-400">Exams</p>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-3 text-center">
-                  <p className="text-2xl font-black">{totalAnswered.toLocaleString()}</p>
-                  <p className="text-[10px] uppercase text-slate-400">Questions</p>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-3 text-center">
-                  <p className="text-2xl font-black">{overallAccuracy}%</p>
-                  <p className="text-[10px] uppercase text-slate-400">Accuracy</p>
-                </div>
-                <div className="rounded-2xl bg-white/10 p-3 text-center">
-                  <p className="text-2xl font-black">{streakDays}</p>
-                  <p className="text-[10px] uppercase text-slate-400">Streak</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Quick actions */}
-          <section className="mb-7">
-            <div className="mb-4 flex items-end justify-between">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#9a6814]">Keep moving</p>
-                <h2 className="mt-1 text-2xl font-black text-[#10263c]">Quick actions</h2>
-              </div>
-              <Link href="/practice" className="text-sm font-bold text-[#0d6b3f]">View all</Link>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {quickActions.map((action) => (
-                <Link key={action.label} href={action.href} className="group rounded-[22px] bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-1 hover:ring-[#9bd4b8]">
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-xl text-xs font-black ${action.tone}`}>{action.icon}</span>
-                  <p className="mt-4 font-black text-[#10263c]">{action.label}</p>
-                  <p className="mt-1 text-xs text-slate-500">{action.detail}</p>
-                  <span className="mt-4 block text-sm font-bold text-[#0d6b3f] opacity-0 transition group-hover:opacity-100">Open -&gt;</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          {/* Learning suite */}
-          <section className="mb-7 rounded-[28px] bg-[#10263c] p-6 text-white shadow-sm sm:p-7">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#f4d889]">Your learning suite</p>
-                <h2 className="mt-1 text-2xl font-black">Everything in one place</h2>
-              </div>
-              <span className={`rounded-full px-3 py-1 text-xs font-bold ${productSource === "aloc" ? "bg-[#b8e3cf] text-[#0d6b3f]" : "bg-white/10 text-slate-300"}`}>
-                {productSource === "aloc" ? "ALOC connected" : "Offline catalog"}
-              </span>
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {products.map((product) => (
-                <Link key={product.slug} href={product.href} className="group rounded-2xl bg-white/10 p-4 ring-1 ring-white/10 transition hover:bg-white/15">
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-black ${product.tone}`}>{product.name.slice(0, 1)}</span>
-                  <p className="mt-3 font-black">{product.name}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-300">{product.detail}</p>
-                  <span className="mt-3 block text-xs font-bold text-[#f4d889]">Open -&gt;</span>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          {/* Syllabus progress + daily goal */}
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <section className="rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-7">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#2b9b6a]">Syllabus progress</p>
-                  <h2 className="mt-1 text-2xl font-black text-[#10263c]">Your subjects</h2>
-                </div>
-                <Link href="/knowledge-hub" className="text-sm font-bold text-[#0d6b3f]">Open syllabus</Link>
-              </div>
-              {dataLoading ? (
-                <p className="mt-6 text-sm text-slate-400">Loading…</p>
-              ) : (
-                <div className="mt-7 grid gap-5 sm:grid-cols-2">
-                  {subjectProgressItems.map((subject) => (
-                    <div key={subject.name}>
-                      <div className="mb-2 flex justify-between text-sm">
-                        <span className="font-bold text-[#10263c]">{subject.name}</span>
-                        <span className="font-black text-slate-500">{subject.progress}%</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div className={`h-2 rounded-full ${subject.color}`} style={{ width: `${subject.progress}%` }} />
-                      </div>
-                      <p className="mt-2 text-xs text-slate-400">{subject.progress > 50 ? "On track" : "Needs attention"}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-[28px] bg-[#fffaf0] p-6 shadow-sm ring-1 ring-[#f2e4c4] sm:p-7">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#9a6814]">Daily goal</p>
-                  <h2 className="mt-1 text-2xl font-black text-[#10263c]">{dailyGoal} questions</h2>
-                </div>
-                <span className="text-3xl font-black text-[#9a6814]">{dailyPct}%</span>
-              </div>
-              <div className="mt-6 h-3 rounded-full bg-[#f1e5c9]">
-                <div className="h-3 rounded-full bg-[#d7a62d]" style={{ width: `${dailyPct}%` }} />
-              </div>
-              <div className="mt-4 flex justify-between text-sm text-slate-500">
-                <span>{todayAnswered} completed</span>
-                <span>{Math.max(0, dailyGoal - todayAnswered)} to go</span>
-              </div>
-              <Link href="/practice" className="mt-7 flex h-11 items-center justify-center rounded-xl bg-[#10263c] text-sm font-bold text-white transition hover:bg-[#0d6b3f]">
-                Continue practice
-              </Link>
-            </section>
+            <Link href="/practice"
+              className="rounded-xl bg-[#10263c] px-4 py-2 text-xs font-bold text-white">
+              {todayAnswered >= dailyGoal ? "Goal reached 🎉" : "Continue"}
+            </Link>
           </div>
+          <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#f1e5c9]">
+            <div className="h-full rounded-full bg-[#d7a62d] transition-all" style={{ width: `${dailyPct}%` }} />
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">{todayAnswered} / {dailyGoal} questions done today</p>
+        </section>
 
-          {/* Weak sessions */}
-          <section className="mt-6 rounded-[28px] bg-white p-6 shadow-sm ring-1 ring-slate-200 sm:p-7">
-            <div className="flex items-end justify-between">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#b9684a]">Personalized insight</p>
-                <h2 className="mt-1 text-2xl font-black text-[#10263c]">Sessions to revisit</h2>
-              </div>
-              <Link href="/analytics" className="text-sm font-bold text-[#0d6b3f]">See analytics</Link>
-            </div>
-            {weakSessions.length === 0 ? (
-              <p className="mt-5 text-sm text-slate-400">
-                {attempts.length === 0
-                  ? "Complete your first exam to see personalized insights."
-                  : "Great work — no low-scoring sessions to revisit right now."}
-              </p>
-            ) : (
-              <div className="mt-5 grid gap-3 md:grid-cols-3">
-                {weakSessions.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-2xl bg-[#fff8f4] p-4 ring-1 ring-[#f1ded5]">
-                    <div>
-                      <p className="font-bold text-[#10263c]">
-                        {new Date(a.started_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}
-                      </p>
-                      <p className="mt-1 text-xs text-[#b9684a]">
-                        Score {Math.round((a.score / a.question_count) * 100)}%
-                      </p>
-                    </div>
-                    <Link href={`/review?attemptId=${a.id}`} className="text-xs font-black text-[#b9684a]">Retry</Link>
+        {/* Subject progress */}
+        <section className="mb-5 rounded-[24px] bg-white p-4 ring-1 ring-slate-100 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-black text-slate-800">Subjects</h2>
+            <Link href="/knowledge-hub" className="text-xs font-bold text-violet-600">Syllabus</Link>
+          </div>
+          {dataLoading ? (
+            <div className="space-y-3">{[1, 2].map((n) => <div key={n} className="h-8 animate-pulse rounded-xl bg-slate-100" />)}</div>
+          ) : (
+            <div className="space-y-3">
+              {subjectProgressItems.map((s) => (
+                <div key={s.name}>
+                  <div className="mb-1 flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">{s.name}</span>
+                    <span className="text-slate-400">{s.progress}%</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
+                  <div className="h-1.5 rounded-full bg-slate-100">
+                    <div className={`h-full rounded-full ${s.color}`} style={{ width: `${s.progress}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Mobile nav */}
-          <nav className="mt-8 flex justify-between border-t border-slate-200 pt-4 lg:hidden" aria-label="Mobile navigation">
-            {navigation.map((item) => (
-              <Link key={item.label} href={item.href} className={`text-center text-xs font-bold ${item.active ? "text-[#0d6b3f]" : "text-slate-400"}`}>
-                <span className="mx-auto mb-1 flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px]">{item.label.slice(0, 1)}</span>
-                {item.label}
+        {/* Sessions to revisit */}
+        {weakSessions.length > 0 && (
+          <section className="mb-5 rounded-[24px] bg-white p-4 ring-1 ring-slate-100 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-black text-slate-800">Revisit</h2>
+              <Link href="/analytics" className="text-xs font-bold text-violet-600">Analytics</Link>
+            </div>
+            <div className="space-y-2">
+              {weakSessions.map((a) => (
+                <div key={a.id} className="flex items-center justify-between rounded-xl bg-[#fff8f4] px-4 py-3 ring-1 ring-[#f1ded5]">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      {new Date(a.started_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}
+                    </p>
+                    <p className="text-xs text-rose-500">Score {Math.round((a.score / a.question_count) * 100)}%</p>
+                  </div>
+                  <Link href={`/review?attemptId=${a.id}`} className="rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-bold text-rose-700">
+                    Review
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Learning suite */}
+        <section className="mb-2 rounded-[24px] bg-[#10263c] p-4 text-white">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-base font-black">Learning suite</h2>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${productSource === "aloc" ? "bg-emerald-800 text-emerald-200" : "bg-white/10 text-slate-400"}`}>
+              {productSource === "aloc" ? "Live" : "Offline"}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {products.map((product) => (
+              <Link key={product.slug} href={product.href}
+                className="rounded-xl bg-white/10 p-3 ring-1 ring-white/10 transition active:bg-white/20">
+                <span className={`flex h-7 w-7 items-center justify-center rounded-lg text-xs font-black ${product.tone}`}>{product.name.slice(0, 1)}</span>
+                <p className="mt-2 text-sm font-black">{product.name}</p>
+                <p className="mt-0.5 text-[11px] leading-4 text-slate-400">{product.detail}</p>
               </Link>
             ))}
-          </nav>
-        </div>
+          </div>
+        </section>
+
       </div>
-    </main>
+    </AppShell>
   );
 }

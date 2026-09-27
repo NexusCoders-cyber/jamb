@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import AuthGuard from "@/components/AuthGuard";
 import { getNotifications, markAllNotificationsRead } from "@/lib/queries";
 import type { Notification } from "@/lib/queries";
 
@@ -46,32 +48,21 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read_at).length;
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Notifications</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">
-              Center {unreadCount > 0 && <span className="ml-2 rounded-full bg-violet-600 px-2 py-0.5 text-sm font-bold text-white">{unreadCount}</span>}
-            </h1>
-          </div>
+    <AppShell title="Notifications">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-slate-900">
+            Notifications {unreadCount > 0 && <span className="ml-2 rounded-full bg-violet-600 px-2 py-0.5 text-sm font-bold text-white">{unreadCount}</span>}
+          </h1>
           {unreadCount > 0 && (
-            <button
-              onClick={handleMarkAllRead}
-              disabled={marking}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-60"
-            >
+            <button onClick={handleMarkAllRead} disabled={marking}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60">
               {marking ? "Marking…" : "Mark all read"}
             </button>
           )}
         </div>
-
-        {!user && !authLoading ? (
-          <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
-            <p className="font-bold text-slate-700">Sign in to view your notifications</p>
-            <Link href="/" className="mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Sign in</Link>
-          </div>
-        ) : loading ? (
+        <AuthGuard user={user} loading={authLoading}>
+          {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((n) => (
               <div key={n} className="animate-pulse rounded-[24px] bg-slate-100 p-4 h-16" />
@@ -104,6 +95,7 @@ export default function NotificationsPage() {
             ))}
           </div>
         )}
+        </AuthGuard>
 
         <div className="mt-6 flex justify-center">
           <Link href="/dashboard" className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-bold text-white">
@@ -111,6 +103,6 @@ export default function NotificationsPage() {
           </Link>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }

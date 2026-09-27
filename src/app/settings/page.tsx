@@ -5,6 +5,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import AuthGuard from "@/components/AuthGuard";
 import { getProfile, updateProfile } from "@/lib/queries";
 
 type Theme = "light" | "dark" | "system";
@@ -46,7 +48,7 @@ export default function SettingsPage() {
             if (parsed.theme) setTheme(parsed.theme);
             if (parsed.dailyGoal) setDailyGoal(parsed.dailyGoal);
           }
-        } catch { /* ignore */ }
+        } catch (_e) { /* ignore */ }
       })
       .finally(() => setLoading(false));
   }, [user, authLoading]);
@@ -89,24 +91,12 @@ export default function SettingsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Settings</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Profile &amp; Preferences</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Dashboard
-          </Link>
-        </div>
+    <AppShell title="Settings">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900">Profile &amp; Preferences</h1>
 
-        {!user && !authLoading ? (
-          <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
-            <p className="font-bold text-slate-700">Sign in to manage your settings</p>
-            <Link href="/" className="mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Sign in</Link>
-          </div>
-        ) : loading ? (
+        <AuthGuard user={user} loading={authLoading}>
+        {loading ? (
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="animate-pulse rounded-[24px] bg-slate-100 p-5 h-28" />
@@ -247,7 +237,8 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+        </AuthGuard>
       </div>
-    </main>
+    </AppShell>
   );
 }

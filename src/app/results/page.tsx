@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getAttempt, getSubjectStats } from "@/lib/queries";
+import AppShell from "@/components/AppShell";
 import type { SubjectStats } from "@/lib/queries";
 
 function ResultsPageContent() {
@@ -50,17 +51,9 @@ function ResultsPageContent() {
   }, [user, attemptId]);
 
   return (
-    <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_20px_70px_rgba(16,38,60,0.08)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Results</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Exam Results</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Dashboard
-          </Link>
-        </div>
+    <AppShell title="Results" back="/practice">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900">Exam Results</h1>
 
         <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
           {/* Score card */}
@@ -133,7 +126,7 @@ function ResultsPageContent() {
 
           {subjectBreakdown.length === 0 ? (
             <p className="text-sm text-slate-400">
-              {user ? "No subject breakdown available yet — complete more exams." : "Sign in to see your subject breakdown."}
+              No subject breakdown available yet — complete more exams to see it here.
             </p>
           ) : (
             <div className="space-y-4">
@@ -152,13 +145,13 @@ function ResultsPageContent() {
           )}
         </section>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen px-4 py-6" />}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
       <ResultsPageContent />
     </Suspense>
   );

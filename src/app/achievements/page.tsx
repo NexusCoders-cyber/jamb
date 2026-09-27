@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import AuthGuard from "@/components/AuthGuard";
 import { getProfile, getUserAttempts } from "@/lib/queries";
 
 type Badge = { title: string; description: string; unlocked: boolean };
@@ -60,27 +62,11 @@ export default function AchievementsPage() {
   const locked = badges.filter((b) => !b.unlocked);
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Achievements</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Streaks &amp; Milestones</h1>
-          </div>
-          <Link href="/dashboard" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Dashboard
-          </Link>
-        </div>
+    <AppShell title="Achievements">
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
+        <h1 className="mb-4 text-2xl font-black text-slate-900">Achievements</h1>
 
-        {!user && !authLoading && (
-          <div className="mb-5 rounded-[20px] bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-700 ring-1 ring-violet-100">
-            Sign in to track your achievements.{" "}
-            <Link href="/" className="underline">Sign in</Link>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {loading ? (          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {[1, 2, 3, 4].map((n) => <div key={n} className="animate-pulse rounded-[24px] bg-slate-100 h-32" />)}
           </div>
         ) : (
@@ -123,6 +109,6 @@ export default function AchievementsPage() {
           </>
         )}
       </div>
-    </main>
+    </AppShell>
   );
 }

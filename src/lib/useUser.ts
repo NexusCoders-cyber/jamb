@@ -16,7 +16,7 @@ export function useUser() {
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
     try {
       supabase = createSupabaseBrowserClient();
-    } catch {
+    } catch (_e) {
       // Env vars not available (e.g. during static pre-render or missing .env.local)
       setLoading(false);
       return;

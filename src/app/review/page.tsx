@@ -5,6 +5,8 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import AuthGuard from "@/components/AuthGuard";
 import { getAttemptAnswers } from "@/lib/queries";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -23,7 +25,7 @@ function statusFor(a: AttemptAnswer): string {
 
 function ReviewContent() {
   const searchParams = useSearchParams();
-  const { user } = useUser();
+  const { user, loading: authLoading } = useUser();
   const attemptId = searchParams.get("attemptId");
 
   const [answers, setAnswers] = useState<AttemptAnswer[]>([]);
@@ -31,6 +33,7 @@ function ReviewContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user || !attemptId) { setLoading(false); return; }
 
     const supabase = createSupabaseBrowserClient();
@@ -40,34 +43,38 @@ function ReviewContent() {
         setSelected(rows.find((r) => !r.is_correct) ?? rows[0] ?? null);
       })
       .finally(() => setLoading(false));
-  }, [user, attemptId]);
+  }, [user, authLoading, attemptId]);
 
-  if (loading) {
+  // Show spinner while auth resolves
+  if (authLoading || loading) {
     return (
-      <main className="min-h-screen px-4 py-6">
-        <p className="mt-20 text-center text-sm text-slate-400">Loading review…</p>
-      </main>
+      <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      </div>
     );
   }
 
+  // Auth guard — shows sign-in card if not logged in
   if (!user) {
     return (
-      <main className="min-h-screen px-4 py-6">
-        <div className="mx-auto max-w-md rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200">
-          <p className="text-lg font-bold text-slate-900">Sign in to review your answers</p>
-          <Link href="/" className="mt-5 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Sign in</Link>
-        </div>
-      </main>
+      <AuthGuard user={null} loading={false}>
+        <></>
+      </AuthGuard>
     );
   }
 
+  // No attempt data
   if (!attemptId || answers.length === 0) {
     return (
       <main className="min-h-screen px-4 py-6">
         <div className="mx-auto max-w-md rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200">
           <p className="text-lg font-bold text-slate-900">No answers to review</p>
-          <p className="mt-2 text-sm text-slate-500">Complete an exam first, then open the correction room from your results page.</p>
-          <Link href="/practice" className="mt-5 inline-block rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white">Start practising</Link>
+          <p className="mt-2 text-sm text-slate-500">
+            Complete an exam first, then open the correction room from your results page.
+          </p>
+          <Link href="/practice" className="mt-5 inline-block rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-bold text-white">
+            Start practising
+          </Link>
         </div>
       </main>
     );
@@ -76,18 +83,17 @@ function ReviewContent() {
   const q = selected?.question;
 
   return (
-    <main className="min-h-screen bg-[#eef2ff] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl rounded-[30px] bg-white p-6 ring-1 ring-slate-200 shadow-[0_18px_60px_rgba(93,74,228,0.1)]">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-500">Review</p>
-            <h1 className="mt-2 text-3xl font-black text-slate-900">Review Answers</h1>
-          </div>
-          <Link href={`/results?attemptId=${attemptId}`} className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
-            Results
-          </Link>
+    <AppShell title="Review Answers" back={`/results?attemptId=${attemptId ?? ""}`}>
+      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-5xl lg:px-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-slate-900">Review Answers</h1>
+          {attemptId && (
+            <Link href={`/results?attemptId=${attemptId}`}
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
+              Results
+            </Link>
+          )}
         </div>
-
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
           {/* Question list */}
           <aside className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
@@ -96,12 +102,8 @@ function ReviewContent() {
               {answers.map((a, i) => {
                 const status = statusFor(a);
                 return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setSelected(a)}
-                    className={`flex items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${selected?.id === a.id ? "ring-violet-400 bg-violet-50" : "bg-white ring-slate-200"}`}
-                  >
+                  <button key={a.id} type="button" onClick={() => setSelected(a)}
+                    className={`flex items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${selected?.id === a.id ? "ring-violet-400 bg-violet-50" : "bg-white ring-slate-200"}`}>
                     <div>
                       <p className="text-sm font-bold text-slate-900">Q{i + 1}</p>
                       <p className="text-xs text-slate-500 truncate max-w-[120px]">{a.question?.prompt?.slice(0, 30) ?? "—"}…</p>
@@ -123,7 +125,6 @@ function ReviewContent() {
                   <div>
                     <p className="text-sm text-slate-500">Question {answers.indexOf(selected) + 1}</p>
                     <h2 className="text-2xl font-black text-slate-900">
-                      {/* subject name from nested join */}
                       {(q as unknown as { subject?: { name: string } }).subject?.name ?? "Question"}
                     </h2>
                   </div>
@@ -140,16 +141,12 @@ function ReviewContent() {
                       const isCorrect = idx === q.correct_option;
                       const isSelected = idx === selected.selected_option;
                       return (
-                        <div
-                          key={opt}
+                        <div key={opt}
                           className={`rounded-2xl border p-3 ${
-                            isCorrect
-                              ? "border-emerald-400 bg-emerald-50 font-semibold text-emerald-900"
-                              : isSelected && !isCorrect
-                                ? "border-rose-300 bg-rose-50 text-rose-800"
-                                : "border-slate-200 text-slate-700"
-                          }`}
-                        >
+                            isCorrect ? "border-emerald-400 bg-emerald-50 font-semibold text-emerald-900"
+                            : isSelected && !isCorrect ? "border-rose-300 bg-rose-50 text-rose-800"
+                            : "border-slate-200 text-slate-700"
+                          }`}>
                           {String.fromCharCode(65 + idx)}. {opt}
                           {isCorrect && <span className="ml-2 text-xs font-bold text-emerald-700">✓ Correct</span>}
                           {isSelected && !isCorrect && <span className="ml-2 text-xs font-bold text-rose-600">✗ Your answer</span>}
@@ -172,13 +169,13 @@ function ReviewContent() {
           </section>
         </div>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 export default function ReviewPage() {
   return (
-    <Suspense fallback={<main className="min-h-screen px-4 py-6" />}>
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
       <ReviewContent />
     </Suspense>
   );
