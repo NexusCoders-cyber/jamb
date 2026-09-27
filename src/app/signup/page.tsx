@@ -56,16 +56,18 @@ export default function SignUpPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error ?? "Unable to create your account right now.");
 
-      localStorage.setItem(
-        "jamb_user",
-        JSON.stringify({
-          email: data?.user?.email ?? email,
-          fullName: fullName.trim(),
-          course: course.trim(),
-          targetScore: Number(targetScore),
-          subjects,
-        }),
-      );
+      try {
+        const existing = JSON.parse(localStorage.getItem("orbit_prefs") ?? "{}") as Record<string, unknown>;
+        localStorage.setItem(
+          "orbit_prefs",
+          JSON.stringify({
+            ...existing,
+            course: course.trim(),
+            targetScore: Number(targetScore),
+            subjects,
+          }),
+        );
+      } catch { /* ignore */ }
 
       // If Supabase email confirmation is enabled, the session will be null.
       // In that case show a success message instead of redirecting.

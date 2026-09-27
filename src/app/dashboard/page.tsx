@@ -39,15 +39,6 @@ export default function DashboardPage() {
     if (authLoading) return;
 
     if (!user) {
-      // Guest: use localStorage
-      try {
-        const stored = localStorage.getItem("jamb_user");
-        if (stored) {
-          const parsed = JSON.parse(stored) as { fullName?: string; targetScore?: number };
-          if (parsed.fullName) startTransition(() => setUserName(parsed.fullName as string));
-          if (typeof parsed.targetScore === "number") startTransition(() => setTargetScore(parsed.targetScore as number));
-        }
-      } catch (_e) { /* ignore */ }
       setDataLoading(false);
       return;
     }

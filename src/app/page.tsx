@@ -36,12 +36,6 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error ?? "Unable to sign in right now.");
 
-      const safeName =
-        data?.user?.user_metadata?.full_name ||
-        data?.user?.email?.split("@")[0]?.replace(/[._-]/g, " ") ||
-        "Candidate";
-      localStorage.setItem("jamb_user", JSON.stringify({ email: data?.user?.email ?? email, fullName: safeName }));
-
       // Redirect to ?next= destination if present, otherwise dashboard
       const params = new URLSearchParams(window.location.search);
       const next = params.get("next");
@@ -173,10 +167,6 @@ export default function Home() {
                       <Link href="/signup" className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-base font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50">
                         Create account
                       </Link>
-                      <button type="button" onClick={() => router.push("/dashboard")}
-                        className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-base font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50">
-                        Continue as guest
-                      </button>
                     </div>
                   </form>
 

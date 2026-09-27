@@ -220,7 +220,7 @@ function ExamPageContent() {
   // Restore saved subjects
   useEffect(() => {
     try {
-      const s = localStorage.getItem("jamb_user");
+      const s = localStorage.getItem("orbit_prefs");
       if (s) {
         const p = JSON.parse(s) as { subjects?: string[] };
         if (Array.isArray(p.subjects) && p.subjects.length === 4) startTransition(() => setSelectedSubjects(p.subjects!));

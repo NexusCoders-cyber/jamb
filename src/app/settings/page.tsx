@@ -71,10 +71,6 @@ export default function SettingsPage() {
       // Persist local preferences
       try {
         localStorage.setItem("orbit_prefs", JSON.stringify({ theme, dailyGoal }));
-        localStorage.setItem(
-          "jamb_user",
-          JSON.stringify({ fullName: fullName.trim(), email, targetScore: Number(targetScore) }),
-        );
       } catch { /* ignore */ }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);

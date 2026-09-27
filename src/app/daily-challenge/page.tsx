@@ -47,8 +47,6 @@ export default function DailyChallengePage() {
   useEffect(() => {
     // Wait for auth to resolve before calling the gated /api/aloc endpoint
     if (authLoading) return;
-    // Guests fall back to sample questions immediately
-    if (!user) { setQuestions(FALLBACK); setLoading(false); return; }
 
     fetch(`/api/aloc?endpoint=questions-count&subject=${encodeURIComponent(todaySubject)}&count=${DAILY_COUNT}&type=utme`)
       .then((r) => r.json())
