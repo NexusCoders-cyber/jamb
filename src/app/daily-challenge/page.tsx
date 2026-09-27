@@ -75,6 +75,15 @@ export default function DailyChallengePage() {
           const rows = Object.entries(answers).map(([i, sel]) => ({
             question_id: questions[Number(i)].id, selected_option: sel,
             is_correct: questions[Number(i)].answer === sel, marked_for_review: false,
+            question: {
+              id: questions[Number(i)].id,
+              prompt: questions[Number(i)].prompt,
+              options: questions[Number(i)].options,
+              correct_option: questions[Number(i)].answer,
+              explanation: questions[Number(i)].explanation,
+              difficulty: "medium",
+              subject_name: todaySubject,
+            },
           }));
           await saveAnswers(supabase, attempt.id, rows);
           await submitAttempt(supabase, attempt.id, correct);

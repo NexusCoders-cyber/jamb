@@ -294,6 +294,15 @@ function ExamPageContent() {
             selected_option: e.selectedIdx as number,
             is_correct: e.question.answer === e.selectedIdx,
             marked_for_review: marked.has(e.questionIdx),
+            question: {
+              id: e.question.id,
+              prompt: e.question.prompt,
+              options: e.question.options,
+              correct_option: e.question.answer,
+              explanation: e.question.explanation,
+              difficulty: "medium",
+              subject_name: selectedSubject,
+            },
           }));
         await saveAnswers(supabase, attemptIdRef.current, rows);
         await submitAttempt(supabase, attemptIdRef.current, correct);

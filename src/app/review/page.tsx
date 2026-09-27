@@ -125,7 +125,7 @@ function ReviewContent() {
                   <div>
                     <p className="text-sm text-slate-500">Question {answers.indexOf(selected) + 1}</p>
                     <h2 className="text-2xl font-black text-slate-900">
-                      {(q as unknown as { subject?: { name: string } }).subject?.name ?? "Question"}
+                      {(q as unknown as { subject?: { name: string }; subject_name?: string | null }).subject_name ?? (q as unknown as { subject?: { name: string } }).subject?.name ?? "Question"}
                     </h2>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[statusFor(selected)] ?? ""}`}>

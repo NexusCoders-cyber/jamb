@@ -7,6 +7,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Shape of the per-answer question snapshot stored in attempt_answers.question_data
+export type QuestionSnapshot = {
+  id: string;
+  prompt: string;
+  options: string[];
+  correct_option: number;
+  explanation: string | null;
+  difficulty: string;
+  subject_name?: string | null;
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Profile = {
@@ -55,7 +66,7 @@ export type AttemptAnswer = {
   is_correct: boolean | null;
   marked_for_review: boolean;
   answered_at: string | null;
-  question?: Question;
+  question?: QuestionSnapshot;
 };
 
 export type Notification = {
@@ -177,28 +188,43 @@ export async function saveAnswers(
     selected_option: number | null;
     is_correct: boolean;
     marked_for_review: boolean;
+    /** Full question snapshot so review/mistakes can render without a join */
+    question?: QuestionSnapshot;
   }>,
 ): Promise<void> {
   if (answers.length === 0) return;
-  await supabase.from("attempt_answers").upsert(
+  const { error } = await supabase.from("attempt_answers").upsert(
     answers.map((a) => ({
-      ...a,
+      question_id: a.question_id,
+      selected_option: a.selected_option,
+      is_correct: a.is_correct,
+      marked_for_review: a.marked_for_review,
+      ...(a.question ? { question_data: a.question } : {}),
       attempt_id: attemptId,
       answered_at: new Date().toISOString(),
     })),
     { onConflict: "attempt_id,question_id" },
   );
+  if (error) throw error;
 }
 
 export async function getAttemptAnswers(
   supabase: SupabaseClient,
   attemptId: string,
 ): Promise<AttemptAnswer[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("attempt_answers")
-    .select("*, question:questions(id, subject_id, prompt, options, correct_option, explanation, difficulty)")
-    .eq("attempt_id", attemptId);
-  return (data ?? []) as AttemptAnswer[];
+    .select("*")
+    .eq("attempt_id", attemptId)
+    .order("answered_at", { ascending: true });
+  if (error) {
+    console.error("getAttemptAnswers failed:", error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    ...(row as unknown as AttemptAnswer),
+    question: (row.question_data as QuestionSnapshot | null) ?? undefined,
+  }));
 }
 
 // ─── Analytics helpers ───────────────────────────────────────────────────────
@@ -212,43 +238,43 @@ export type SubjectStats = {
 
 /**
  * Returns per-subject accuracy derived from all submitted attempt_answers
- * for a user.  Requires a join via exam_attempts → attempt_answers → questions → subjects.
+ * for a user. Reads subject_name from the stored question snapshot.
  */
 export async function getSubjectStats(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<SubjectStats[]> {
   // Fetch all answered questions for submitted attempts
-  const { data: answers } = await supabase
+  const { data: attemptIds, error: idsError } = await supabase
+    .from("exam_attempts")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "submitted");
+
+  if (idsError) {
+    console.error("getSubjectStats (attempt ids) failed:", idsError.message);
+    return [];
+  }
+  const idList = attemptIds?.map((a: { id: string }) => a.id) ?? [];
+  if (idList.length === 0) return [];
+
+  const { data: answers, error } = await supabase
     .from("attempt_answers")
-    .select(`
-      is_correct,
-      question:questions(
-        subject_id,
-        subject:subjects(name)
-      )
-    `)
-    .in(
-      "attempt_id",
-      (
-        await supabase
-          .from("exam_attempts")
-          .select("id")
-          .eq("user_id", userId)
-          .eq("status", "submitted")
-      ).data?.map((a: { id: string }) => a.id) ?? [],
-    );
+    .select("is_correct, question_data")
+    .in("attempt_id", idList);
 
-  if (!answers) return [];
+  if (error) {
+    console.error("getSubjectStats failed:", error.message);
+    return [];
+  }
 
-  // Aggregate by subject
+  // Aggregate by subject (from snapshot)
   const map = new Map<string, { total: number; correct: number }>();
-  for (const row of answers as unknown as Array<{
+  for (const row of (answers ?? []) as Array<{
     is_correct: boolean | null;
-    question: { subject: { name: string } | null } | null;
+    question_data: QuestionSnapshot | null;
   }>) {
-    const name = row.question?.subject?.name;
-    if (!name) continue;
+    const name = row.question_data?.subject_name ?? "Unknown";
     const entry = map.get(name) ?? { total: 0, correct: 0 };
     entry.total += 1;
     if (row.is_correct) entry.correct += 1;
@@ -276,9 +302,9 @@ export async function getScoreHistory(
     .select("score, question_count, submitted_at")
     .eq("user_id", userId)
     .eq("status", "submitted")
-    .order("submitted_at", { ascending: true })
+    .order("submitted_at", { ascending: false })
     .limit(limit);
-  return data ?? [];
+  return (data ?? []).reverse();
 }
 
 /**
@@ -289,19 +315,21 @@ export async function getWrongAnswers(
   userId: string,
   limit = 60,
 ): Promise<AttemptAnswer[]> {
-  const { data: attemptIds } = await supabase
+  const { data: attemptIds, error: idsError } = await supabase
     .from("exam_attempts")
     .select("id")
     .eq("user_id", userId)
     .eq("status", "submitted");
 
+  if (idsError) {
+    console.error("getWrongAnswers (attempt ids) failed:", idsError.message);
+    return [];
+  }
   if (!attemptIds || attemptIds.length === 0) return [];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("attempt_answers")
-    .select(
-      "*, question:questions(id, subject_id, prompt, options, correct_option, explanation, difficulty, subject:subjects(name))",
-    )
+    .select("*")
     .in(
       "attempt_id",
       attemptIds.map((a: { id: string }) => a.id),
@@ -309,7 +337,14 @@ export async function getWrongAnswers(
     .eq("is_correct", false)
     .limit(limit);
 
-  return (data ?? []) as AttemptAnswer[];
+  if (error) {
+    console.error("getWrongAnswers failed:", error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    ...(row as unknown as AttemptAnswer),
+    question: (row.question_data as QuestionSnapshot | null) ?? undefined,
+  }));
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────

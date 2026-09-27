@@ -19,7 +19,7 @@ function groupBySubject(answers: AttemptAnswer[]): GroupedMistake[] {
 
   for (const a of answers) {
     const q = a.question as (typeof a.question & { subject?: { name: string } }) | undefined;
-    const subjectName = q?.subject?.name ?? "Unknown";
+    const subjectName = q?.subject_name ?? q?.subject?.name ?? "Unknown";
     // Use first 30 chars of prompt as a rough "topic"
     const topic = q?.prompt?.slice(0, 35) ?? "Question";
 
