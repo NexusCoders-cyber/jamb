@@ -27,6 +27,10 @@ export type Profile = {
   role: "student" | "admin";
   target_score: number;
   streak_days: number;
+  /** Subjects the student is preparing for — used by the friends browser */
+  interests?: string[] | null;
+  /** Desired course of study, shown on the students browser */
+  course?: string | null;
   created_at: string;
   updated_at: string;
 };

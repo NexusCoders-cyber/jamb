@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Check, CheckCircle2 } from "lucide-react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGate from "@/components/AuthGate";
 
 // English is always required; the rest are optional
@@ -56,6 +57,18 @@ export default function SignUpPage() {
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error ?? "Unable to create your account right now.");
+
+      // Persist interests (the 4 UTME subjects) + course directly to the
+      // profile so other students can discover them in the friends browser.
+      if (data?.user?.id) {
+        try {
+          const supabase = createSupabaseBrowserClient();
+          await supabase
+            .from("profiles")
+            .update({ interests: subjects, course: course.trim() })
+            .eq("id", data.user.id);
+        } catch { /* non-fatal — profile can be edited later in settings */ }
+      }
 
       try {
         const existing = JSON.parse(localStorage.getItem("orbit_prefs") ?? "{}") as Record<string, unknown>;

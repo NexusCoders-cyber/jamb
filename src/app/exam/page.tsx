@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { startTransition, Suspense, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -277,7 +277,6 @@ function InlineReview({
 type SubjectPlan = { name: string; count: number };
 
 function ExamPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
 
@@ -591,15 +590,11 @@ function ExamPageContent() {
       }
     } catch (_e) { /* ignore DB errors, still show review */ }
 
-    if (mode === "exam" && !isStudyMode) {
-      router.push(
-        `/results?score=${correct}&total=${questionTotal}&subject=${encodeURIComponent(sessionLabel)}&answered=${answeredCount}&wrong=${Math.max(answeredCount - correct, 0)}${attemptIdRef.current ? `&attemptId=${attemptIdRef.current}` : ""}`,
-      );
-    } else {
-      setReviewScore(correct);
-      setReviewEntries(entries);
-      setSubmitting(false);
-    }
+    // Every mode ends with the full answer + correction review — candidates
+    // always see every question, the right answer, and their choice.
+    setReviewScore(correct);
+    setReviewEntries(entries);
+    setSubmitting(false);
   }
 
   function handleRetry() {

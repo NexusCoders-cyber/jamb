@@ -91,6 +91,10 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
 export default function CommunityPage() {
   const { user, loading: authLoading } = useUser();
 
+  // Join gate — first visit asks the student to pick interest channels
+  const [joined, setJoined] = useState<boolean | null>(null); // null = loading
+  const [pickedChannels, setPickedChannels] = useState<string[]>([]);
+
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -104,7 +108,7 @@ export default function CommunityPage() {
   const [postError, setPostError] = useState("");
   const formRef = useRef<HTMLDivElement>(null);
 
-  // Load channels on mount
+  // Load channels on mount + check whether the student already joined
   useEffect(() => {
     if (authLoading) return;
     const supabase = createSupabaseBrowserClient();
@@ -112,6 +116,11 @@ export default function CommunityPage() {
       setChannels(ch);
       if (ch.length > 0) setActiveChannel(ch[0]);
     });
+    try {
+      setJoined(localStorage.getItem("community_joined") === "1");
+    } catch {
+      setJoined(false);
+    }
   }, [authLoading]);
 
   // Load posts when channel changes
@@ -143,6 +152,58 @@ export default function CommunityPage() {
   }
 
   const myName = user?.user_metadata?.full_name as string | undefined;
+
+  // ── Join community onboarding ────────────────────────────────────────────
+  if (joined === false) {
+    return (
+      <AppShell title="Community">
+        <div className="mx-auto max-w-xl px-4 py-6">
+          <div className="mb-6 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">Orbit Community</p>
+            <h1 className="mt-2 text-3xl font-black">Join the community</h1>
+            <p className="mt-2 text-sm text-violet-100">
+              Discuss tough questions, share past papers and prep tips with thousands of UTME candidates. Pick the channels that match your subjects.
+            </p>
+          </div>
+
+          <p className="mb-2 text-sm font-bold text-slate-700">Choose your channels</p>
+          <div className="mb-5 grid grid-cols-2 gap-2">
+            {channels.map((ch) => {
+              const on = pickedChannels.includes(ch.id);
+              return (
+                <button key={ch.id} type="button"
+                  onClick={() => setPickedChannels((p) => (on ? p.filter((id) => id !== ch.id) : [...p, ch.id]))}
+                  className={`rounded-2xl border p-3 text-left text-sm font-bold transition ${on ? "border-violet-500 bg-violet-50 text-violet-900" : "border-slate-200 bg-white text-slate-600"}`}>
+                  {ch.name}
+                </button>
+              );
+            })}
+          </div>
+
+          <button type="button" onClick={() => {
+            try { localStorage.setItem("community_joined", "1"); } catch { /* ignore */ }
+            const first = channels.find((c) => pickedChannels.includes(c.id));
+            if (first) setActiveChannel(first);
+            setJoined(true);
+          }}
+            className="h-14 w-full rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700">
+            Join community
+          </button>
+          <p className="mt-3 text-center text-xs text-slate-400">You can change these anytime from the sidebar.</p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (joined === null || authLoading) {
+    return (
+      <AppShell title="Community">
+        <div className="mx-auto max-w-2xl px-4 py-10">
+          <div className="space-y-3">{[1, 2, 3].map((n) => <div key={n} className="h-24 animate-pulse rounded-[24px] bg-slate-100" />)}</div>
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell title="Community">

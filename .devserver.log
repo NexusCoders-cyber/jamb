@@ -65,3 +65,15 @@ npm notice run next dev
  GET /api/aloc?endpoint=questions&subject=Biology&type=utme 200 in 4.0s (next.js: 1194ms, application-code: 2.8s)
  GET /api/aloc?endpoint=questions&subject=Physics&type=utme 200 in 4.1s (next.js: 150ms, application-code: 3.9s)
  GET /api/aloc?endpoint=questions&subject=English%20Language&type=utme 200 in 4.2s (next.js: 1175ms, application-code: 3.0s)
+✓ Compiled in 972ms
+ GET /exam 200 in 1489ms (next.js: 146ms, proxy.ts: 1243ms, application-code: 100ms)
+✓ Compiled in 2.2s
+ GET /exam 200 in 560ms (next.js: 348ms, proxy.ts: 27ms, application-code: 185ms)
+ GET /exam 200 in 672ms (next.js: 319ms, proxy.ts: 35ms, application-code: 318ms)
+✓ Compiled in 11.8s
+ GET /exam 200 in 994ms (next.js: 320ms, proxy.ts: 29ms, application-code: 645ms)
+ GET /exam 200 in 916ms (next.js: 542ms, proxy.ts: 55ms, application-code: 320ms)
+✓ Compiled in 2.3s
+ GET /exam 200 in 1828ms (next.js: 207ms, proxy.ts: 60ms, application-code: 1561ms)
+ GET /messages 200 in 2.4s (next.js: 397ms, proxy.ts: 41ms, application-code: 1926ms)
+ GET / 200 in 1453ms (next.js: 886ms, proxy.ts: 55ms, application-code: 512ms)

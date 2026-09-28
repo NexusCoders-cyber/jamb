@@ -7,6 +7,15 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getDMInbox, type DMThread } from "@/lib/queries";
+import { Search, Users } from "lucide-react";
+
+type Student = {
+  id: string;
+  full_name: string;
+  course?: string;
+  interests?: string[] | null;
+  streak_days?: number;
+};
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -34,11 +43,32 @@ export default function MessagesPage() {
   const [searchResults, setSearchResults] = useState<{ id: string; full_name: string }[]>([]);
   const [searching, setSearching] = useState(false);
 
+  // Students browser — all users with their interests, so you can add friends
+  const [students, setStudents] = useState<Student[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { setLoading(false); return; }
     const supabase = createSupabaseBrowserClient();
     getDMInbox(supabase, user.id).then(setThreads).finally(() => setLoading(false));
+  }, [user, authLoading]);
+
+  // Load all students (excluding me) for the friends browser
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) { setStudentsLoading(false); return; }
+    const supabase = createSupabaseBrowserClient();
+    supabase
+      .from("profiles")
+      .select("id, full_name, course, interests, streak_days")
+      .neq("id", user.id)
+      .order("full_name")
+      .limit(50)
+      .then(({ data }) => {
+        setStudents((data ?? []) as Student[]);
+        setStudentsLoading(false);
+      });
   }, [user, authLoading]);
 
   async function searchUsers(q: string) {
@@ -58,6 +88,17 @@ export default function MessagesPage() {
     }
   }
 
+  const [studentFilter, setStudentFilter] = useState("");
+  const visibleStudents = students.filter((s) => {
+    if (!studentFilter.trim()) return true;
+    const q = studentFilter.trim().toLowerCase();
+    return (
+      s.full_name.toLowerCase().includes(q) ||
+      (s.course ?? "").toLowerCase().includes(q) ||
+      (s.interests ?? []).some((i) => i.toLowerCase().includes(q))
+    );
+  });
+
   const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
 
   return (
@@ -71,6 +112,52 @@ export default function MessagesPage() {
         </div>
         <AuthGuard user={user} loading={authLoading}>
           <>
+            {/* Students browser — discover users and add friends */}
+            <section className="mb-6 rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
+              <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                <Users className="h-4 w-4" aria-hidden /> Students
+              </p>
+              <div className="relative mb-3">
+                <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" aria-hidden />
+                <input
+                  type="search"
+                  placeholder="Filter students by name or interest…"
+                  value={studentFilter}
+                  onChange={(e) => setStudentFilter(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm outline-none focus:border-violet-400"
+                />
+              </div>
+              {studentsLoading ? (
+                <div className="space-y-2">{[1, 2, 3].map((n) => <div key={n} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}</div>
+              ) : visibleStudents.length === 0 ? (
+                <p className="py-3 text-sm text-slate-400">No students found yet — invite your friends to join Orbit Prep.</p>
+              ) : (
+                <div className="space-y-1">
+                  {visibleStudents.map((s) => (
+                    <Link key={s.id} href={`/messages/${s.id}`}
+                      className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-violet-50">
+                      <Avatar name={s.full_name} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-bold text-slate-900">{s.full_name}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          {s.course && (
+                            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">{s.course}</span>
+                          )}
+                          {(s.interests ?? []).slice(0, 3).map((i) => (
+                            <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{i.replace(" Language", "")}</span>
+                          ))}
+                          {typeof s.streak_days === "number" && s.streak_days > 0 && (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{s.streak_days}d streak</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {/* Search to start a new conversation */}
             <div className="mb-5">
               <label className="mb-2 block text-sm font-bold text-slate-700">Start a new conversation</label>

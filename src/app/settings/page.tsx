@@ -66,6 +66,14 @@ export default function SettingsPage() {
       target_score: Number(targetScore),
     });
 
+    // Keep interests in sync (subjects chosen at signup, editable here)
+    try {
+      const prefs = JSON.parse(localStorage.getItem("orbit_prefs") ?? "{}") as { subjects?: string[] };
+      if (Array.isArray(prefs.subjects) && prefs.subjects.length === 4) {
+        await supabase.from("profiles").update({ interests: prefs.subjects }).eq("id", user.id);
+      }
+    } catch { /* ignore */ }
+
     if (err) {
       setError(err.message);
     } else {
