@@ -134,10 +134,11 @@ export default function MessagesPage() {
               ) : (
                 <div className="space-y-1">
                   {visibleStudents.map((s) => (
-                    <Link key={s.id} href={`/messages/${s.id}`}
-                      className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-violet-50">
-                      <Avatar name={s.full_name} />
-                      <div className="min-w-0 flex-1">
+                    <div key={s.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-violet-50">
+                      <Link href={`/profile/${s.id}`} className="shrink-0" aria-label={`View ${s.full_name}'s profile`}>
+                        <Avatar name={s.full_name} />
+                      </Link>
+                      <Link href={`/profile/${s.id}`} className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-slate-900">{s.full_name}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1">
                           {s.course && (
@@ -150,9 +151,10 @@ export default function MessagesPage() {
                             <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{s.streak_days}d streak</span>
                           )}
                         </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</span>
-                    </Link>
+                      </Link>
+                      <Link href={`/messages/${s.id}`}
+                        className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</Link>
+                    </div>
                   ))}
                 </div>
               )}

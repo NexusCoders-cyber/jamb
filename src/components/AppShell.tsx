@@ -11,6 +11,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useUser } from "@/lib/useUser";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getUnreadDMCount } from "@/lib/queries";
 import type { LucideIcon } from "lucide-react";
 import {
   Flame,
@@ -74,12 +78,47 @@ const TABS: { label: string; href: string; icon: LucideIcon; match: string }[] =
   { label: "Me",    href: "/profile",   icon: Settings,       match: "/profile" },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function isActive(href: string, pathname: string): boolean {
   const base = href.split("?")[0];
   if (base === "/dashboard") return pathname === "/dashboard";
   return pathname === base || pathname.startsWith(base + "/");
+}
+
+/** Live unread-DM count for the Chat tab badge. */
+function useUnreadDMCount(): number {
+  const { user } = useUser();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setUnread(0); return; }
+    let mounted = true;
+    const supabase = createSupabaseBrowserClient();
+
+    const load = () => {
+      getUnreadDMCount(supabase, user.id).then((n) => {
+        if (mounted) setUnread(n);
+      }).catch(() => undefined);
+    };
+    load();
+
+    // Refresh on realtime DM inserts + when the tab regains focus
+    const channel = supabase
+      .channel("dm-unread-badge")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" }, () => load())
+      .subscribe();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", onFocus);
+      void supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  return unread;
 }
 
 // ─── Sidebar (desktop) ────────────────────────────────────────────────────────
@@ -143,6 +182,7 @@ function Sidebar({ pathname }: { pathname: string }) {
 // ─── Bottom tab bar (mobile) ──────────────────────────────────────────────────
 
 function BottomNav({ pathname }: { pathname: string }) {
+  const unread = useUnreadDMCount();
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200/80 bg-white/95 backdrop-blur-md lg:hidden"
@@ -158,11 +198,18 @@ function BottomNav({ pathname }: { pathname: string }) {
             {active && (
               <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-violet-600" />
             )}
-            <Icon
-              className={`h-5 w-5 leading-none ${active ? "text-violet-700" : "text-slate-400"}`}
-              strokeWidth={active ? 2.5 : 2}
-              aria-hidden
-            />
+            <span className="relative">
+              <Icon
+                className={`h-5 w-5 leading-none ${active ? "text-violet-700" : "text-slate-400"}`}
+                strokeWidth={active ? 2.5 : 2}
+                aria-hidden
+              />
+              {tab.href === "/messages" && unread > 0 && (
+                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
+                  {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+            </span>
             <span className={`text-[10px] font-bold tracking-wide ${active ? "text-violet-700" : "text-slate-400"}`}>
               {tab.label}
             </span>
@@ -176,6 +223,7 @@ function BottomNav({ pathname }: { pathname: string }) {
 // ─── Top bar (mobile, inside the shell header slot) ──────────────────────────
 
 function TopBar({ title, back }: { title?: string; back?: string }) {
+  const unread = useUnreadDMCount();
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 backdrop-blur-md lg:hidden">
       {back && (
@@ -189,6 +237,12 @@ function TopBar({ title, back }: { title?: string; back?: string }) {
         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#6557d9] text-xs font-black text-white">O</div>
       )}
       <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Orbit Prep"}</h1>
+      {unread > 0 && (
+        <Link href="/messages" aria-label={`${unread} unread messages`}
+          className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">
+          {unread > 9 ? "9+" : unread}
+        </Link>
+      )}
     </header>
   );
 }

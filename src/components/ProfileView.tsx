@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getProfile, type Profile } from "@/lib/queries";
+import { getProfile, getUserAttempts, type Profile } from "@/lib/queries";
 import {
   BadgeCheck,
   CalendarDays,
@@ -44,6 +43,18 @@ const BADGE_RULES: Array<{
 ];
 
 // ─── Shared UI pieces ─────────────────────────────────────────────────────────
+
+function longestStreak(dates: string[]): number {
+  if (dates.length === 0) return 0;
+  const unique = [...new Set(dates.map((d) => d.slice(0, 10)))].sort();
+  let best = 1, cur = 1;
+  for (let i = 1; i < unique.length; i++) {
+    const diff = (new Date(unique[i]).getTime() - new Date(unique[i - 1]).getTime()) / 86400000;
+    cur = diff === 1 ? cur + 1 : 1;
+    if (cur > best) best = cur;
+  }
+  return best;
+}
 
 function ActivityGrid({ dates }: { dates: string[] }) {
   const active = new Set(dates.map((d) => d.slice(0, 10)));
@@ -98,11 +109,11 @@ function StatCard({ label, value, Icon }: { label: string; value: string | numbe
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function ProfilePage() {
-  const { userId: routeUserId } = useParams<{ userId?: string }>();
+/** Renders a user profile. Pass `userId` to view someone else read-only;
+ *  omit it for the signed-in user's own editable profile. */
+export default function ProfileView({ userId: routeUserId }: { userId?: string }) {
   const { user, loading: authLoading } = useUser();
 
-  // No route param → own profile (/profile); with param → someone else (/profile/<id>)
   const viewingOther = Boolean(routeUserId);
   const targetUserId = routeUserId ?? user?.id ?? null;
 
@@ -141,7 +152,7 @@ export default function ProfilePage() {
       setBioDraft(p.bio ?? "");
 
       if (!viewingOther) {
-        const attempts = await (await import("@/lib/queries")).getUserAttempts(supabase, user!.id, 200);
+        const attempts = await getUserAttempts(supabase, user!.id, 200);
         const dates = attempts.map((a) => a.submitted_at ?? a.started_at).filter(Boolean) as string[];
         setRecentDates(dates);
         setLongest(dates.length > 0 ? longestStreak(dates) : 0);
