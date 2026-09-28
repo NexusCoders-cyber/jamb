@@ -6,6 +6,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import { Check, Lock, Trophy } from "lucide-react";
 import { getProfile, getUserAttempts } from "@/lib/queries";
 
 const STREAK_MILESTONES = [
@@ -77,7 +78,7 @@ export default function StreaksPage() {
   const metrics = [
     { label: "Current streak", value: loading ? "…" : `${streakDays} ${streakDays === 1 ? "day" : "days"}` },
     { label: "Longest streak", value: loading ? "…" : `${longestStreakDays} ${longestStreakDays === 1 ? "day" : "days"}` },
-    { label: "Daily goal", value: loading ? "…" : dailyDone ? "Completed ✓" : "Pending" },
+    { label: "Daily goal", value: loading ? "…" : dailyDone ? "Completed" : "Pending" },
     { label: "Weekly activity", value: loading ? "…" : `${weekly}/7 days` },
   ];
 
@@ -105,7 +106,7 @@ export default function StreaksPage() {
                   <div className="flex flex-wrap gap-3">
                     {unlockedBadges.map((badge) => (
                       <span key={badge.label} className="rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-700">
-                        🏅 {badge.label}
+                        <Trophy className="inline h-4 w-4" aria-hidden /> {badge.label}
                       </span>
                     ))}
                   </div>
@@ -118,7 +119,7 @@ export default function StreaksPage() {
                   <div className="flex flex-wrap gap-3">
                     {lockedBadges.map((badge) => (
                       <span key={badge.label} className="rounded-full bg-slate-200 px-4 py-2 text-sm font-bold text-slate-500">
-                        🔒 {badge.label} ({badge.days} days)
+                        <Lock className="inline h-4 w-4" aria-hidden /> {badge.label} ({badge.days} days)
                       </span>
                     ))}
                   </div>

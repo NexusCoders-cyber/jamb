@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Check, XCircle } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -143,7 +144,11 @@ export default function AdminPage() {
                   <div key={name} className="flex justify-between">
                     <span className="text-slate-600">{name}</span>
                     <strong className={ok ? "text-emerald-600" : "text-rose-500"}>
-                      {ok === undefined ? "Checking…" : ok ? "✓ Connected" : "✗ Missing"}
+                      {ok === undefined ? "Checking…" : ok ? (
+                        <span className="inline-flex items-center gap-1"><Check className="h-4 w-4" aria-hidden /> Connected</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1"><XCircle className="h-4 w-4" aria-hidden /> Missing</span>
+                      )}
                     </strong>
                   </div>
                 ))}

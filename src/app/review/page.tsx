@@ -8,6 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getAttemptAnswers } from "@/lib/queries";
+import { Check, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -148,8 +149,16 @@ function ReviewContent() {
                             : "border-slate-200 text-slate-700"
                           }`}>
                           {String.fromCharCode(65 + idx)}. {opt}
-                          {isCorrect && <span className="ml-2 text-xs font-bold text-emerald-700">✓ Correct</span>}
-                          {isSelected && !isCorrect && <span className="ml-2 text-xs font-bold text-rose-600">✗ Your answer</span>}
+                          {isCorrect && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                              <Check className="h-3.5 w-3.5" aria-hidden /> Correct
+                            </span>
+                          )}
+                          {isSelected && !isCorrect && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+                              <XCircle className="h-3.5 w-3.5" aria-hidden /> Your answer
+                            </span>
+                          )}
                         </div>
                       );
                     })}

@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { getPost, getReplies, createReply, type Post, type PostReply } from "@/lib/queries";
+import { Mail } from "lucide-react";
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -128,7 +129,7 @@ export default function PostThreadPage() {
             ← {channelName}
           </Link>
           <Link href="/messages" className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700">
-            ✉ Messages
+            Messages
           </Link>
         </div>
 

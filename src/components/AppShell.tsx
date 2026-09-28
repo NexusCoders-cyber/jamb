@@ -11,47 +11,63 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import {
+  Home,
+  PenLine,
+  BookOpen,
+  FileText,
+  Star,
+  BarChart3,
+  Library,
+  Target,
+  MessagesSquare,
+  Mail,
+  Bell,
+  Trophy,
+  Settings,
+} from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
 
-const NAV_GROUPS = [
+const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: LucideIcon }[] }[] = [
   {
     label: "Learn",
     items: [
-      { label: "Home",            href: "/dashboard",           icon: "🏠" },
-      { label: "Practice",        href: "/practice",            icon: "✏️" },
-      { label: "Study Mode",      href: "/practice?mode=study", icon: "📖" },
-      { label: "Mock Exam",       href: "/exam",                icon: "📝" },
-      { label: "Daily Challenge", href: "/daily-challenge",     icon: "⭐" },
-      { label: "Analytics",       href: "/analytics",           icon: "📊" },
-      { label: "Syllabus",        href: "/knowledge-hub",       icon: "📚" },
-      { label: "Mistakes",        href: "/mistakes",            icon: "🎯" },
+      { label: "Home",            href: "/dashboard",           icon: Home },
+      { label: "Practice",        href: "/practice",            icon: PenLine },
+      { label: "Study Mode",      href: "/practice?mode=study", icon: BookOpen },
+      { label: "Mock Exam",       href: "/exam",                icon: FileText },
+      { label: "Daily Challenge", href: "/daily-challenge",     icon: Star },
+      { label: "Analytics",       href: "/analytics",           icon: BarChart3 },
+      { label: "Syllabus",        href: "/knowledge-hub",       icon: Library },
+      { label: "Mistakes",        href: "/mistakes",            icon: Target },
     ],
   },
   {
     label: "Social",
     items: [
-      { label: "Community", href: "/community", icon: "💬" },
-      { label: "Messages",  href: "/messages",  icon: "✉️"  },
+      { label: "Community", href: "/community", icon: MessagesSquare },
+      { label: "Messages",  href: "/messages",  icon: Mail },
     ],
   },
   {
     label: "Account",
     items: [
-      { label: "Notifications", href: "/notifications", icon: "🔔" },
-      { label: "Achievements",  href: "/achievements",  icon: "🏅" },
-      { label: "Settings",      href: "/settings",      icon: "⚙️"  },
+      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "Achievements",  href: "/achievements",  icon: Trophy },
+      { label: "Settings",      href: "/settings",      icon: Settings },
     ],
   },
 ];
 
 // 5-item bottom tab bar for mobile
-const TABS = [
-  { label: "Home",      href: "/dashboard",  icon: "🏠", match: "/dashboard" },
-  { label: "Learn",     href: "/practice",   icon: "✏️",  match: "/practice" },
-  { label: "Exam",      href: "/exam",        icon: "📝", match: "/exam" },
-  { label: "Chat",      href: "/community",  icon: "💬", match: "/community" },
-  { label: "Me",        href: "/settings",   icon: "⚙️",  match: "/settings" },
+const TABS: { label: string; href: string; icon: LucideIcon; match: string }[] = [
+  { label: "Home",  href: "/dashboard", icon: Home,           match: "/dashboard" },
+  { label: "Learn", href: "/practice",  icon: PenLine,        match: "/practice" },
+  { label: "Exam",  href: "/exam",      icon: FileText,       match: "/exam" },
+  { label: "Chat",  href: "/community", icon: MessagesSquare, match: "/community" },
+  { label: "Me",    href: "/settings",  icon: Settings,       match: "/settings" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -86,14 +102,15 @@ function Sidebar({ pathname }: { pathname: string }) {
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const active = isActive(item.href, pathname);
+                const Icon = item.icon;
                 return (
                   <Link key={item.href} href={item.href}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all ${
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors ${
                       active
                         ? "bg-violet-50 text-violet-700 shadow-sm ring-1 ring-violet-100"
                         : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
                     }`}>
-                    <span className="w-5 text-center text-base leading-none">{item.icon}</span>
+                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.25} aria-hidden />
                     {item.label}
                     {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-500" />}
                   </Link>
@@ -108,7 +125,7 @@ function Sidebar({ pathname }: { pathname: string }) {
       <div className="border-t border-slate-100 p-4">
         <Link href="/practice"
           className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-3 text-white shadow-lg shadow-violet-400/30 transition hover:shadow-violet-400/50">
-          <span className="text-lg">✏️</span>
+          <PenLine className="h-5 w-5 shrink-0" aria-hidden />
           <div>
             <p className="text-xs font-black">Start practicing</p>
             <p className="text-[10px] text-violet-200">Keep your streak alive</p>
@@ -130,13 +147,18 @@ function BottomNav({ pathname }: { pathname: string }) {
     >
       {TABS.map((tab) => {
         const active = isActive(tab.href, pathname);
+        const Icon = tab.icon;
         return (
           <Link key={tab.href} href={tab.href}
-            className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-transform active:scale-95">
+            className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors">
             {active && (
               <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-violet-600" />
             )}
-            <span className={`text-xl leading-none ${active ? "opacity-100" : "opacity-50"}`}>{tab.icon}</span>
+            <Icon
+              className={`h-5 w-5 leading-none ${active ? "text-violet-700" : "text-slate-400"}`}
+              strokeWidth={active ? 2.5 : 2}
+              aria-hidden
+            />
             <span className={`text-[10px] font-bold tracking-wide ${active ? "text-violet-700" : "text-slate-400"}`}>
               {tab.label}
             </span>
@@ -153,7 +175,7 @@ function TopBar({ title, back }: { title?: string; back?: string }) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 backdrop-blur-md lg:hidden">
       {back && (
-        <Link href={back} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200">
+        <Link href={back} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200" aria-label="Go back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>

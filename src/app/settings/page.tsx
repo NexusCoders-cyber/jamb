@@ -8,6 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getProfile, updateProfile } from "@/lib/queries";
+import { Check } from "lucide-react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -210,7 +211,7 @@ export default function SettingsPage() {
               )}
               {saved && (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-                  Settings saved ✓
+                  <span className="inline-flex items-center gap-2"><Check className="h-4 w-4" aria-hidden /> Settings saved</span>
                 </div>
               )}
               <div className="flex flex-wrap gap-3">

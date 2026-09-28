@@ -86,10 +86,16 @@ button, input, select, textarea {
   box-shadow: 0 2px 16px rgba(101, 87, 217, 0.06);
 }
 
-/* ── Smooth press feedback on interactive elements ──────────────────────────── */
+/* ── Smooth press feedback on interactive elements (no scale — keeps UI at 1x) */
 button:active, a:active {
-  transform: scale(0.98);
-  transition: transform 0.08s ease;
+  filter: brightness(0.96);
+  transition: filter 0.08s ease;
+}
+
+/* ── Visible focus rings for keyboard users — never scales the design ───────── */
+:focus-visible {
+  outline: 2px solid var(--orbit-violet);
+  outline-offset: 2px;
 }
 
 @keyframes progress {

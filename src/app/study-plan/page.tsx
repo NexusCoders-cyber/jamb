@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { Check } from "lucide-react";
 import { getSubjectStats } from "@/lib/queries";
 import AppShell from "@/components/AppShell";
 import type { SubjectStats } from "@/lib/queries";
@@ -130,8 +131,8 @@ export default function StudyPlanPage() {
                         className={`flex w-full items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${done ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-200 hover:ring-violet-200"}`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-xs ${done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"}`}>
-                            {done ? "✓" : ""}
+                          <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${done ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300"}`}>
+                            {done && <Check className="h-3 w-3" strokeWidth={3} aria-hidden />}
                           </span>
                           <span className={`font-semibold ${done ? "text-emerald-800 line-through" : "text-slate-800"}`}>
                             {task.subject} · {task.duration}

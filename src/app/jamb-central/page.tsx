@@ -6,13 +6,15 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import type { Notification } from "@/lib/queries";
+import { GraduationCap, Lightbulb, Library, Megaphone, Rocket } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 // Static content categories — always shown
-const BULLETIN_CATEGORIES = [
+const BULLETIN_CATEGORIES: { slug: string; title: string; icon: LucideIcon; detail: string; color: string; badge: string }[] = [
   {
     slug: "official",
     title: "Official announcements",
-    icon: "📢",
+    icon: Megaphone,
     detail: "Authoritative JAMB registration details and exam updates.",
     color: "bg-violet-50 ring-violet-100",
     badge: "bg-violet-100 text-violet-700",
@@ -20,7 +22,7 @@ const BULLETIN_CATEGORIES = [
   {
     slug: "prep",
     title: "Preparation updates",
-    icon: "📚",
+    icon: Library,
     detail: "Changes affecting your study timetable or exam process.",
     color: "bg-emerald-50 ring-emerald-100",
     badge: "bg-emerald-100 text-emerald-700",
@@ -28,7 +30,7 @@ const BULLETIN_CATEGORIES = [
   {
     slug: "tips",
     title: "Study tips",
-    icon: "💡",
+    icon: Lightbulb,
     detail: "Short educational insights to improve your revision strategy.",
     color: "bg-amber-50 ring-amber-100",
     badge: "bg-amber-100 text-amber-700",
@@ -36,7 +38,7 @@ const BULLETIN_CATEGORIES = [
   {
     slug: "app",
     title: "App announcements",
-    icon: "🚀",
+    icon: Rocket,
     detail: "Platform changes, releases, and new learning tools.",
     color: "bg-blue-50 ring-blue-100",
     badge: "bg-blue-100 text-blue-700",
@@ -92,8 +94,8 @@ export default function JambCentralPage() {
           {BULLETIN_CATEGORIES.map((cat) => (
             <div key={cat.slug} className={`rounded-[28px] p-5 ring-1 ${cat.color}`}>
               <div className="flex items-start gap-4">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-xl shadow-sm ring-1 ring-slate-100">
-                  {cat.icon}
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-100">
+                  <cat.icon className="h-5 w-5 text-violet-600" aria-hidden />
                 </span>
                 <div>
                   <div className="flex items-center gap-2">

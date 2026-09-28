@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, startTransition } from "react";
+import { Bell, BookOpen, FileText, MessagesSquare, PenLine } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -9,11 +11,11 @@ import { getProfile, getUserAttempts, getSubjectStats } from "@/lib/queries";
 import type { ExamAttempt, SubjectStats } from "@/lib/queries";
 import AppShell from "@/components/AppShell";
 
-const quickActions = [
-  { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: "📝" },
-  { label: "Practice", detail: "Past questions, your pace", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: "✏️" },
-  { label: "Study mode", detail: "See answers as you go", href: "/practice?mode=study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: "📖" },
-  { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: "💬" },
+const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
+  { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: FileText },
+  { label: "Practice", detail: "Past questions, your pace", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: PenLine },
+  { label: "Study mode", detail: "See answers as you go", href: "/practice?mode=study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: BookOpen },
+  { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: MessagesSquare },
 ];
 
 const SUBJECT_COLORS = ["bg-[#d7a62d]", "bg-[#2b9b6a]", "bg-[#4a78a8]", "bg-[#b9684a]"];
@@ -119,11 +121,13 @@ export default function DashboardPage() {
           <div>
             <p className="text-xs font-semibold text-slate-400">{todayLabel}</p>
             <h1 className="mt-0.5 text-2xl font-black tracking-tight text-slate-900">
-              Hi, {userName.split(" ")[0]} 👋
+              Hi, {userName.split(" ")[0]}
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/notifications" className="flex h-10 w-10 items-center justify-center rounded-full bg-white ring-1 ring-slate-200 text-base">🔔</Link>
+            <Link href="/notifications" aria-label="Notifications" className="flex h-10 w-10 items-center justify-center rounded-full bg-white ring-1 ring-slate-200">
+              <Bell className="h-5 w-5 text-slate-600" aria-hidden />
+            </Link>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#6557d9] font-black text-white text-sm">{initials}</div>
           </div>
         </header>
@@ -195,8 +199,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 gap-3">
             {quickActions.map((action) => (
               <Link key={action.label} href={action.href}
-                className="flex items-center gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-100 shadow-sm transition active:scale-95">
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl ${action.tone}`}>{action.icon}</span>
+                className="flex items-center gap-3 rounded-2xl bg-white p-4 ring-1 ring-slate-100 shadow-sm transition-colors">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${action.tone}`}>
+                  <action.icon className="h-5 w-5" aria-hidden />
+                </span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black text-slate-900">{action.label}</p>
                   <p className="truncate text-[11px] text-slate-400">{action.detail}</p>
@@ -215,7 +221,7 @@ export default function DashboardPage() {
             </div>
             <Link href="/practice"
               className="rounded-xl bg-[#10263c] px-4 py-2 text-xs font-bold text-white">
-              {todayAnswered >= dailyGoal ? "Goal reached 🎉" : "Continue"}
+              {todayAnswered >= dailyGoal ? "Goal reached" : "Continue"}
             </Link>
           </div>
           <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#f1e5c9]">

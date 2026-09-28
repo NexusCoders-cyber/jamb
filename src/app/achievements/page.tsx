@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Lock, Trophy } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
@@ -77,7 +78,9 @@ export default function AchievementsPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {unlocked.map((badge) => (
                     <div key={badge.title} className="rounded-[24px] bg-emerald-50 p-5 ring-1 ring-emerald-200">
-                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-xl">🏅</div>
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100">
+                        <Trophy className="h-6 w-6 text-emerald-700" aria-hidden />
+                      </div>
                       <p className="text-lg font-black text-slate-900">{badge.title}</p>
                       <p className="mt-1 text-xs text-slate-500">{badge.description}</p>
                       <span className="mt-3 inline-flex rounded-full bg-emerald-100 px-2 py-1 text-[10px] font-bold text-emerald-700">
@@ -95,7 +98,9 @@ export default function AchievementsPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {locked.map((badge) => (
                     <div key={badge.title} className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200 opacity-70">
-                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-200 text-xl">🔒</div>
+                      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-200">
+                        <Lock className="h-6 w-6 text-slate-500" aria-hidden />
+                      </div>
                       <p className="text-lg font-black text-slate-900">{badge.title}</p>
                       <p className="mt-1 text-xs text-slate-500">{badge.description}</p>
                       <span className="mt-3 inline-flex rounded-full bg-slate-200 px-2 py-1 text-[10px] font-bold text-slate-600">

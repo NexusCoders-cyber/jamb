@@ -8,6 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
+import { Check, CheckCircle2, Star, XCircle } from "lucide-react";
 
 type ExamQuestion = { id: string; prompt: string; options: string[]; answer: number; explanation: string | null };
 type SubjectItem = { name: string; slug: string; count: number };
@@ -74,7 +75,7 @@ function InlineReview({
             <h1 className="text-5xl font-black">{practiceScore}<span className="ml-1 text-2xl font-semibold text-emerald-200">/400</span></h1>
             <div className="pb-1">
               <p className="text-lg font-bold">{score} / {total} correct · {pct}%</p>
-              <p className="text-sm text-emerald-100">{pct >= 70 ? "Great performance! 🎉" : pct >= 50 ? "Keep pushing!" : "More practice needed 💪"}</p>
+              <p className="text-sm text-emerald-100">{pct >= 70 ? "Great performance!" : pct >= 50 ? "Keep pushing!" : "More practice needed"}</p>
             </div>
           </div>
           <div className="mt-5 grid grid-cols-3 gap-3">
@@ -128,7 +129,7 @@ function InlineReview({
                 {/* Question header */}
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
-                    Q{questionIdx + 1} · {isCorrect ? "✓ Correct" : isSkipped ? "Skipped" : "✗ Wrong"}
+                    Q{questionIdx + 1} · {isCorrect ? "Correct" : isSkipped ? "Skipped" : "Wrong"}
                   </span>
                 </div>
                 <p className="text-base font-semibold leading-7 text-slate-800">{q.prompt}</p>
@@ -151,7 +152,11 @@ function InlineReview({
                           {String.fromCharCode(65 + idx)}
                         </span>
                         {opt}
-                        {isCorrectOpt && <span className="ml-auto text-xs font-bold text-emerald-700">✓ Correct answer</span>}
+                        {isCorrectOpt && (
+                          <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                            <Check className="h-3.5 w-3.5" aria-hidden /> Correct answer
+                          </span>
+                        )}
                         {isYours && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">Your answer</span>}
                       </div>
                     );
@@ -457,8 +462,16 @@ function ExamPageContent() {
                       {String.fromCharCode(65 + idx)}
                     </span>
                     {String.fromCharCode(65 + idx)}. {opt}
-                    {showResult && isCorrectOpt && <span className="ml-auto text-xs font-bold text-emerald-700">✓ Correct</span>}
-                    {showResult && isSelected && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">✗ Wrong</span>}
+                    {showResult && isCorrectOpt && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                        <Check className="h-3.5 w-3.5" aria-hidden /> Correct
+                      </span>
+                    )}
+                    {showResult && isSelected && !isCorrectOpt && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+                        <XCircle className="h-3.5 w-3.5" aria-hidden /> Wrong
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -482,7 +495,9 @@ function ExamPageContent() {
                 {!isStudyMode && (
                   <button type="button" onClick={toggleMark}
                     className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${marked.has(currentQuestion) ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
-                    {marked.has(currentQuestion) ? "Marked ★" : "Mark"}
+                    {marked.has(currentQuestion) ? (
+                      <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-current" aria-hidden /> Marked</span>
+                    ) : "Mark"}
                   </button>
                 )}
               </div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Check, CheckCircle2 } from "lucide-react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AuthGate from "@/components/AuthGate";
 
@@ -217,7 +218,9 @@ export default function SignUpPage() {
                   })}
                 </div>
                 {subjects.length === 4 && (
-                  <p className="mt-1.5 text-xs text-emerald-700 font-semibold">✓ All 4 subjects selected</p>
+                  <p className="mt-1.5 inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                    <Check className="h-3.5 w-3.5" aria-hidden /> All 4 subjects selected
+                  </p>
                 )}
               </fieldset>
 
@@ -227,7 +230,9 @@ export default function SignUpPage() {
 
               {showConfirmNotice && (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                  <p className="font-bold">Check your inbox! 📬</p>
+                  <p className="inline-flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Check your inbox
+                  </p>
                   <p className="mt-1">We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account, then sign in.</p>
                 </div>
               )}

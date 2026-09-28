@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { Flame, Inbox } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGate from "@/components/AuthGate";
 
@@ -115,7 +116,7 @@ export default function Home() {
                   <p className="text-sm font-medium text-slate-500">Daily streak</p>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-3xl font-black tracking-tight">0 days</span>
-                    <span className="text-2xl">🔥</span>
+                    <Flame className="h-8 w-8 text-amber-500" aria-hidden />
                   </div>
                 </div>
               </div>
@@ -226,7 +227,9 @@ export default function Home() {
             {/* ── FORGOT SENT VIEW ── */}
             {view === "forgot-sent" && (
               <div className="flex h-full flex-col items-center justify-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 text-4xl">📬</div>
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
+                  <Inbox className="h-10 w-10 text-emerald-700" aria-hidden />
+                </div>
                 <h2 className="text-3xl font-black text-slate-900">Check your inbox</h2>
                 <p className="mt-3 max-w-sm text-sm text-slate-500">
                   We sent a password reset link to <strong>{resetEmail}</strong>. Click the link in the email to set a new password.

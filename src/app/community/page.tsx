@@ -4,11 +4,10 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import AppShell from "@/components/AppShell";
-import {
-  getChannels, getPosts, createPost,
+import AppShell from "@/components/AppShell";import { getChannels, getPosts, createPost,
   type Channel, type Post,
 } from "@/lib/queries";
+import { MessageCircle } from "lucide-react";
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -89,7 +88,7 @@ export default function CommunityPage() {
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-2xl font-black text-slate-900">Community</h1>
           <Link href="/messages" className="flex items-center gap-1.5 rounded-full bg-violet-100 px-3 py-1.5 text-xs font-bold text-violet-700">
-            ✉ Messages
+            Messages
           </Link>
         </div>
 
@@ -140,7 +139,7 @@ export default function CommunityPage() {
                 {user ? (
                   <button onClick={() => { setShowForm((v) => !v); setPostError(""); }}
                     className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold hover:bg-white/25 transition">
-                    {showForm ? "✕ Cancel" : "+ New post"}
+                    {showForm ? "Cancel" : "New post"}
                   </button>
                 ) : (
                   <Link href="/" className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold hover:bg-white/25">
@@ -213,7 +212,7 @@ export default function CommunityPage() {
                       <p className="mt-1 text-sm text-slate-600 line-clamp-2">{post.body}</p>
                       <div className="mt-3 flex items-center gap-4">
                         <Link href={`/community/${post.id}`} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-violet-600 transition">
-                          <span>💬</span> {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
+                          <MessageCircle className="h-4 w-4" aria-hidden /> {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
                         </Link>
                         <Link href={`/community/${post.id}`} className="text-xs font-bold text-violet-600 hover:underline">
                           Read &amp; reply →

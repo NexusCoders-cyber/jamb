@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
+import { Check, XCircle } from "lucide-react";
 
 type Q = { id: string; prompt: string; options: string[]; answer: number; explanation: string | null };
 
@@ -114,7 +115,7 @@ export default function DailyChallengePage() {
               <h2 className="mt-2 text-3xl font-black">Daily challenge</h2>
             </div>
             <div className="rounded-full bg-white/10 px-3 py-1 text-sm font-bold">
-              {finished ? "Done ✓" : started ? `${current + 1}/${questions.length}` : "Live"}
+              {finished ? "Done" : started ? `${current + 1}/${questions.length}` : "Live"}
             </div>
           </div>
           {finished && (
@@ -123,7 +124,7 @@ export default function DailyChallengePage() {
                 { label: "Score", value: `${correct} / ${questions.length}` },
                 { label: "Accuracy", value: `${accuracy}%` },
                 { label: "Subject", value: todaySubject },
-                { label: "Result", value: accuracy >= 70 ? "Great! 🎉" : accuracy >= 50 ? "Keep going!" : "Practice more 💪" },
+                { label: "Result", value: accuracy >= 70 ? "Great!" : accuracy >= 50 ? "Keep going!" : "Practice more" },
               ].map((c) => (
                 <div key={c.label} className="rounded-2xl bg-white/10 p-4 ring-1 ring-white/10">
                   <p className="text-xs uppercase tracking-[0.18em] text-violet-100">{c.label}</p>
@@ -177,8 +178,16 @@ export default function DailyChallengePage() {
                       {String.fromCharCode(65 + idx)}
                     </span>
                     {opt}
-                    {showResult && isCorrectOpt && <span className="ml-auto text-xs font-bold text-emerald-600">✓ Correct</span>}
-                    {showResult && isSelected && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">✗ Wrong</span>}
+                    {showResult && isCorrectOpt && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+                        <Check className="h-3.5 w-3.5" aria-hidden /> Correct
+                      </span>
+                    )}
+                    {showResult && isSelected && !isCorrectOpt && (
+                      <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+                        <XCircle className="h-3.5 w-3.5" aria-hidden /> Wrong
+                      </span>
+                    )}
                   </button>
                 );
               })}

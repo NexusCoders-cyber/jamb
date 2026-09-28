@@ -10,6 +10,7 @@ import {
   getDMThread, sendDM, markDMsRead, getProfile,
   type DirectMessage,
 } from "@/lib/queries";
+import { Mail } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -159,8 +160,8 @@ export default function DMConversationPage() {
             </div>
           ) : messages.length === 0 ? (
             <div className="pt-16 text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-100 text-3xl">
-                ✉
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-100">
+                <Mail className="h-8 w-8 text-violet-600" aria-hidden />
               </div>
               <p className="text-lg font-black text-slate-900">Start the conversation</p>
               <p className="mt-1 text-sm text-slate-500">Send {partnerName} a message below.</p>

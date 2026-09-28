@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getWrongAnswers } from "@/lib/queries";
+import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
 type GroupedMistake = {
@@ -77,7 +78,9 @@ export default function MistakesPage() {
           </div>
         ) : totalMistakes === 0 ? (
           <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
-            <p className="text-2xl font-black text-slate-900">Clean slate! 🎉</p>
+            <p className="inline-flex items-center gap-2 text-2xl font-black text-slate-900">
+              Clean slate <PartyPopper className="h-6 w-6 text-violet-600" aria-hidden />
+            </p>
             <p className="mt-2 text-sm text-slate-500">No mistakes recorded yet. Complete exams to build your mistake bank.</p>
             <Link href="/exam" className="mt-5 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Take an exam</Link>
           </div>
@@ -137,8 +140,16 @@ export default function MistakesPage() {
                             }`}
                           >
                             {String.fromCharCode(65 + idx)}. {opt}
-                            {isCorrect && <span className="ml-2 text-xs font-bold text-emerald-600">✓ Correct</span>}
-                            {isSelected && !isCorrect && <span className="ml-2 text-xs font-bold text-rose-600">✗ Your answer</span>}
+                            {isCorrect && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+                                <Check className="h-3.5 w-3.5" aria-hidden /> Correct
+                              </span>
+                            )}
+                            {isSelected && !isCorrect && (
+                              <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+                                <XCircle className="h-3.5 w-3.5" aria-hidden /> Your answer
+                              </span>
+                            )}
                           </div>
                         );
                       })}

@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { CheckCircle2, KeyRound, LinkIcon } from "lucide-react";
 
 type Stage = "loading" | "form" | "success" | "invalid";
 
@@ -76,7 +77,9 @@ export default function ResetPasswordPage() {
         {/* Invalid / expired link */}
         {stage === "invalid" && (
           <div className="text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-rose-100 text-3xl">🔗</div>
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-rose-100">
+              <LinkIcon className="h-8 w-8 text-rose-600" aria-hidden />
+            </div>
             <h1 className="text-2xl font-black text-slate-900">Link expired</h1>
             <p className="mt-2 text-sm text-slate-500">
               This password reset link is invalid or has expired. Request a new one from the login page.
@@ -94,7 +97,9 @@ export default function ResetPasswordPage() {
         {stage === "form" && (
           <>
             <div className="mb-7 text-center">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100 text-2xl">🔐</div>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-violet-100">
+                <KeyRound className="h-7 w-7 text-violet-600" aria-hidden />
+              </div>
               <h1 className="text-2xl font-black text-slate-900">Set new password</h1>
               <p className="mt-2 text-sm text-slate-500">Choose a strong password for your account.</p>
             </div>
@@ -162,7 +167,9 @@ export default function ResetPasswordPage() {
         {/* Success */}
         {stage === "success" && (
           <div className="text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">✅</div>
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+              <CheckCircle2 className="h-8 w-8 text-emerald-600" aria-hidden />
+            </div>
             <h1 className="text-2xl font-black text-slate-900">Password updated!</h1>
             <p className="mt-2 text-sm text-slate-500">Your password has been changed. Redirecting you to the dashboard…</p>
             <div className="mt-4 h-1 overflow-hidden rounded-full bg-slate-100">
