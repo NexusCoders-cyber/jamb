@@ -576,6 +576,17 @@ export async function getDMInbox(
 
 // ─── Streak management ────────────────────────────────────────────────────────
 
+/** Calendar date (YYYY-MM-DD) in Nigeria/Lagos time — students live in UTC+1,
+ *  so the streak "day" must flip at Lagos midnight, not UTC. */
+function lagosDate(d: Date | string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(typeof d === "string" ? new Date(d) : d);
+}
+
 /**
  * Call after every exam submission.
  * - If the user has already submitted an exam today, do nothing.
@@ -589,44 +600,49 @@ export async function updateStreak(
   const profile = await getProfile(supabase, userId);
   if (!profile) return;
 
-  // Find the most recent PREVIOUS attempt (before today)
-  const today = new Date().toISOString().slice(0, 10);
+  const today = lagosDate(new Date());
+  const yesterday = lagosDate(new Date(Date.now() - 86400000));
 
-  const { data: todayAttempts } = await supabase
+  // Attempts submitted today (Lagos time) — more than one means already counted
+  const { data: attempts } = await supabase
     .from("exam_attempts")
-    .select("id")
+    .select("id, submitted_at")
     .eq("user_id", userId)
     .eq("status", "submitted")
-    .gte("submitted_at", `${today}T00:00:00.000Z`)
-    .limit(2); // if >1 means we already counted today
-
-  // Already updated today (more than 1 submitted today means streak was already counted)
-  if ((todayAttempts?.length ?? 0) > 1) return;
-
-  // Get last attempt before today
-  const { data: lastAttempts } = await supabase
-    .from("exam_attempts")
-    .select("submitted_at")
-    .eq("user_id", userId)
-    .eq("status", "submitted")
-    .lt("submitted_at", `${today}T00:00:00.000Z`)
     .order("submitted_at", { ascending: false })
-    .limit(1);
+    .limit(50);
 
-  const lastDate = lastAttempts?.[0]?.submitted_at?.slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const submitted = (attempts ?? [])
+    .map((a: { submitted_at: string | null }) => a.submitted_at)
+    .filter(Boolean) as string[];
 
-  let newStreak: number;
-  if (!lastDate) {
-    // First ever attempt
-    newStreak = 1;
-  } else if (lastDate === yesterday) {
-    // Consecutive day
-    newStreak = (profile.streak_days ?? 0) + 1;
-  } else {
-    // Streak broken
-    newStreak = 1;
+  const lagosDays = submitted.map((d) => lagosDate(d));
+  const todayCount = lagosDays.filter((d) => d === today).length;
+
+  if (todayCount > 1) {
+    // Already counted today
+    return;
+  }
+  if (todayCount === 1) {
+    // First submission today: yesterday's attempt decides increment vs reset
+    const lastDate = lagosDays.find((d) => d !== today);
+    const newStreak = lastDate === yesterday ? (profile.streak_days ?? 0) + 1 : 1;
+    await updateProfile(supabase, userId, { streak_days: newStreak });
+    return;
   }
 
-  await updateProfile(supabase, userId, { streak_days: newStreak });
+  // No submission today — nothing to update yet
+}
+
+/** Unread direct-message count for nav badges. */
+export async function getUnreadDMCount(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<number> {
+  const { count } = await supabase
+    .from("direct_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("receiver_id", userId)
+    .is("read_at", null);
+  return count ?? 0;
 }

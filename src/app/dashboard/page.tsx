@@ -81,13 +81,23 @@ export default function DashboardPage() {
   const totalAnswered = attempts.reduce((s, a) => s + a.question_count, 0);
   const totalCorrect = attempts.reduce((s, a) => s + a.score, 0);
   const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-  const practiceLevel = Math.min(400, overallAccuracy > 0 ? Math.round((overallAccuracy / 100) * 400) : 0);
+  // Real JAMB scale: accuracy% × 400 = estimated score (capped at 400)
+  const practiceLevel = Math.min(400, Math.round((overallAccuracy / 100) * 400));
   const targetProgress = targetScore > 0 ? Math.min(100, Math.round((practiceLevel / targetScore) * 100)) : 0;
 
-  // Daily goal
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Daily goal — counted in Lagos time so the day flips at Nigerian midnight
+  const todayStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
   const todayAnswered = attempts
-    .filter((a) => (a.started_at ?? "").slice(0, 10) === todayStr)
+    .filter((a) => {
+      const ts = a.submitted_at ?? a.started_at;
+      if (!ts) return false;
+      const d = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date(ts));
+      return d === todayStr;
+    })
     .reduce((s, a) => s + a.question_count, 0);
   const dailyGoal = 20;
   const dailyPct = Math.min(100, Math.round((todayAnswered / dailyGoal) * 100));
@@ -143,7 +153,9 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-white px-4 py-2 text-right shadow-sm ring-1 ring-slate-200">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Streak</p>
-              <p className="font-black text-[#6557d9]">{streakDays} {streakDays === 1 ? "day" : "days"}</p>
+              <p className="font-black text-[#6557d9]">
+                {streakDays <= 0 ? "0 days" : `${streakDays} ${streakDays === 1 ? "day" : "days"}`}
+              </p>
             </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#6557d9] font-black text-white">{initials}</div>
           </div>
@@ -156,6 +168,7 @@ export default function DashboardPage() {
           <h2 className="mt-1.5 text-2xl font-black leading-snug">
             {dataLoading ? "Loading…"
               : attempts.length === 0 ? "Complete your first exam"
+              : practiceLevel >= targetScore ? "Target reached — keep it up"
               : `${targetProgress}% to your target`}
           </h2>
           <div className="mt-4 h-2 rounded-full bg-white/15">
