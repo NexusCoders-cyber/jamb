@@ -1,0 +1,51 @@
+npm notice run jamb-app-build@0.1.0 dev
+npm notice run next dev
+▲ Next.js 16.3.5 (Turbopack)
+- Local:         http://localhost:51151
+- Network:       http://10.77.134.158:51151
+- Environments: .env.local
+✓ Ready in 3.4s
+✓ Running next.config.ts took 305ms
+○ Compiling proxy ...
+
+○ Compiling / ...
+ GET / 200 in 29.1s (next.js: 25.8s, proxy.ts: 1085ms, application-code: 2.3s)
+ GET / 200 in 620ms (next.js: 144ms, proxy.ts: 42ms, application-code: 433ms)
+ GET / 200 in 240ms (next.js: 28ms, proxy.ts: 31ms, application-code: 181ms)
+○ Compiling /dashboard ...
+ GET /dashboard 200 in 5.8s (next.js: 4.2s, proxy.ts: 472ms, application-code: 1110ms)
+○ Compiling /api/aloc ...
+ GET /api/aloc?endpoint=products 200 in 23.6s (next.js: 22.9s, application-code: 684ms)
+ GET /api/aloc?endpoint=products 200 in 146ms (next.js: 87ms, application-code: 60ms)
+ GET /settings 200 in 23.1s (next.js: 20.6s, proxy.ts: 1069ms, application-code: 1515ms)
+ GET /community 200 in 20.5s (next.js: 17.8s, proxy.ts: 717ms, application-code: 1938ms)
+[browser] [GlobalError] Error: Supabase public env vars are not set. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and restart the dev server.
+    at createSupabaseBrowserClient (src/lib/supabase/browser.ts:7:11)
+    at CommunityPage.useEffect (src/app/community/page.tsx:48:49)
+   5 |   const { url, anonKey } = getSupabasePublicEnv();
+   6 |   if (!url || !anonKey) {
+>  7 |     throw new Error("Supabase public env vars are not set. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and restart the dev server.");
+     |           ^
+   8 |   }
+   9 |   return createBrowserClient(url, anonKey);
+  10 | } (src/app/error.tsx:16:13)
+[browser] [GlobalError] Error: Supabase public env vars are not set. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and restart the dev server.
+    at createSupabaseBrowserClient (src/lib/supabase/browser.ts:7:11)
+    at CommunityPage.useEffect (src/app/community/page.tsx:48:49)
+   5 |   const { url, anonKey } = getSupabasePublicEnv();
+   6 |   if (!url || !anonKey) {
+>  7 |     throw new Error("Supabase public env vars are not set. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and restart the dev server.");
+     |           ^
+   8 |   }
+   9 |   return createBrowserClient(url, anonKey);
+  10 | } (src/app/error.tsx:16:13)
+✓ Compiled in 2.5s
+ GET /community 200 in 1521ms (next.js: 116ms, proxy.ts: 1123ms, application-code: 282ms)
+ GET /community 200 in 1302ms (next.js: 53ms, proxy.ts: 731ms, application-code: 518ms)
+○ Compiling /messages ...
+ GET /settings 200 in 2.5s (next.js: 118ms, proxy.ts: 762ms, application-code: 1662ms)
+ GET /dashboard 200 in 1784ms (next.js: 174ms, proxy.ts: 982ms, application-code: 628ms)
+ GET /api/aloc?endpoint=products 200 in 1770ms (next.js: 1474ms, application-code: 296ms)
+ GET /api/aloc?endpoint=products 200 in 380ms (next.js: 162ms, application-code: 217ms)
+ GET /settings 200 in 2.2s (next.js: 36ms, proxy.ts: 2.0s, application-code: 108ms)
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior

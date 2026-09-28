@@ -52,7 +52,21 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // Treat auth-server failure as "unknown" rather than "signed out" so a
+  // network blip can't bounce a signed-in user to the login page.
+  let user: { id: string } | null = null;
+  let authCheckFailed = false;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    user = error ? null : data.user;
+    authCheckFailed = Boolean(error);
+  } catch {
+    authCheckFailed = true;
+  }
+
+  // Never redirect based on a failed auth check — let the request through and
+  // let the page-level guards (AuthGuard) handle it once the client recovers.
+  if (authCheckFailed) return response;
 
   const isProtected = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
   const isAuthOnly  = AUTH_ONLY.includes(pathname);

@@ -14,15 +14,16 @@ function required(name: string): string {
   return value;
 }
 
-/** Safe for NEXT_PUBLIC_* — returns "" instead of throwing (checked at call site). */
-function publicVar(name: string): string {
-  return process.env[name] ?? "";
-}
-
+/**
+ * NEXT_PUBLIC_* vars MUST be referenced directly (dotted access) — bundlers
+ * inline them into the client bundle by literal name. A dynamic lookup like
+ * process.env[name] is undefined in the browser and silently broke every
+ * client-side Supabase call (sign-in walls, redirect loops, error pages).
+ */
 export function getSupabasePublicEnv() {
   return {
-    url: publicVar("NEXT_PUBLIC_SUPABASE_URL"),
-    anonKey: publicVar("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    anonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   };
 }
 
