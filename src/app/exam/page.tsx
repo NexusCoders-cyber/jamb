@@ -91,7 +91,7 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
     setExpr((e) => e + k);
   }
   return (
-    <div className="rounded-[28px] bg-slate-900 p-4 text-white">
+    <div className="fixed bottom-24 right-4 z-50 w-72 rounded-[28px] bg-slate-900 p-4 text-white shadow-2xl shadow-slate-900/40 lg:bottom-6">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-bold">Calculator</p>
         <button type="button" onClick={onClose} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold" aria-label="Close calculator">Hide</button>
@@ -293,8 +293,14 @@ function ExamPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
 
-  const mode = searchParams.get("mode") === "study" ? "study" : "exam";
+  // mode=study → answers shown immediately; mode=practice → same reveal flow;
+  // mode=exam (default) → strict JAMB CBT, explanations only in the correction review.
+  const rawMode = searchParams.get("mode");
+  const mode = rawMode === "study" ? "study" : rawMode === "practice" ? "practice" : "exam";
   const isStudyMode = mode === "study";
+  const isPracticeMode = mode === "practice";
+  const isExamMode = mode === "exam";
+  const revealEnabled = isStudyMode || isPracticeMode;
 
   const urlSubject = searchParams.get("subject") ?? ENGLISH;
   const urlCount = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 60));
@@ -337,7 +343,7 @@ function ExamPageContent() {
 
   const q = questions[currentQuestion];
   const answeredCount = Object.keys(answers).length;
-  const isRevealed = isStudyMode && revealedInStudy.has(currentQuestion);
+  const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
 
   const planTotal = ENGLISH_COUNT + OTHER_COUNT * 3;
   const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3)); // JAMB: 180q ≈ 120 min
@@ -362,10 +368,10 @@ function ExamPageContent() {
     setPreparing(true);
     setPrepareError("");
     try {
-      const entries: SubjectPlan[] = isStudyMode
-        ? [{ name: studySubject, count: studyCount }]
-        : plan.map((name, i) => ({ name, count: i === 0 ? ENGLISH_COUNT : OTHER_COUNT }));
-      const yearParam = !isStudyMode && examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
+      const entries: SubjectPlan[] = isExamMode
+        ? plan.map((name, i) => ({ name, count: i === 0 ? ENGLISH_COUNT : OTHER_COUNT }))
+        : [{ name: studySubject, count: studyCount }];
+      const yearParam = examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
 
       // ALOC's bulk endpoint caps at ~40 questions per request. For larger
       // subjects (English needs 60) we fetch extra batches with a cache-busting
@@ -439,13 +445,13 @@ function ExamPageContent() {
         setSubjectTabs(tabs);
         setQuestionTotal(combined.length);
         setSessionLabel(
-          isStudyMode
-            ? studySubject
-            : entries.length > 1
+          isExamMode
+            ? entries.length > 1
               ? `Mock exam · ${entries.map((e) => e.name.replace(" Language", "")).join(" + ")}`
-              : entries[0].name,
+              : entries[0].name
+            : studySubject,
         );
-        if (!isStudyMode) {
+        if (isExamMode) {
           const totalQ = combined.length;
           const mins = urlTimer === "1 hour" ? 60 : urlTimer === "30 minutes" ? 30 : urlTimer === "15 minutes" ? 15 : Math.max(15, Math.round((totalQ * 2) / 3));
           setTimeLeft(mins * 60);
@@ -514,17 +520,17 @@ function ExamPageContent() {
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
           <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">
-              {isStudyMode ? "Study mode — answers shown as you go" : "JAMB standard · 4 subjects"}
+              {isStudyMode ? "Study mode · answers shown as you go" : isPracticeMode ? "Practice · answers shown as you go" : "JAMB standard · 4 subjects"}
             </p>
             <h1 className="mt-2 text-3xl font-black">Ready to begin?</h1>
             <p className="mt-2 text-sm text-violet-100">
-              {isStudyMode
-                ? "Answer at your own pace and see the correct answer immediately after each question."
-                : "Use of English is compulsory. Choose your three other subjects and the year you want to practise."}
+              {isExamMode
+                ? "Use of English is compulsory. Choose your three other subjects and the year you want to practise."
+                : "Answer at your own pace — the correct answer and explanation appear right after each question."}
             </p>
           </div>
 
-          {isStudyMode ? (
+          {!isExamMode ? (
             <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
               <h2 className="mb-4 text-base font-black text-slate-900">Session settings</h2>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -540,6 +546,14 @@ function ExamPageContent() {
                   <select value={studyCount} onChange={(e) => setStudyCount(Number(e.target.value))}
                     className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-violet-500">
                     {[10, 20, 40, 60].map((n) => <option key={n} value={n}>{n} questions</option>)}
+                  </select>
+                </label>
+                <label className="block sm:col-span-2">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Past questions year</span>
+                  <select value={examYear} onChange={(e) => setExamYear(e.target.value)}
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-violet-500">
+                    <option value="random">Random mix — all years</option>
+                    {EXAM_YEARS.filter((y) => y !== "random").map((y) => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </label>
               </div>
@@ -679,12 +693,12 @@ function ExamPageContent() {
   function chooseAnswer(idx: number) {
     setAnswers((p) => ({ ...p, [currentQuestion]: idx }));
     setSkipped((p) => { const n = new Set(p); n.delete(currentQuestion); return n; });
-    if (isStudyMode) {
+    if (revealEnabled) {
       setRevealedInStudy((p) => new Set(p).add(currentQuestion));
     }
   }
   function moveNext() {
-    if (!isStudyMode && answers[currentQuestion] === undefined) setSkipped((p) => new Set(p).add(currentQuestion));
+    if (isExamMode && answers[currentQuestion] === undefined) setSkipped((p) => new Set(p).add(currentQuestion));
     setCurrentQuestion((v) => Math.min(v + 1, questionTotal - 1));
   }
   function toggleMark() {
@@ -713,19 +727,17 @@ function ExamPageContent() {
         <header className="mb-4 rounded-[24px] border border-slate-200 bg-white/90 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
-                {isStudyMode ? "Study mode — answers shown immediately" : "JAMB standard simulation"}
-              </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              {isStudyMode ? "Study mode — answers shown immediately" : isPracticeMode ? "Practice — answers shown as you go" : "JAMB standard simulation"}
+            </p>
               <h1 className="mt-1 truncate text-xl font-black tracking-tight text-slate-900">{sessionLabel}</h1>
             </div>
             <div className="flex items-center gap-2">
               {q?.year && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
-              {!isStudyMode && (
-                <button type="button" onClick={() => setShowCalc((v) => !v)} aria-label="Toggle calculator"
-                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">
-                  <Calculator className="h-3.5 w-3.5" aria-hidden /> Calc
-                </button>
-              )}
+              <button type="button" onClick={() => setShowCalc((v) => !v)} aria-label="Toggle calculator"
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">
+                <Calculator className="h-3.5 w-3.5" aria-hidden /> Calc
+              </button>
               <div className={`rounded-full px-3 py-1 text-sm font-bold ring-1 ${isStudyMode ? "bg-violet-50 text-violet-700 ring-violet-100" : "bg-emerald-50 text-emerald-700 ring-emerald-100"}`}>{fmt}</div>
             </div>
           </div>
@@ -773,7 +785,7 @@ function ExamPageContent() {
               {(q?.options ?? []).map((opt, idx) => {
                 const isSelected = answers[currentQuestion] === idx;
                 const isCorrectOpt = idx === q?.answer;
-                const showResult = isStudyMode && isRevealed;
+                const showResult = revealEnabled && isRevealed;
 
                 let cls = "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50";
                 if (showResult && isCorrectOpt) cls = "border-emerald-500 bg-emerald-50 text-emerald-900";
@@ -783,7 +795,7 @@ function ExamPageContent() {
                 return (
                   <button key={`${q?.id}-${idx}`} type="button"
                     onClick={() => !isRevealed && chooseAnswer(idx)}
-                    disabled={isStudyMode && isRevealed}
+                    disabled={revealEnabled && isRevealed}
                     className={`flex items-center rounded-2xl border p-4 text-left text-sm font-medium transition ${cls}`}>
                     <span className={`mr-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold
                       ${showResult && isCorrectOpt ? "bg-emerald-500 text-white"
@@ -807,13 +819,13 @@ function ExamPageContent() {
               })}
             </div>
 
-            {isStudyMode && isRevealed && q?.explanation && (
+            {revealEnabled && isRevealed && q?.explanation && (
               <div className="mt-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
                 <p className="mt-2 text-sm leading-6 text-emerald-900">{q.explanation}</p>
               </div>
             )}
-            {isStudyMode && isRevealed && !q?.explanation && (
+            {revealEnabled && isRevealed && !q?.explanation && (
               <p className="mt-4 text-xs text-slate-400">No explanation available for this question.</p>
             )}
 
@@ -832,8 +844,8 @@ function ExamPageContent() {
                 )}
               </div>
               <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
-                className={`inline-flex items-center gap-1 rounded-2xl px-6 py-3 text-sm font-bold text-white disabled:opacity-40 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
-                {isStudyMode && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
+                className={`inline-flex items-center gap-1 rounded-2xl px-6 py-3 text-sm font-bold text-white disabled:opacity-40 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
+                {revealEnabled && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
                 <ChevronRight className="h-4 w-4" aria-hidden />
               </button>
             </div>
@@ -861,11 +873,11 @@ function ExamPageContent() {
                             {Array.from({ length: count }, (_, k) => {
                               const i = tab.start + k;
                               let btn = "bg-slate-100 text-slate-700";
-                              if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
-                              else if (isStudyMode && revealedInStudy.has(i)) {
+                              if (i === currentQuestion) btn = revealEnabled ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
+                              else if (revealEnabled && revealedInStudy.has(i)) {
                                 btn = answers[i] === questions[i]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
-                              } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
-                              else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
+                              } else if (isExamMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
+                              else if (isExamMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
                               else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
                               return (
                                 <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
@@ -880,11 +892,11 @@ function ExamPageContent() {
                       <div className="grid grid-cols-5 gap-1.5">
                         {Array.from({ length: questionTotal }, (_, i) => {
                           let btn = "bg-slate-100 text-slate-700";
-                          if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
-                          else if (isStudyMode && revealedInStudy.has(i)) {
+                          if (i === currentQuestion) btn = revealEnabled ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
+                          else if (revealEnabled && revealedInStudy.has(i)) {
                             btn = answers[i] === questions[i]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
-                          } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
-                          else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
+                          } else if (isExamMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
+                          else if (isExamMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
                           else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
                           return (
                             <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
@@ -897,16 +909,17 @@ function ExamPageContent() {
             </div>
 
             <button type="button" onClick={doSubmit} disabled={submitting}
-              className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
-              {submitting ? "Saving…" : isStudyMode ? "Finish & Review" : "Submit Exam"}
+              className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
+              {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
             </button>
             <Link href="/practice" className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
-            {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
           </aside>
         </div>
       </div>
       </main>
+      {/* Floating calculator — fixed to the viewport, above the bottom nav */}
+      {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
     </AppShell>
   );
 }

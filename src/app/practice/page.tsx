@@ -55,7 +55,7 @@ export default function PracticePage() {
 
   const topics = SUBJECT_TOPICS[selectedSubject] ?? [];
 
-  const examHref = `/exam?subject=${encodeURIComponent(selectedSubject)}&count=${questionCount}&timer=${encodeURIComponent(mode === "mock-cbt" ? timer : "No timer")}&mode=${mode === "study" ? "study" : mode === "mock-cbt" ? "exam" : "exam"}${year !== "All years" ? `&year=${year}` : ""}&topic=${encodeURIComponent(selectedTopic)}`;
+  const examHref = `/exam?subject=${encodeURIComponent(selectedSubject)}&count=${questionCount}&timer=${encodeURIComponent(mode === "mock-cbt" ? timer : "No timer")}&mode=${mode === "study" ? "study" : mode === "mock-cbt" ? "exam" : "practice"}${year !== "All years" ? `&year=${year}` : ""}&topic=${encodeURIComponent(selectedTopic)}`;
 
   function changeSubject(name: string) {
     setSelectedSubject(name);
