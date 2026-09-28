@@ -8,9 +8,30 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
-import { Check, CheckCircle2, Star, XCircle } from "lucide-react";
+import {
+  Calculator,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Flag,
+  Play,
+  XCircle,
+} from "lucide-react";
 
-type ExamQuestion = { id: string; prompt: string; options: string[]; answer: number; explanation: string | null };
+/**
+ * Full ALOC question shape — includes fields the review screen and study mode
+ * need (image, section/passage, year) that older code dropped.
+ */
+type ExamQuestion = {
+  id: string;
+  prompt: string;
+  options: string[];
+  answer: number;
+  explanation: string | null;
+  image?: string | null;
+  section?: string | null;
+  year?: string | null;
+};
 type SubjectItem = { name: string; slug: string; count: number };
 
 const FALLBACK: ExamQuestion[] = [
@@ -21,26 +42,89 @@ const FALLBACK: ExamQuestion[] = [
   { id: "f5", prompt: "Photosynthesis in green plants produces:", options: ["CO2 and water", "Glucose and oxygen", "Starch and CO2", "Oxygen only"], answer: 1, explanation: null },
 ];
 
-const ALL_SUBJECTS: SubjectItem[] = ALOC_SUBJECTS.map((s) => ({
-  name: s.name, slug: s.slug, count: s.name === "English Language" ? 60 : 40,
-}));
+const ALL_SUBJECTS: SubjectItem[] = ALOC_SUBJECTS.map((s) => ({ name: s.name, slug: s.slug, count: s.name === "English Language" ? 60 : 40 }));
+
+// ─── Calculator ───────────────────────────────────────────────────────────────
+// A simple safe arithmetic evaluator (no eval): supports + - × ÷ and decimals.
 
 function calcExpr(input: string): string | number {
   const tokens = input.match(/\d+(?:\.\d+)?|[+\-*/]/g);
-  if (!tokens || tokens.join("") !== input.replace(/\s/g, "")) return "-";
+  if (!tokens) return "-";
+  // Guard: token stream must cover the whole (whitespace-stripped) input
+  if (tokens.join("") !== input.replace(/\s/g, "")) return "-";
   let r = Number(tokens[0]);
   for (let i = 1; i < tokens.length; i += 2) {
     const n = Number(tokens[i + 1]);
+    if (Number.isNaN(n)) return "-";
     if (tokens[i] === "+") r += n;
     else if (tokens[i] === "-") r -= n;
     else if (tokens[i] === "*") r *= n;
     else if (tokens[i] === "/") { if (n === 0) return "-"; r /= n; }
+    else return "-";
   }
-  return Number.isFinite(r) ? r : "-";
+  return Number.isFinite(r) ? Math.round(r * 1e10) / 1e10 : "-";
+}
+
+function CalculatorPad({ onClose }: { onClose: () => void }) {
+  const [expr, setExpr] = useState("");
+  const keys = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+"];
+  function press(k: string) {
+    if (k === "=") {
+      const result = calcExpr(expr);
+      if (typeof result === "number") setExpr(String(result));
+      return;
+    }
+    setExpr((e) => e + k);
+  }
+  return (
+    <div className="rounded-[28px] bg-slate-900 p-4 text-white">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-bold">Calculator</p>
+        <button type="button" onClick={onClose} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold" aria-label="Close calculator">Hide</button>
+      </div>
+      <div className="mb-3 min-h-[2.5rem] rounded-xl bg-white/10 px-3 py-2 text-right font-mono text-lg font-bold break-all">
+        {expr || "0"}
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        {keys.map((k) => (
+          <button key={k} type="button" onClick={() => press(k)}
+            className={`h-11 rounded-xl text-base font-bold ${k === "=" ? "bg-emerald-500 text-white" : "bg-white/10 active:bg-white/20"}`}>
+            {k === "*" ? "×" : k === "/" ? "÷" : k}
+          </button>
+        ))}
+        <button type="button" onClick={() => setExpr((e) => e.slice(0, -1))} className="col-span-2 h-11 rounded-xl bg-white/10 text-sm font-bold">Backspace</button>
+        <button type="button" onClick={() => setExpr("")} className="col-span-2 h-11 rounded-xl bg-rose-500/80 text-sm font-bold">Clear</button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Inline review screen shown after submission ──────────────────────────────
 type ReviewEntry = { question: ExamQuestion; selectedIdx: number | null; questionIdx: number };
+
+function QuestionMedia({ question }: { question: ExamQuestion }) {
+  return (
+    <>
+      {/* Comprehension passage / section text */}
+      {question.section && (
+        <div className="mb-4 max-h-72 overflow-y-auto whitespace-pre-line rounded-[20px] bg-amber-50 p-4 ring-1 ring-amber-100">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Passage</p>
+          <p className="text-sm leading-7 text-slate-800">{question.section}</p>
+        </div>
+      )}
+      {/* Question image */}
+      {question.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={question.image}
+          alt="Question illustration"
+          className="mb-4 max-h-72 w-auto max-w-full rounded-2xl ring-1 ring-slate-200"
+          loading="lazy"
+        />
+      )}
+    </>
+  );
+}
 
 function InlineReview({
   entries,
@@ -131,7 +215,10 @@ function InlineReview({
                   <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
                     Q{questionIdx + 1} · {isCorrect ? "Correct" : isSkipped ? "Skipped" : "Wrong"}
                   </span>
+                  {q.year && <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
                 </div>
+
+                <QuestionMedia question={q} />
                 <p className="text-base font-semibold leading-7 text-slate-800">{q.prompt}</p>
 
                 {/* Options */}
@@ -157,7 +244,11 @@ function InlineReview({
                             <Check className="h-3.5 w-3.5" aria-hidden /> Correct answer
                           </span>
                         )}
-                        {isYours && !isCorrectOpt && <span className="ml-auto text-xs font-bold text-rose-600">Your answer</span>}
+                        {isYours && !isCorrectOpt && (
+                          <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-rose-600">
+                            <XCircle className="h-3.5 w-3.5" aria-hidden /> Your answer
+                          </span>
+                        )}
                       </div>
                     );
                   })}
@@ -193,24 +284,30 @@ function ExamPageContent() {
   const mode = searchParams.get("mode") === "study" ? "study" : "exam";
   const isStudyMode = mode === "study";
 
+  // Pre-selected config from /practice (subject, count, timer, year)
+  const urlSubject = searchParams.get("subject") ?? "English Language";
+  const urlCount = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 180));
+  const urlTimer = searchParams.get("timer") ?? "Recommended timer";
+  const urlYear = searchParams.get("year") ?? "All years";
+
+  // ── Lobby state (exam never auto-starts) ──
+  const [started, setStarted] = useState(false);
+
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(["English Language", "Biology", "Chemistry", "Physics"]);
-  const [selectedSubject, setSelectedSubject] = useState(searchParams.get("subject") ?? "English Language");
+  const [selectedSubject, setSelectedSubject] = useState(urlSubject);
   const questionCache = useRef<Map<string, ExamQuestion[]>>(new Map());
-  const [questions, setQuestions] = useState<ExamQuestion[]>(FALLBACK);
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [loadingQ, setLoadingQ] = useState(false);
   const [qError, setQError] = useState("");
 
-  const questionTotal = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 180));
-  const timerPref = searchParams.get("timer") ?? "Recommended timer";
-
+  const [questionTotal, setQuestionTotal] = useState(urlCount);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [marked, setMarked] = useState<Set<number>>(new Set());
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const [revealedInStudy, setRevealedInStudy] = useState<Set<number>>(new Set());
-  const [timeLeft, setTimeLeft] = useState(timerPref === "No timer" || isStudyMode ? null : 120 * 60);
   const [showCalc, setShowCalc] = useState(false);
-  const [calcVal, setCalcVal] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const attemptIdRef = useRef<string | null>(null);
 
@@ -218,7 +315,7 @@ function ExamPageContent() {
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
   const [reviewScore, setReviewScore] = useState(0);
 
-  const q = questions[currentQuestion % questions.length];
+  const q = questions[currentQuestion % Math.max(questions.length, 1)];
   const answeredCount = Object.keys(answers).length;
   const isRevealed = isStudyMode && revealedInStudy.has(currentQuestion);
 
@@ -233,9 +330,9 @@ function ExamPageContent() {
     } catch (_e) { /* ignore */ }
   }, []);
 
-  // Load questions from ALOC
+  // Load questions from ALOC — only AFTER the user presses Start
   useEffect(() => {
-    if (authLoading) return;
+    if (!started || authLoading) return;
     const cached = questionCache.current.get(selectedSubject);
     if (cached) { startTransition(() => setQuestions(cached)); return; }
     let mounted = true;
@@ -248,22 +345,22 @@ function ExamPageContent() {
           questionCache.current.set(selectedSubject, res.data);
           startTransition(() => setQuestions(res.data!));
         } else {
-          setQError(res.error ?? "Could not load questions — showing samples.");
+          setQError(res.error ?? "Could not load questions. Check your connection and try again.");
         }
       })
-      .catch(() => { if (mounted) setQError("Network error — showing sample questions."); })
+      .catch(() => { if (mounted) setQError("Network error — please try again."); })
       .finally(() => { if (mounted) setLoadingQ(false); });
     return () => { mounted = false; };
-  }, [selectedSubject, authLoading]);
+  }, [selectedSubject, started, authLoading]);
 
   // Create attempt on first real question load
   useEffect(() => {
-    if (!user || questions === FALLBACK || attemptIdRef.current) return;
+    if (!user || !started || questions.length === 0 || attemptIdRef.current) return;
     try {
       const supabase = createSupabaseBrowserClient();
       createAttempt(supabase, user.id, null, questionTotal).then((a) => { if (a) attemptIdRef.current = a.id; });
-    } catch (_e) { /* env not set */ }
-  }, [user, questions, questionTotal]);
+    } catch { /* env not set */ }
+  }, [user, started, questions, questionTotal]);
 
   // Timer countdown
   useEffect(() => {
@@ -272,10 +369,82 @@ function ExamPageContent() {
     return () => clearInterval(id);
   }, [timeLeft]);
 
-  const doSubmitRef = useRef<(() => Promise<void>) | undefined>(undefined);
-  useEffect(() => {
-    if (timeLeft === 0) void doSubmitRef.current?.();
-  }, [timeLeft]);
+  // ── Lobby UI ────────────────────────────────────────────────────────────────
+  if (!started && !reviewEntries) {
+    return (
+      <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back="/practice">
+        <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+          <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">
+              {isStudyMode ? "Study mode — answers shown as you go" : "Full exam simulation"}
+            </p>
+            <h1 className="mt-2 text-3xl font-black">Ready to begin?</h1>
+            <p className="mt-2 text-sm text-violet-100">
+              {isStudyMode
+                ? "Answer at your own pace and see the correct answer immediately after each question."
+                : "Answer the questions, flag the ones you want to revisit, and submit before time runs out."}
+            </p>
+          </div>
+
+          <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+            <h2 className="mb-4 text-base font-black text-slate-900">Session settings</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Subject</span>
+                <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-violet-500">
+                  {ALL_SUBJECTS.map((s) => <option key={s.name}>{s.name}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Questions</span>
+                <select value={questionTotal} onChange={(e) => setQuestionTotal(Number(e.target.value))}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-violet-500">
+                  {[10, 20, 40, 60].map((n) => <option key={n} value={n}>{n} questions</option>)}
+                </select>
+              </label>
+              {!isStudyMode && (
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Timer</span>
+                  <select value={urlTimer} disabled
+                    className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none">
+                    <option>{urlTimer}</option>
+                  </select>
+                </label>
+              )}
+              <div className="block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Year</span>
+                <p className="flex h-12 items-center rounded-xl bg-slate-50 px-3 text-sm font-semibold text-slate-500">
+                  {urlYear}
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-slate-400">
+              {isStudyMode
+                ? "Change subject or length here — questions load when you start."
+                : "Subject and length are locked once the exam starts. Set them now."}
+            </p>
+          </div>
+
+          <button type="button" onClick={() => {
+            setStarted(true);
+            if (!isStudyMode && urlTimer !== "No timer") {
+              const mins = urlTimer === "1 hour" ? 60 : urlTimer === "30 minutes" ? 30 : 15;
+              setTimeLeft(mins * 60);
+            }
+          }}
+            disabled={loadingQ}
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700">
+            <Play className="h-5 w-5" aria-hidden />
+            {loadingQ ? "Preparing questions…" : "Start now"}
+          </button>
+          <Link href="/practice" className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+            Back to practice settings
+          </Link>
+        </div>
+      </AppShell>
+    );
+  }
 
   async function doSubmit() {
     if (submitting) return;
@@ -327,8 +496,6 @@ function ExamPageContent() {
     }
   }
 
-  doSubmitRef.current = doSubmit;
-
   function handleRetry() {
     setReviewEntries(null);
     setAnswers({});
@@ -338,12 +505,9 @@ function ExamPageContent() {
     setCurrentQuestion(0);
     setSubmitting(false);
     attemptIdRef.current = null;
+    setStarted(false);
   }
 
-  function toggleSubject(name: string) {
-    if (name === "English Language") return;
-    setSelectedSubjects((c) => c.includes(name) ? c.filter((s) => s !== name) : c.length < 4 ? [...c, name] : c);
-  }
   function chooseAnswer(idx: number) {
     setAnswers((p) => ({ ...p, [currentQuestion]: idx }));
     setSkipped((p) => { const n = new Set(p); n.delete(currentQuestion); return n; });
@@ -357,7 +521,7 @@ function ExamPageContent() {
     setCurrentQuestion((v) => Math.min(v + 1, questionTotal - 1));
   }
   function toggleMark() {
-    setMarked((p) => { const n = new Set(p); n.has(currentQuestion) ? n.delete(currentQuestion) : n.add(currentQuestion); return n; });
+    setMarked((p) => { const n = new Set(p); if (n.has(currentQuestion)) { n.delete(currentQuestion); } else { n.add(currentQuestion); } return n; });
   }
 
   const fmt = timeLeft === null ? (isStudyMode ? "Study mode" : "No timer")
@@ -385,7 +549,7 @@ function ExamPageContent() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">
               {isStudyMode ? "Study mode — answers shown immediately" : "Full exam simulation"}
             </p>
-            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">Orbit CBT</h1>
+            <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900">{selectedSubject}</h1>
           </div>
           <div className="flex items-center gap-2">
             {isStudyMode && (
@@ -396,26 +560,12 @@ function ExamPageContent() {
           </div>
         </header>
 
-        {/* Subject picker — only shown in exam mode */}
-        {!isStudyMode && (
-          <section className="mb-6 rounded-[28px] bg-violet-50 p-5 ring-1 ring-violet-100">
-            <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-600">Choose your subjects</p>
-                <h2 className="mt-1 text-xl font-black text-slate-900">English + three subjects</h2>
-              </div>
-              <span className="text-xs font-bold text-slate-600">{selectedSubjects.length - 1} of 3 selected</span>
-            </div>
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {ALL_SUBJECTS.map((s) => (
-                <button key={s.name} type="button" onClick={() => toggleSubject(s.name)}
-                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-semibold transition ${selectedSubjects.includes(s.name) ? "border-violet-400 bg-white text-violet-900" : "border-transparent bg-white/60 text-slate-600 hover:border-violet-200 hover:bg-white"}`}>
-                  <span className="truncate">{s.name}</span>
-                  {s.name === "English Language" && <span className="ml-1 shrink-0 text-[9px] text-violet-400">Req</span>}
-                </button>
-              ))}
-            </div>
-          </section>
+        {qError && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+            <p className="text-sm font-semibold text-amber-800">{qError}</p>
+            <button type="button" onClick={() => { questionCache.current.delete(selectedSubject); setStarted(false); }}
+              className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-bold text-white">Back to setup</button>
+          </div>
         )}
 
         <div className="grid gap-6 xl:grid-cols-[1.7fr_0.7fr]">
@@ -427,22 +577,31 @@ function ExamPageContent() {
                   Q {currentQuestion + 1} / {questionTotal}{loadingQ ? " · Loading…" : ""}
                 </span>
               </div>
+              {/* Meta chips: year + topic/section (esp. study mode) */}
               <div className="flex items-center gap-2">
-                <div className={`rounded-full px-3 py-1 text-xs font-bold ${isStudyMode ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{selectedSubject}</div>
+                {q?.year && (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{q.year}</span>
+                )}
                 {!isStudyMode && (
-                  <button type="button" onClick={() => setShowCalc((v) => !v)} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">Calc</button>
+                  <button type="button" onClick={() => setShowCalc((v) => !v)} aria-label="Toggle calculator"
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">
+                    <Calculator className="h-3.5 w-3.5" aria-hidden /> Calc
+                  </button>
                 )}
               </div>
             </div>
 
+            {/* Passage + image */}
+            {q && <QuestionMedia question={q} />}
+
             <div className={`rounded-[24px] p-5 ring-1 ${isStudyMode ? "bg-violet-50 ring-violet-100" : "bg-slate-50 ring-slate-200"}`}>
-              <p className="text-lg leading-8 text-slate-800">{q.prompt}</p>
+              <p className="text-lg leading-8 text-slate-800">{q?.prompt ?? (loadingQ ? "Loading question…" : "")}</p>
             </div>
 
             <div className="mt-6 grid gap-3">
-              {q.options.map((opt, idx) => {
+              {(q?.options ?? []).map((opt, idx) => {
                 const isSelected = answers[currentQuestion] === idx;
-                const isCorrectOpt = idx === q.answer;
+                const isCorrectOpt = idx === q?.answer;
                 const showResult = isStudyMode && isRevealed;
 
                 let cls = "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50";
@@ -451,7 +610,7 @@ function ExamPageContent() {
                 else if (!showResult && isSelected) cls = "border-emerald-500 bg-emerald-50 text-emerald-900";
 
                 return (
-                  <button key={`${q.id}-${idx}`} type="button"
+                  <button key={`${q?.id}-${idx}`} type="button"
                     onClick={() => !isRevealed && chooseAnswer(idx)}
                     disabled={isStudyMode && isRevealed}
                     className={`flex items-center rounded-2xl border p-4 text-left text-sm font-medium transition ${cls}`}>
@@ -461,7 +620,7 @@ function ExamPageContent() {
                         : "bg-slate-100 text-slate-600"}`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    {String.fromCharCode(65 + idx)}. {opt}
+                    {opt}
                     {showResult && isCorrectOpt && (
                       <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
                         <Check className="h-3.5 w-3.5" aria-hidden /> Correct
@@ -478,77 +637,45 @@ function ExamPageContent() {
             </div>
 
             {/* Study mode explanation block */}
-            {isStudyMode && isRevealed && q.explanation && (
+            {isStudyMode && isRevealed && q?.explanation && (
               <div className="mt-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
                 <p className="mt-2 text-sm leading-6 text-emerald-900">{q.explanation}</p>
               </div>
             )}
-            {isStudyMode && isRevealed && !q.explanation && (
+            {isStudyMode && isRevealed && !q?.explanation && (
               <p className="mt-4 text-xs text-slate-400">No explanation available for this question.</p>
             )}
 
             <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
               <div className="flex gap-3">
                 <button type="button" disabled={currentQuestion === 0} onClick={() => setCurrentQuestion((v) => v - 1)}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">Prev</button>
+                  className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">
+                  <ChevronLeft className="h-4 w-4" aria-hidden /> Prev
+                </button>
                 {!isStudyMode && (
                   <button type="button" onClick={toggleMark}
-                    className={`rounded-2xl border px-4 py-2 text-sm font-semibold ${marked.has(currentQuestion) ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
-                    {marked.has(currentQuestion) ? (
-                      <span className="inline-flex items-center gap-1"><Star className="h-3.5 w-3.5 fill-current" aria-hidden /> Marked</span>
-                    ) : "Mark"}
+                    className={`inline-flex items-center gap-1 rounded-2xl border px-4 py-2 text-sm font-semibold ${marked.has(currentQuestion) ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700"}`}>
+                    <Flag className="h-3.5 w-3.5" aria-hidden />
+                    {marked.has(currentQuestion) ? "Marked" : "Mark"}
                   </button>
                 )}
               </div>
               <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
-                className={`rounded-2xl px-6 py-3 text-sm font-bold text-white disabled:opacity-40 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
+                className={`inline-flex items-center gap-1 rounded-2xl px-6 py-3 text-sm font-bold text-white disabled:opacity-40 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
                 {isStudyMode && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
+                <ChevronRight className="h-4 w-4" aria-hidden />
               </button>
             </div>
           </section>
 
           <aside className="space-y-5">
-            {/* Subject switcher — study mode only */}
-            {isStudyMode ? (
-              <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
-                <h3 className="mb-3 text-base font-black text-slate-900">Subject</h3>
-                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 200 }}>
-                  {ALL_SUBJECTS.map((s) => (
-                    <button key={s.name} type="button" onClick={() => { setSelectedSubject(s.name); setCurrentQuestion(0); setAnswers({}); setRevealedInStudy(new Set()); }}
-                      className={`flex w-full items-center justify-between rounded-2xl p-3 text-left text-xs transition ${s.name === selectedSubject ? "bg-violet-50 ring-1 ring-violet-200" : "bg-slate-50 hover:bg-slate-100"}`}>
-                      <span className="font-semibold text-slate-800">{s.name}</span>
-                      {s.name === selectedSubject && <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">Active</span>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-base font-black text-slate-900">Subjects</h3>
-                  <span className="text-xs font-semibold text-slate-500">{answeredCount} answered</span>
-                </div>
-                <div className="space-y-2 overflow-y-auto" style={{ maxHeight: 260 }}>
-                  {ALL_SUBJECTS.map((s) => (
-                    <button key={s.name} type="button" onClick={() => setSelectedSubject(s.name)}
-                      className={`flex w-full items-center justify-between rounded-2xl p-3 text-left text-xs transition ${s.name === selectedSubject ? "bg-emerald-50 ring-1 ring-emerald-200" : "bg-slate-50 hover:bg-slate-100"}`}>
-                      <div>
-                        <p className="font-semibold text-slate-800">{s.name}</p>
-                        <p className="text-slate-400">{s.count} questions</p>
-                      </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.name === selectedSubject ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                        {s.name === selectedSubject ? "Active" : "Ready"}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Navigator */}
+            {/* Progress + navigator — no subject switching mid-exam */}
             <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
-              <h3 className="mb-4 text-base font-black text-slate-900">Navigator</h3>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-base font-black text-slate-900">Navigator</h3>
+                <span className="text-xs font-semibold text-slate-500">{answeredCount} answered</span>
+              </div>
               <div className="grid grid-cols-5 gap-1.5">
                 {Array.from({ length: Math.min(questionTotal, 60) }, (_, i) => {
                   let btn = "bg-slate-100 text-slate-700";
@@ -571,15 +698,9 @@ function ExamPageContent() {
               className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${isStudyMode ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
               {submitting ? "Saving…" : isStudyMode ? "Finish & Review" : "Submit Exam"}
             </button>
-            <Link href="/dashboard" className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
+            <Link href="/practice" className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
-            {showCalc && (
-              <div className="rounded-[28px] bg-slate-900 p-4 text-white">
-                <p className="mb-2 text-sm font-bold">Calculator</p>
-                <input value={calcVal} onChange={(e) => setCalcVal(e.target.value)} placeholder="e.g. 200 / 50" className="w-full rounded-xl bg-white/10 px-3 py-2 text-sm outline-none" />
-                <p className="mt-3 text-right text-lg font-black">{calcVal ? calcExpr(calcVal) : "0"}</p>
-              </div>
-            )}
+            {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
           </aside>
         </div>
       </div>

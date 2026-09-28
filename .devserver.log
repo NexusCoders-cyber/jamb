@@ -49,3 +49,12 @@ npm notice run next dev
  GET /api/aloc?endpoint=products 200 in 380ms (next.js: 162ms, application-code: 217ms)
  GET /settings 200 in 2.2s (next.js: 36ms, proxy.ts: 2.0s, application-code: 108ms)
 [browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+✓ Compiled in 4.5s
+✓ Compiled in 6.7s
+ GET /settings 200 in 4.2s (next.js: 1763ms, proxy.ts: 1745ms, application-code: 704ms)
+ GET /settings 200 in 938ms (next.js: 66ms, proxy.ts: 605ms, application-code: 266ms)
+○ Compiling /exam ...
+ GET /exam?subject=Biology&count=10&timer=No%20timer&mode=study 200 in 12.0s (next.js: 9.0s, proxy.ts: 895ms, application-code: 2.1s)
+ GET /api/aloc?endpoint=questions&subject=Biology&type=utme 200 in 4.6s (next.js: 62ms, application-code: 4.5s)
+ GET /messages 200 in 4.2s (next.js: 299ms, proxy.ts: 3.2s, application-code: 768ms)
+ GET /community 200 in 11.5s (next.js: 253ms, proxy.ts: 10.8s, application-code: 471ms)

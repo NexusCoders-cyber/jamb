@@ -66,7 +66,7 @@ const TABS: { label: string; href: string; icon: LucideIcon; match: string }[] =
   { label: "Home",  href: "/dashboard", icon: Home,           match: "/dashboard" },
   { label: "Learn", href: "/practice",  icon: PenLine,        match: "/practice" },
   { label: "Exam",  href: "/exam",      icon: FileText,       match: "/exam" },
-  { label: "Chat",  href: "/community", icon: MessagesSquare, match: "/community" },
+  { label: "Chat",  href: "/messages",  icon: Mail,           match: "/messages" },
   { label: "Me",    href: "/settings",  icon: Settings,       match: "/settings" },
 ];
 

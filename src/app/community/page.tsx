@@ -3,11 +3,73 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import AppShell from "@/components/AppShell";import { getChannels, getPosts, createPost,
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";import AppShell from "@/components/AppShell";
+import {
+  getChannels, getPosts, createPost,
   type Channel, type Post,
 } from "@/lib/queries";
-import { MessageCircle } from "lucide-react";
+
+type Person = { id: string; full_name: string; streak_days?: number };
+
+function PeopleBrowser({ myId }: { myId: string }) {
+  const [query, setQuery] = useState("");
+  const [people, setPeople] = useState<Person[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!query.trim()) { setPeople([]); return; }
+    let mounted = true;
+    setLoading(true);
+    const supabase = createSupabaseBrowserClient();
+    const t = setTimeout(() => {
+      supabase
+        .from("profiles")
+        .select("id, full_name, streak_days")
+        .ilike("full_name", `%${query.trim()}%`)
+        .neq("id", myId)
+        .limit(12)
+        .then(({ data }) => {
+          if (mounted) { setPeople((data ?? []) as Person[]); setLoading(false); }
+        });
+    }, 300);
+    return () => { mounted = false; clearTimeout(t); };
+  }, [query, myId]);
+
+  return (
+    <div className="rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
+      <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+        <Users className="h-4 w-4" aria-hidden /> Find students
+      </p>
+      <input
+        type="search"
+        placeholder="Search by name…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        className="mb-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-violet-400"
+      />
+      {loading && <p className="py-2 text-xs text-slate-400">Searching…</p>}
+      {!loading && query.trim() && people.length === 0 && (
+        <p className="py-2 text-xs text-slate-400">No students found.</p>
+      )}
+      <div className="space-y-1">
+        {people.map((p) => (
+          <Link key={p.id} href={`/messages/${p.id}`}
+            className="flex items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-violet-50">
+            <Avatar name={p.full_name} size="sm" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-slate-900">{p.full_name}</p>
+              {typeof p.streak_days === "number" && (
+                <p className="text-[11px] text-slate-400">{p.streak_days}-day streak</p>
+              )}
+            </div>
+            <span className="rounded-full bg-violet-100 px-2.5 py-1 text-[10px] font-bold text-violet-700">Message</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+import { MessageCircle, Search, Users } from "lucide-react";
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -109,19 +171,22 @@ export default function CommunityPage() {
             </div>
 
             {user && (
-              <div className="rounded-[24px] bg-violet-600 p-4 text-white">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Your profile</p>
-                <div className="mt-3 flex items-center gap-3">
-                  <Avatar name={myName ?? user.email ?? "U"} />
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{myName ?? "Student"}</p>
-                    <p className="truncate text-xs text-violet-200">{user.email}</p>
+              <>
+                <PeopleBrowser myId={user.id} />
+                <div className="rounded-[24px] bg-violet-600 p-4 text-white">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Your profile</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <Avatar name={myName ?? user.email ?? "U"} />
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">{myName ?? "Student"}</p>
+                      <p className="truncate text-xs text-violet-200">{user.email}</p>
+                    </div>
                   </div>
+                  <Link href="/settings" className="mt-3 block rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-bold text-white hover:bg-white/20">
+                    Edit profile
+                  </Link>
                 </div>
-                <Link href="/settings" className="mt-3 block rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-bold text-white hover:bg-white/20">
-                  Edit profile
-                </Link>
-              </div>
+              </>
             )}
           </aside>
 
