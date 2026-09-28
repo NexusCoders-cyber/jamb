@@ -366,21 +366,58 @@ function ExamPageContent() {
         ? [{ name: studySubject, count: studyCount }]
         : plan.map((name, i) => ({ name, count: i === 0 ? ENGLISH_COUNT : OTHER_COUNT }));
       const yearParam = !isStudyMode && examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
+
+      // ALOC's bulk endpoint caps at ~40 questions per request. For larger
+      // subjects (English needs 60) we fetch extra batches with a cache-busting
+      // `t` param so each batch returns different questions, then dedupe.
+      async function fetchPool(name: string, want: number): Promise<ExamQuestion[]> {
+        const cacheKey = examYear === "random" ? name : `${name}:${examYear}`;
+        const cached = questionCache.current.get(cacheKey);
+        const batches: ExamQuestion[][] = [];
+        if (cached) {
+          batches.push(cached);
+        } else {
+          const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
+            .then((r) => r.json())
+            .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
+              if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+                questionCache.current.set(cacheKey, res.data);
+                return res.data;
+              }
+              throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
+            });
+          batches.push(first);
+        }
+
+        const seen = new Set(batches[0].map((q) => String(q.id)));
+        let round = 1;
+        while (seen.size < want && round < 3) {
+          const more = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&t=${Date.now()}-${round}`)
+            .then((r) => r.json())
+            .then((res: { ok: boolean; data?: ExamQuestion[] }) =>
+              (res.ok && Array.isArray(res.data) ? res.data : []) as ExamQuestion[],
+            )
+            .catch(() => [] as ExamQuestion[]);
+          if (more.length === 0) break;
+          let added = 0;
+          for (const qn of more) {
+            const id = String(qn.id);
+            if (!seen.has(id)) {
+              seen.add(id);
+              batches.push([qn]);
+              added += 1;
+            }
+            if (seen.size >= want) break;
+          }
+          if (added === 0) break; // provider returned only duplicates — stop
+          round += 1;
+        }
+        return batches.flat();
+      }
+
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
-          const cacheKey = examYear === "random" ? name : `${name}:${examYear}`;
-          const cached = questionCache.current.get(cacheKey);
-          const pool: ExamQuestion[] =
-            cached ??
-            await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
-              .then((r) => r.json())
-              .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
-                if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-                  questionCache.current.set(cacheKey, res.data);
-                  return res.data;
-                }
-                throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
-              });
+          const pool = await fetchPool(name, count);
           return pool.slice(0, count).map((qn) => ({ ...qn, subject: name }));
         }),
       );
@@ -448,7 +485,30 @@ function ExamPageContent() {
   }, [timeLeft]);
 
   // ── Lobby ───────────────────────────────────────────────────────────────────
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+      </div>
+    );
+  }
+
   if (!started && !reviewEntries) {
+    if (!user) {
+      return (
+        <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back="/practice">
+          <div className="mx-auto max-w-md px-4 py-16">
+            <div className="rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200 shadow-lg">
+              <h2 className="text-xl font-black text-slate-900">Sign in to start</h2>
+              <p className="mt-2 text-sm text-slate-500">Mock exams save your score, streak, and correction history — sign in to begin.</p>
+              <Link href="/" className="mt-6 flex h-11 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700">
+                Sign in
+              </Link>
+            </div>
+          </div>
+        </AppShell>
+      );
+    }
     return (
       <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back="/practice">
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
