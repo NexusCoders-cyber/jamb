@@ -77,3 +77,12 @@ npm notice run next dev
  GET /exam 200 in 1828ms (next.js: 207ms, proxy.ts: 60ms, application-code: 1561ms)
  GET /messages 200 in 2.4s (next.js: 397ms, proxy.ts: 41ms, application-code: 1926ms)
  GET / 200 in 1453ms (next.js: 886ms, proxy.ts: 55ms, application-code: 512ms)
+ GET / 200 in 1192ms (next.js: 577ms, proxy.ts: 211ms, application-code: 404ms)
+ GET / 200 in 263ms (next.js: 62ms, proxy.ts: 26ms, application-code: 175ms)
+✓ Compiled in 1523ms
+ GET / 200 in 395ms (next.js: 105ms, proxy.ts: 31ms, application-code: 259ms)
+ GET / 200 in 213ms (next.js: 46ms, proxy.ts: 28ms, application-code: 139ms)
+ GET /exam 200 in 629ms (next.js: 187ms, proxy.ts: 54ms, application-code: 388ms)
+ GET /exam?next=/exam 200 in 1173ms (next.js: 75ms, proxy.ts: 35ms, application-code: 1063ms)
+✓ Compiled in 1675ms
+ GET /exam?next=%2Fexam 200 in 2.9s (next.js: 909ms, proxy.ts: 228ms, application-code: 1793ms)

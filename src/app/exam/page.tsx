@@ -27,6 +27,19 @@ import {
 const ENGLISH = "English Language";
 const OTHER_SUBJECTS = ALOC_SUBJECTS.filter((s) => s.name !== ENGLISH).map((s) => s.name);
 
+/** JAMB UTME standard: English 60 + three subjects × 40 = 180 questions */
+const ENGLISH_COUNT = 60;
+const OTHER_COUNT = 40;
+
+/** Years available on ALOC — "random" mixes every year. */
+const EXAM_YEARS = [
+  "random", "2024", "2023", "2022", "2021", "2020", "2019", "2018", "2017",
+  "2016", "2015", "2014", "2013", "2012", "2011", "2010", "2009", "2008",
+  "2007", "2006", "2005", "2004", "2003", "2002", "2001", "2000", "1999",
+  "1998", "1997", "1996", "1995", "1994", "1993", "1992", "1991", "1990",
+  "1989", "1988", "1987", "1986", "1985",
+];
+
 type ExamQuestion = {
   id: string;
   prompt: string;
@@ -294,12 +307,10 @@ function ExamPageContent() {
   const [prepareError, setPrepareError] = useState("");
 
   // Exam mode: JAMB standard 4-subject plan. English is always subject 1.
-  const [plan, setPlan] = useState<SubjectPlan[]>([
-    { name: ENGLISH, count: 60 },
-    { name: "Biology", count: 40 },
-    { name: "Chemistry", count: 40 },
-    { name: "Physics", count: 40 },
-  ]);
+  // Question counts are fixed by the standard (60/40/40/40 = 180) — only the
+  // SUBJECTS and the YEAR are selectable.
+  const [plan, setPlan] = useState<string[]>([ENGLISH, "Biology", "Chemistry", "Physics"]);
+  const [examYear, setExamYear] = useState("random");
 
   // Study mode: single subject
   const [studySubject, setStudySubject] = useState(urlSubject);
@@ -328,7 +339,7 @@ function ExamPageContent() {
   const answeredCount = Object.keys(answers).length;
   const isRevealed = isStudyMode && revealedInStudy.has(currentQuestion);
 
-  const planTotal = plan.reduce((s, p) => s + p.count, 0);
+  const planTotal = ENGLISH_COUNT + OTHER_COUNT * 3;
   const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3)); // JAMB: 180q ≈ 120 min
 
   // Restore saved 4-subject combination
@@ -339,10 +350,8 @@ function ExamPageContent() {
         const p = JSON.parse(s) as { subjects?: string[] };
         if (Array.isArray(p.subjects) && p.subjects.length === 4) {
           const others = p.subjects.filter((n) => n !== ENGLISH).slice(0, 3);
-          setPlan((prev) => [
-            prev[0],
-            ...[0, 1, 2].map((i) => ({ name: others[i] ?? prev[i + 1].name, count: prev[i + 1].count })),
-          ]);
+          while (others.length < 3) others.push("Biology");
+          setPlan([ENGLISH, others[0], others[1], others[2]]);
         }
       }
     } catch (_e) { /* ignore */ }
@@ -353,20 +362,24 @@ function ExamPageContent() {
     setPreparing(true);
     setPrepareError("");
     try {
-      const entries = isStudyMode ? [{ name: studySubject, count: studyCount }] : plan;
+      const entries: SubjectPlan[] = isStudyMode
+        ? [{ name: studySubject, count: studyCount }]
+        : plan.map((name, i) => ({ name, count: i === 0 ? ENGLISH_COUNT : OTHER_COUNT }));
+      const yearParam = !isStudyMode && examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
-          const cached = questionCache.current.get(name);
+          const cacheKey = examYear === "random" ? name : `${name}:${examYear}`;
+          const cached = questionCache.current.get(cacheKey);
           const pool: ExamQuestion[] =
             cached ??
-            await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme`)
+            await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
               .then((r) => r.json())
               .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
                 if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-                  questionCache.current.set(name, res.data);
+                  questionCache.current.set(cacheKey, res.data);
                   return res.data;
                 }
-                throw new Error(res.error ?? `No questions for ${name}`);
+                throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
               });
           return pool.slice(0, count).map((qn) => ({ ...qn, subject: name }));
         }),
@@ -396,7 +409,8 @@ function ExamPageContent() {
               : entries[0].name,
         );
         if (!isStudyMode) {
-          const mins = urlTimer === "1 hour" ? 60 : urlTimer === "30 minutes" ? 30 : urlTimer === "15 minutes" ? 15 : autoMinutes;
+          const totalQ = combined.length;
+          const mins = urlTimer === "1 hour" ? 60 : urlTimer === "30 minutes" ? 30 : urlTimer === "15 minutes" ? 15 : Math.max(15, Math.round((totalQ * 2) / 3));
           setTimeLeft(mins * 60);
         } else {
           setTimeLeft(null);
@@ -446,7 +460,7 @@ function ExamPageContent() {
             <p className="mt-2 text-sm text-violet-100">
               {isStudyMode
                 ? "Answer at your own pace and see the correct answer immediately after each question."
-                : "Use of English is compulsory. Choose your three other subjects and how many questions per subject."}
+                : "Use of English is compulsory. Choose your three other subjects and the year you want to practise."}
             </p>
           </div>
 
@@ -475,59 +489,52 @@ function ExamPageContent() {
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-base font-black text-slate-900">Your four subjects</h2>
                 <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700 ring-1 ring-violet-100">
-                  <Layers className="h-3.5 w-3.5" aria-hidden /> {planTotal} questions
+                  <Layers className="h-3.5 w-3.5" aria-hidden /> {planTotal} questions · JAMB standard
                 </span>
               </div>
 
-              {/* English — compulsory */}
+              {/* English — compulsory, fixed 60 questions */}
               <div className="mb-3 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-black text-white">EN</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-black text-slate-900">{ENGLISH}</p>
-                    <p className="text-[11px] font-semibold text-violet-600">Compulsory</p>
+                    <p className="text-[11px] font-semibold text-violet-600">Compulsory · {ENGLISH_COUNT} questions</p>
                   </div>
-                  <select
-                    value={plan[0].count}
-                    onChange={(e) => setPlan((p) => p.map((row, i) => (i === 0 ? { ...row, count: Number(e.target.value) } : row)))}
-                    className="h-10 w-28 rounded-xl border border-violet-200 bg-white px-2 text-sm font-bold text-slate-800 outline-none focus:border-violet-500"
-                    aria-label="English questions"
-                  >
-                    {[40, 50, 60].map((n) => <option key={n} value={n}>{n} Qs</option>)}
-                  </select>
                 </div>
               </div>
 
-              {/* Three optional subjects with dropdowns */}
+              {/* Three optional subjects — dropdowns select SUBJECTS only */}
               {[1, 2, 3].map((slot) => (
                 <div key={slot} className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-500">{slot + 1}</span>
                   <select
-                    value={plan[slot].name}
-                    onChange={(e) =>
-                      setPlan((p) => p.map((row, i) => (i === slot ? { ...row, name: e.target.value } : row)))
-                    }
+                    value={plan[slot]}
+                    onChange={(e) => setPlan((p) => p.map((n, i) => (i === slot ? e.target.value : n)))}
                     className="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 outline-none focus:border-violet-500"
                     aria-label={`Subject ${slot + 1}`}
                   >
                     {OTHER_SUBJECTS.map((n) => (
-                      <option key={n} value={n} disabled={plan.some((row, i) => i > 0 && i !== slot && row.name === n)}>
+                      <option key={n} value={n} disabled={plan.some((row, i) => i > 0 && i !== slot && row === n)}>
                         {n}
                       </option>
                     ))}
                   </select>
-                  <select
-                    value={plan[slot].count}
-                    onChange={(e) => setPlan((p) => p.map((row, i) => (i === slot ? { ...row, count: Number(e.target.value) } : row)))}
-                    className="h-10 w-28 rounded-xl border border-slate-200 bg-white px-2 text-sm font-bold text-slate-800 outline-none focus:border-violet-500"
-                    aria-label={`Subject ${slot + 1} questions`}
-                  >
-                    {[10, 20, 30, 40].map((n) => <option key={n} value={n}>{n} Qs</option>)}
-                  </select>
+                  <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-500">{OTHER_COUNT} Qs</span>
                 </div>
               ))}
 
-              <div className="mt-2 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+              {/* Year selector — specific year or a random mix */}
+              <label className="mt-4 block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Past questions year</span>
+                <select value={examYear} onChange={(e) => setExamYear(e.target.value)}
+                  className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 outline-none focus:border-violet-500">
+                  <option value="random">Random mix — all years</option>
+                  {EXAM_YEARS.filter((y) => y !== "random").map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+
+              <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
                 <span className="font-bold text-slate-700">Total time</span>
                 <span className="font-black text-slate-900">{autoMinutes} minutes <span className="font-semibold text-slate-400">(JAMB pace)</span></span>
               </div>
@@ -776,24 +783,57 @@ function ExamPageContent() {
             <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-base font-black text-slate-900">Navigator</h3>
-                <span className="text-xs font-semibold text-slate-500">{answeredCount} answered</span>
+                <span className="text-xs font-semibold text-slate-500">{answeredCount} / {questionTotal} answered</span>
               </div>
-              <div className="grid grid-cols-5 gap-1.5">
-                {Array.from({ length: Math.min(questionTotal, 60) }, (_, i) => {
-                  let btn = "bg-slate-100 text-slate-700";
-                  if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
-                  else if (isStudyMode && revealedInStudy.has(i)) {
-                    btn = answers[i] === questions[i]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
-                  } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
-                  else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
-                  else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
-                  return (
-                    <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
-                      className={`flex h-9 items-center justify-center rounded-xl text-xs font-bold ${btn}`}>{i + 1}</button>
-                  );
-                })}
+              {/* All questions, grouped per subject — scrollable */}
+              <div className="max-h-[420px] space-y-4 overflow-y-auto pr-1">
+                {subjectTabs.length > 1
+                  ? subjectTabs.map((tab, ti) => {
+                      const end = ti + 1 < subjectTabs.length ? subjectTabs[ti + 1].start : questionTotal;
+                      const count = end - tab.start;
+                      return (
+                        <div key={tab.name}>
+                          <p className="mb-1.5 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">
+                            <span>{tab.name.replace(" Language", "")}</span>
+                            <span>{count} Qs</span>
+                          </p>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {Array.from({ length: count }, (_, k) => {
+                              const i = tab.start + k;
+                              let btn = "bg-slate-100 text-slate-700";
+                              if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
+                              else if (isStudyMode && revealedInStudy.has(i)) {
+                                btn = answers[i] === questions[i]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+                              } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
+                              else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
+                              else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
+                              return (
+                                <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
+                                  className={`flex h-9 items-center justify-center rounded-xl text-xs font-bold ${btn}`}>{i + 1}</button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })
+                  : (
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {Array.from({ length: questionTotal }, (_, i) => {
+                          let btn = "bg-slate-100 text-slate-700";
+                          if (i === currentQuestion) btn = isStudyMode ? "bg-violet-700 text-white" : "bg-emerald-700 text-white";
+                          else if (isStudyMode && revealedInStudy.has(i)) {
+                            btn = answers[i] === questions[i]?.answer ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700";
+                          } else if (!isStudyMode && skipped.has(i)) btn = "bg-rose-100 text-rose-700";
+                          else if (!isStudyMode && marked.has(i)) btn = "bg-amber-100 text-amber-800";
+                          else if (answers[i] !== undefined) btn = "bg-emerald-100 text-emerald-700";
+                          return (
+                            <button key={i} type="button" onClick={() => setCurrentQuestion(i)}
+                              className={`flex h-9 items-center justify-center rounded-xl text-xs font-bold ${btn}`}>{i + 1}</button>
+                          );
+                        })}
+                      </div>
+                    )}
               </div>
-              {questionTotal > 60 && <p className="mt-2 text-xs text-slate-400">Showing first 60 of {questionTotal}</p>}
             </div>
 
             <button type="button" onClick={doSubmit} disabled={submitting}
