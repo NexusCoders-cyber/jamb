@@ -13,6 +13,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
+  Flame,
   Home,
   PenLine,
   BookOpen,
@@ -26,6 +27,7 @@ import {
   Bell,
   Trophy,
   Settings,
+  UserRound,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -54,8 +56,10 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
   {
     label: "Account",
     items: [
+      { label: "Profile",       href: "/profile",       icon: UserRound },
       { label: "Notifications", href: "/notifications", icon: Bell },
       { label: "Achievements",  href: "/achievements",  icon: Trophy },
+      { label: "Streaks",       href: "/streaks",       icon: Flame },
       { label: "Settings",      href: "/settings",      icon: Settings },
     ],
   },
@@ -67,7 +71,7 @@ const TABS: { label: string; href: string; icon: LucideIcon; match: string }[] =
   { label: "Learn", href: "/practice",  icon: PenLine,        match: "/practice" },
   { label: "Exam",  href: "/exam",      icon: FileText,       match: "/exam" },
   { label: "Chat",  href: "/messages",  icon: Mail,           match: "/messages" },
-  { label: "Me",    href: "/settings",  icon: Settings,       match: "/settings" },
+  { label: "Me",    href: "/profile",   icon: Settings,       match: "/profile" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

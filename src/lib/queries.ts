@@ -31,6 +31,10 @@ export type Profile = {
   interests?: string[] | null;
   /** Desired course of study, shown on the students browser */
   course?: string | null;
+  /** Public URL of the user's avatar in the `avatars` storage bucket */
+  avatar_url?: string | null;
+  /** Short bio shown on the profile page */
+  bio?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -96,7 +100,7 @@ export async function getProfile(supabase: SupabaseClient, userId: string): Prom
 export async function updateProfile(
   supabase: SupabaseClient,
   userId: string,
-  updates: Partial<Pick<Profile, "full_name" | "target_score" | "streak_days">>,
+  updates: Partial<Pick<Profile, "full_name" | "target_score" | "streak_days" | "avatar_url" | "bio" | "interests" | "course">>,
 ) {
   const { error } = await supabase
     .from("profiles")

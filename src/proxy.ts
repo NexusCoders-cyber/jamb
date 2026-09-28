@@ -7,7 +7,7 @@ const PROTECTED = [
   "/analytics", "/smart-coach", "/knowledge-hub", "/progress",
   "/streaks", "/notifications", "/study-plan", "/mistakes",
   "/daily-challenge", "/settings", "/achievements", "/community",
-  "/messages", "/speed-training", "/admin",
+  "/messages", "/speed-training", "/profile", "/admin",
 ];
 
 // Routes that redirect authenticated users away
