@@ -20,19 +20,13 @@ import {
   XCircle,
 } from "lucide-react";
 
-/**
- * JAMB UTME standard: Use of English (60) + three other subjects (40 each)
- * = 180 questions in 2 hours. The lobby lets candidates pick the three
- * subjects and per-subject question counts before starting.
- */
 const ENGLISH = "English Language";
+const NEEDS_CALCULATOR = new Set(["Mathematics", "Physics", "Chemistry", "Economics", "Accounting", "Commerce", "Insurance"]);
 const OTHER_SUBJECTS = ALOC_SUBJECTS.filter((s) => s.name !== ENGLISH).map((s) => s.name);
 
-/** JAMB UTME standard: English 60 + three subjects × 40 = 180 questions */
 const ENGLISH_COUNT = 60;
 const OTHER_COUNT = 40;
 
-/** Years available on ALOC — "random" mixes every year. 2025/2026 confirmed live. */
 const EXAM_YEARS = [
   "random", "2026", "2025", "2024", "2023", "2022", "2021", "2020", "2019",
   "2018", "2017", "2016", "2015", "2014", "2013", "2012", "2011", "2010",
@@ -55,7 +49,7 @@ type ExamQuestion = {
   novel?: string | null;
   examtype?: string | null;
   year?: string | null;
-  subject?: string | null; // set at combine time
+  subject?: string | null;
 };
 
 const FALLBACK: ExamQuestion[] = [
@@ -66,23 +60,39 @@ const FALLBACK: ExamQuestion[] = [
   { id: "f5", prompt: "Photosynthesis in green plants produces:", options: ["CO2 and water", "Glucose and oxygen", "Starch and CO2", "Oxygen only"], answer: 1, explanation: null },
 ];
 
-// ─── Calculator ───────────────────────────────────────────────────────────────
-
 function calcExpr(input: string): string | number {
   const tokens = input.match(/\d+(?:\.\d+)?|[+\-*/]/g);
   if (!tokens) return "-";
   if (tokens.join("") !== input.replace(/\s/g, "")) return "-";
-  let r = Number(tokens[0]);
-  for (let i = 1; i < tokens.length; i += 2) {
-    const n = Number(tokens[i + 1]);
-    if (Number.isNaN(n)) return "-";
-    if (tokens[i] === "+") r += n;
-    else if (tokens[i] === "-") r -= n;
-    else if (tokens[i] === "*") r *= n;
-    else if (tokens[i] === "/") { if (n === 0) return "-"; r /= n; }
-    else return "-";
+  if (tokens.length === 0 || /[+\-*/]/.test(tokens[0]) || /[+\-*/]/.test(tokens[tokens.length - 1])) return "-";
+
+  const numsAndOps: (string | number)[] = tokens.map((t) => (/[+\-*/]/.test(t) ? t : Number(t)));
+
+  const highPrecedence: (string | number)[] = [numsAndOps[0]];
+  for (let i = 1; i < numsAndOps.length; i += 2) {
+    const op = numsAndOps[i];
+    const next = numsAndOps[i + 1];
+    if (typeof next !== "number" || Number.isNaN(next)) return "-";
+    if (op === "*" || op === "/") {
+      const prev = highPrecedence.pop();
+      if (typeof prev !== "number") return "-";
+      if (op === "/" && next === 0) return "-";
+      highPrecedence.push(op === "*" ? prev * next : prev / next);
+    } else {
+      highPrecedence.push(op, next);
+    }
   }
-  return Number.isFinite(r) ? Math.round(r * 1e10) / 1e10 : "-";
+
+  let result = highPrecedence[0];
+  if (typeof result !== "number") return "-";
+  for (let i = 1; i < highPrecedence.length; i += 2) {
+    const op = highPrecedence[i];
+    const next = highPrecedence[i + 1];
+    if (typeof next !== "number") return "-";
+    result = op === "+" ? result + next : result - next;
+  }
+
+  return Number.isFinite(result) ? Math.round(result * 1e10) / 1e10 : "-";
 }
 
 function CalculatorPad({ onClose }: { onClose: () => void }) {
@@ -119,8 +129,6 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Media (passage + image) ──────────────────────────────────────────────────
-
 function QuestionMedia({ question }: { question: ExamQuestion }) {
   const isPassage = question.sectionKind === "passage";
   return (
@@ -140,7 +148,6 @@ function QuestionMedia({ question }: { question: ExamQuestion }) {
         </div>
       )}
       {question.image && (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={question.image}
           alt="Question illustration"
@@ -152,7 +159,6 @@ function QuestionMedia({ question }: { question: ExamQuestion }) {
   );
 }
 
-// ─── Inline review screen ─────────────────────────────────────────────────────
 type ReviewEntry = { question: ExamQuestion; selectedIdx: number | null; questionIdx: number };
 
 function InlineReview({
@@ -300,16 +306,12 @@ function InlineReview({
   );
 }
 
-// ─── Main exam content ────────────────────────────────────────────────────────
-
 type SubjectPlan = { name: string; count: number };
 
 function ExamPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
 
-  // mode=study → answers shown immediately; mode=practice → same reveal flow;
-  // mode=exam (default) → strict JAMB CBT, explanations only in the correction review.
   const rawMode = searchParams.get("mode");
   const mode = rawMode === "study" ? "study" : rawMode === "practice" ? "practice" : "exam";
   const isStudyMode = mode === "study";
@@ -326,18 +328,13 @@ function ExamPageContent() {
   // Standalone setup page this session was launched from (Learn hub modes)
   const setupHref = urlNovel ? "/practice/novel" : isPracticeMode ? "/practice/past-questions" : isStudyMode ? "/practice/study" : "/practice";
 
-  // ── Lobby state ──
   const [started, setStarted] = useState(false);
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState("");
 
-  // Exam mode: JAMB standard 4-subject plan. English is always subject 1.
-  // Question counts are fixed by the standard (60/40/40/40 = 180) — only the
-  // SUBJECTS and the YEAR are selectable.
   const [plan, setPlan] = useState<string[]>([ENGLISH, "Biology", "Chemistry", "Physics"]);
   const [examYear, setExamYear] = useState("random");
 
-  // Study mode: single subject
   const [studySubject, setStudySubject] = useState(urlSubject);
   const [studyCount, setStudyCount] = useState(urlCount);
 
@@ -354,6 +351,7 @@ function ExamPageContent() {
   const [skipped, setSkipped] = useState<Set<number>>(new Set());
   const [revealedInStudy, setRevealedInStudy] = useState<Set<number>>(new Set());
   const [showCalc, setShowCalc] = useState(false);
+  const [calcManuallySet, setCalcManuallySet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const attemptIdRef = useRef<string | null>(null);
 
@@ -361,13 +359,19 @@ function ExamPageContent() {
   const [reviewScore, setReviewScore] = useState(0);
 
   const q = questions[currentQuestion];
+  const activeSubjectName = q?.subject ?? (isExamMode ? null : studySubject);
   const answeredCount = Object.keys(answers).length;
+
+  useEffect(() => {
+    if (calcManuallySet) return;
+    if (!started || !activeSubjectName) return;
+    setShowCalc(NEEDS_CALCULATOR.has(activeSubjectName));
+  }, [activeSubjectName, started, calcManuallySet]);
   const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
 
   const planTotal = ENGLISH_COUNT + OTHER_COUNT * 3;
-  const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3)); // JAMB: 180q ≈ 120 min
+  const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3));
 
-  // Restore saved 4-subject combination
   useEffect(() => {
     try {
       const s = localStorage.getItem("orbit_prefs");
@@ -379,10 +383,9 @@ function ExamPageContent() {
           setPlan([ENGLISH, others[0], others[1], others[2]]);
         }
       }
-    } catch (_e) { /* ignore */ }
+    } catch (_e) {  }
   }, []);
 
-  // ── Start: fetch per-subject questions, tag them, build tabs ────────────────
   async function startSession() {
     setPreparing(true);
     setPrepareError("");
@@ -392,9 +395,6 @@ function ExamPageContent() {
         : [{ name: studySubject, count: studyCount }];
       const yearParam = examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
 
-      // ALOC's bulk endpoint caps at ~40 questions per request. For larger
-      // subjects (English needs 60) we fetch extra batches with a cache-busting
-      // `t` param so each batch returns different questions, then dedupe.
       async function fetchPool(name: string, want: number): Promise<ExamQuestion[]> {
         const cacheKey = examYear === "random" ? name : `${name}:${examYear}`;
         const cached = questionCache.current.get(cacheKey);
@@ -434,7 +434,7 @@ function ExamPageContent() {
             }
             if (seen.size >= want) break;
           }
-          if (added === 0) break; // provider returned only duplicates — stop
+          if (added === 0) break;
           round += 1;
         }
         return batches.flat();
@@ -498,29 +498,24 @@ function ExamPageContent() {
     }
   }
 
-  // Create attempt once questions are ready
   useEffect(() => {
     if (!user || !started || questions.length === 0 || attemptIdRef.current) return;
     try {
       const supabase = createSupabaseBrowserClient();
       createAttempt(supabase, user.id, null, questionTotal).then((a) => { if (a) attemptIdRef.current = a.id; });
-    } catch { /* env not set */ }
+    } catch {  }
   }, [user, started, questions, questionTotal]);
 
-  // Timer countdown
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
     const id = window.setInterval(() => setTimeLeft((v) => (v === null ? null : v - 1)), 1000);
     return () => clearInterval(id);
   }, [timeLeft]);
 
-  // Auto-submit when time expires
   useEffect(() => {
     if (timeLeft === 0 && !submitting) void doSubmit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  // ── Lobby ───────────────────────────────────────────────────────────────────
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
@@ -597,7 +592,6 @@ function ExamPageContent() {
                 </span>
               </div>
 
-              {/* English — compulsory, fixed 60 questions */}
               <div className="mb-3 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
                 <div className="flex items-center gap-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-xs font-black text-white">EN</span>
@@ -608,7 +602,6 @@ function ExamPageContent() {
                 </div>
               </div>
 
-              {/* Three optional subjects — dropdowns select SUBJECTS only */}
               {[1, 2, 3].map((slot) => (
                 <div key={slot} className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-xs font-black text-slate-500">{slot + 1}</span>
@@ -628,7 +621,6 @@ function ExamPageContent() {
                 </div>
               ))}
 
-              {/* Year selector — specific year or a random mix */}
               <label className="mt-4 block">
                 <span className="mb-1.5 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Past questions year</span>
                 <select value={examYear} onChange={(e) => setExamYear(e.target.value)}
@@ -705,10 +697,8 @@ function ExamPageContent() {
         await submitAttempt(supabase, attemptIdRef.current, correct);
         await updateStreak(supabase, user.id);
       }
-    } catch (_e) { /* ignore DB errors, still show review */ }
+    } catch (_e) {  }
 
-    // Every mode ends with the full answer + correction review — candidates
-    // always see every question, the right answer, and their choice.
     setReviewScore(correct);
     setReviewEntries(entries);
     setSubmitting(false);
@@ -722,6 +712,7 @@ function ExamPageContent() {
     setRevealedInStudy(new Set());
     setCurrentQuestion(0);
     setSubmitting(false);
+    setCalcManuallySet(false);
     attemptIdRef.current = null;
     setStarted(false);
   }
@@ -770,7 +761,7 @@ function ExamPageContent() {
             </div>
             <div className="flex items-center gap-2">
               {q?.year && <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
-              <button type="button" onClick={() => setShowCalc((v) => !v)} aria-label="Toggle calculator"
+              <button type="button" onClick={() => { setShowCalc((v) => !v); setCalcManuallySet(true); }} aria-label="Toggle calculator"
                 className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700">
                 <Calculator className="h-3.5 w-3.5" aria-hidden /> Calc
               </button>
@@ -778,7 +769,6 @@ function ExamPageContent() {
             </div>
           </div>
 
-          {/* Subject tabs — jump to each subject's first question */}
           {subjectTabs.length > 1 && (
             <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
               {subjectTabs.map((tab, ti) => {
@@ -895,7 +885,6 @@ function ExamPageContent() {
                 <h3 className="text-base font-black text-slate-900">Navigator</h3>
                 <span className="text-xs font-semibold text-slate-500">{answeredCount} / {questionTotal} answered</span>
               </div>
-              {/* All questions, grouped per subject — scrollable */}
               <div className="max-h-[420px] space-y-4 overflow-y-auto pr-1">
                 {subjectTabs.length > 1
                   ? subjectTabs.map((tab, ti) => {
@@ -956,7 +945,6 @@ function ExamPageContent() {
         </div>
       </div>
       </main>
-      {/* Floating calculator — fixed to the viewport, above the bottom nav */}
       {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
     </AppShell>
   );
