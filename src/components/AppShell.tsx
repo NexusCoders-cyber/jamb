@@ -181,8 +181,7 @@ function Sidebar({ pathname }: { pathname: string }) {
 
 // ─── Bottom tab bar (mobile) ──────────────────────────────────────────────────
 
-function BottomNav({ pathname }: { pathname: string }) {
-  const unread = useUnreadDMCount();
+function BottomNav({ pathname, unread }: { pathname: string; unread: number }) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200/80 bg-white/95 backdrop-blur-md lg:hidden"
@@ -222,8 +221,7 @@ function BottomNav({ pathname }: { pathname: string }) {
 
 // ─── Top bar (mobile, inside the shell header slot) ──────────────────────────
 
-function TopBar({ title, back }: { title?: string; back?: string }) {
-  const unread = useUnreadDMCount();
+function TopBar({ title, back, unread }: { title?: string; back?: string; unread: number }) {
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 backdrop-blur-md lg:hidden">
       {back && (
@@ -261,6 +259,9 @@ interface AppShellProps {
 
 export default function AppShell({ children, title, back, hideTopBar = false }: AppShellProps) {
   const pathname = usePathname();
+  // Single subscription instance — mounting the realtime channel from more
+  // than one component throws "cannot add callbacks after subscribe()".
+  const unread = useUnreadDMCount();
 
   return (
     <div className="min-h-screen bg-[#f5f4ff] lg:pl-64">
@@ -268,7 +269,7 @@ export default function AppShell({ children, title, back, hideTopBar = false }: 
       <Sidebar pathname={pathname} />
 
       {/* Mobile top bar */}
-      {!hideTopBar && <TopBar title={title} back={back} />}
+      {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
 
       {/* Page content — add bottom padding on mobile so content clears the tab bar */}
       <main className="min-h-screen pb-20 lg:pb-0">
@@ -276,7 +277,7 @@ export default function AppShell({ children, title, back, hideTopBar = false }: 
       </main>
 
       {/* Mobile bottom tabs */}
-      <BottomNav pathname={pathname} />
+      <BottomNav pathname={pathname} unread={unread} />
     </div>
   );
 }
