@@ -32,6 +32,8 @@ import {
   Trophy,
   Settings,
   UserRound,
+  ShieldCheck,
+  Newspaper,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -66,6 +68,13 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Achievements",  href: "/achievements",  icon: Trophy },
       { label: "Streaks",       href: "/streaks",       icon: Flame },
       { label: "Settings",      href: "/settings",      icon: Settings },
+    ],
+  },
+  {
+    label: "Admin",
+    items: [
+      { label: "Admin Portal",  href: "/admin",         icon: ShieldCheck },
+      { label: "Blog",          href: "/blog",          icon: Newspaper },
     ],
   },
 ];

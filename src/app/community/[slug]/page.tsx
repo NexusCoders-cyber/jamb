@@ -7,6 +7,8 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { getChannelBySlug, getPosts, createPost, type Channel, type Post } from "@/lib/queries";
+import Avatar from "@/components/Avatar";
+import EmojiPicker from "@/components/EmojiPicker";
 import { ArrowLeft, MessageCircle } from "lucide-react";
 
 function timeAgo(iso: string) {
@@ -15,15 +17,6 @@ function timeAgo(iso: string) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
-}
-
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
-  const sz = size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  );
 }
 
 export default function ChannelPage() {
@@ -138,6 +131,9 @@ export default function ChannelPage() {
               value={newBody} onChange={(e) => setNewBody(e.target.value)} maxLength={5000} rows={4}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-violet-400 resize-none"
             />
+            <div className="mt-1.5">
+              <EmojiPicker onPick={(emoji) => setNewBody((b) => b + emoji)} />
+            </div>
             {postError && <p className="mt-2 text-xs text-rose-600">{postError}</p>}
             <div className="mt-3 flex items-center justify-between">
               <span className="text-xs text-slate-400">{newBody.length}/5000</span>
@@ -170,8 +166,7 @@ export default function ChannelPage() {
           ) : (
             posts.map((post) => (
               <article key={post.id} className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200 hover:ring-violet-200 transition">
-                <div className="flex items-start gap-3">
-                  <Avatar name={(post.author as { full_name: string } | undefined)?.full_name ?? "U"} />
+                <div className="flex items-start gap-3">                    <Avatar user={{ full_name: (post.author as { full_name: string } | undefined)?.full_name ?? "U", avatar_url: (post.author as { avatar_url?: string | null } | undefined)?.avatar_url ?? null }} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-bold text-slate-900">

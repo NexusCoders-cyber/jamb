@@ -7,6 +7,8 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { getPost, getReplies, createReply, type Post, type PostReply } from "@/lib/queries";
+import Avatar from "@/components/Avatar";
+import EmojiPicker from "@/components/EmojiPicker";
 import { Mail } from "lucide-react";
 
 function timeAgo(iso: string) {
@@ -15,15 +17,6 @@ function timeAgo(iso: string) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
-}
-
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
-  const sz = size === "sm" ? "h-7 w-7 text-xs" : size === "lg" ? "h-12 w-12 text-base" : "h-9 w-9 text-sm";
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  );
 }
 
 export default function PostThreadPage() {
@@ -139,7 +132,7 @@ export default function PostThreadPage() {
         {/* Original post */}
         <div className="rounded-[28px] bg-white p-6 ring-1 ring-slate-200 mb-4">
           <div className="flex items-start gap-4">
-            <Avatar name={authorName} size="lg" />
+            <Avatar user={{ full_name: authorName, avatar_url: (post?.author as { avatar_url?: string | null } | undefined)?.avatar_url ?? null }} size="lg" />
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <span className="font-bold text-slate-900">{authorName}</span>
@@ -165,7 +158,7 @@ export default function PostThreadPage() {
               return (
                 <div key={reply.id}
                   className={`flex items-start gap-3 rounded-[20px] p-4 ring-1 ${isMe ? "bg-violet-50 ring-violet-200 flex-row-reverse" : "bg-white ring-slate-200"}`}>
-                  <Avatar name={rAuthor} size="sm" />
+                  <Avatar user={{ full_name: rAuthor, avatar_url: (reply.author as { avatar_url?: string | null } | undefined)?.avatar_url ?? null }} size="sm" />
                   <div className={`flex-1 min-w-0 ${isMe ? "text-right" : ""}`}>
                     <div className={`flex items-center gap-2 mb-1 ${isMe ? "justify-end" : ""}`}>
                       <span className="text-sm font-bold text-slate-900">{isMe ? "You" : rAuthor}</span>
@@ -185,7 +178,7 @@ export default function PostThreadPage() {
         {user ? (
           <div className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
             <div className="flex items-start gap-3">
-              <Avatar name={(user.user_metadata?.full_name as string | undefined) ?? user.email ?? "U"} />
+              <Avatar user={(user.user_metadata?.full_name as string | undefined) ? { full_name: user.user_metadata.full_name as string } : { full_name: user.email ?? "U" }} />
               <div className="flex-1">
                 <textarea
                   placeholder="Write a reply…"
@@ -198,7 +191,10 @@ export default function PostThreadPage() {
                 />
                 {replyError && <p className="mt-1 text-xs text-rose-600">{replyError}</p>}
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">{replyBody.length}/2000 · Ctrl+Enter to send</span>
+                  <div className="flex items-center gap-2">
+                    <EmojiPicker onPick={(emoji) => setReplyBody((b) => b + emoji)} />
+                    <span className="text-xs text-slate-400">{replyBody.length}/2000 · Ctrl+Enter to send</span>
+                  </div>
                   <button onClick={handleReply} disabled={sending || replyBody.trim().length === 0}
                     className="rounded-xl bg-violet-600 px-5 py-2 text-sm font-bold text-white disabled:opacity-50">
                     {sending ? "Sending…" : "Reply"}

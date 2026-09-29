@@ -7,11 +7,13 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getDMInbox, type DMThread } from "@/lib/queries";
+import Avatar from "@/components/Avatar";
 import { Search, Users } from "lucide-react";
 
 type Student = {
   id: string;
   full_name: string;
+  avatar_url?: string | null;
   course?: string;
   interests?: string[] | null;
   streak_days?: number;
@@ -23,14 +25,6 @@ function timeAgo(iso: string) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
-}
-
-function Avatar({ name }: { name: string }) {
-  return (
-    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100 text-sm font-black text-violet-700">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  );
 }
 
 export default function MessagesPage() {
@@ -61,7 +55,7 @@ export default function MessagesPage() {
     const supabase = createSupabaseBrowserClient();
     supabase
       .from("profiles")
-      .select("id, full_name, course, interests, streak_days")
+      .select("id, full_name, avatar_url, course, interests, streak_days")
       .neq("id", user.id)
       .order("full_name")
       .limit(50)
@@ -78,7 +72,7 @@ export default function MessagesPage() {
       const supabase = createSupabaseBrowserClient();
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name")
+        .select("id, full_name, avatar_url")
         .ilike("full_name", `%${q}%`)
         .neq("id", user.id)
         .limit(8);
@@ -136,7 +130,7 @@ export default function MessagesPage() {
                   {visibleStudents.map((s) => (
                     <div key={s.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-violet-50">
                       <Link href={`/profile/${s.id}`} className="shrink-0" aria-label={`View ${s.full_name}'s profile`}>
-                        <Avatar name={s.full_name} />
+                        <Avatar user={s} size="lg" />
                       </Link>
                       <Link href={`/profile/${s.id}`} className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-slate-900">{s.full_name}</p>
@@ -184,7 +178,7 @@ export default function MessagesPage() {
                   {searchResults.map((r) => (
                     <Link key={r.id} href={`/messages/${r.id}`}
                       className="flex items-center gap-3 px-4 py-3 hover:bg-violet-50 transition border-b border-slate-100 last:border-0">
-                      <Avatar name={r.full_name} />
+                      <Avatar user={r} size="lg" />
                       <div>
                         <p className="font-bold text-slate-900">{r.full_name}</p>
                         <p className="text-xs text-slate-400">Tap to message</p>
@@ -218,7 +212,7 @@ export default function MessagesPage() {
                     <div key={thread.partner_id} className="group flex items-center gap-4 px-4 py-4 transition hover:bg-violet-50">
                       <Link href={`/messages/${thread.partner_id}`} className="flex min-w-0 flex-1 items-center gap-4" aria-label={`Open chat with ${thread.partner_name}`}>
                         <div className="relative">
-                          <Avatar name={thread.partner_name} />
+                          <Avatar user={{ full_name: thread.partner_name, avatar_url: thread.partner_avatar_url }} size="lg" />
                           {thread.unread > 0 && (
                             <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
                               {thread.unread}

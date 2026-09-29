@@ -6,9 +6,10 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { getChannels, type Channel } from "@/lib/queries";
+import Avatar from "@/components/Avatar";
 import { ArrowRight, MessagesSquare, Users } from "lucide-react";
 
-type Person = { id: string; full_name: string; streak_days?: number };
+type Person = { id: string; full_name: string; avatar_url?: string | null; streak_days?: number };
 
 function PeopleBrowser({ myId }: { myId: string }) {
   const [query, setQuery] = useState("");
@@ -23,7 +24,7 @@ function PeopleBrowser({ myId }: { myId: string }) {
     const t = setTimeout(() => {
       supabase
         .from("profiles")
-        .select("id, full_name, streak_days")
+        .select("id, full_name, avatar_url, streak_days")
         .ilike("full_name", `%${query.trim()}%`)
         .neq("id", myId)
         .limit(12)
@@ -54,7 +55,7 @@ function PeopleBrowser({ myId }: { myId: string }) {
         {people.map((p) => (
           <Link key={p.id} href={`/messages/${p.id}`}
             className="flex items-center gap-3 rounded-xl px-3 py-2 transition hover:bg-violet-50">
-            <Avatar name={p.full_name} size="sm" />
+            <Avatar user={p} size="sm" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold text-slate-900">{p.full_name}</p>
               {typeof p.streak_days === "number" && (
@@ -66,15 +67,6 @@ function PeopleBrowser({ myId }: { myId: string }) {
         ))}
       </div>
     </div>
-  );
-}
-
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
-  const sz = size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
-      {name.slice(0, 1).toUpperCase()}
-    </span>
   );
 }
 
@@ -198,7 +190,7 @@ export default function CommunityPage() {
                 <div className="rounded-[24px] bg-violet-600 p-4 text-white">
                   <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-200">Your profile</p>
                   <div className="mt-3 flex items-center gap-3">
-                    <Avatar name={myName ?? user.email ?? "U"} />
+                    <Avatar user={{ full_name: myName ?? user.email ?? "U", avatar_url: null }} />
                     <div className="min-w-0">
                       <p className="truncate font-bold">{myName ?? "Student"}</p>
                       <p className="truncate text-xs text-violet-200">{user.email}</p>

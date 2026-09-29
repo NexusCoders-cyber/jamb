@@ -70,24 +70,24 @@ export default function Home() {
 
   return (
     <AuthGate>
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[32px] border border-slate-200 bg-white/85 p-4 shadow-[0_20px_70px_rgba(14,33,33,0.08)] backdrop-blur-sm sm:p-6 lg:p-8">
-        <div className="grid min-h-[820px] gap-6 lg:grid-cols-[0.98fr_1.42fr]">
+    <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-[32px] border border-slate-200 bg-white/85 p-3 shadow-[0_20px_70px_rgba(14,33,33,0.08)] backdrop-blur-sm sm:p-6 lg:p-8">
+        <div className="grid gap-6 lg:min-h-[820px] lg:grid-cols-[0.98fr_1.42fr]">
 
           {/* Left panel */}
-          <aside className="gradient-bg relative overflow-hidden rounded-[28px] p-6 text-white sm:p-8">
+          <aside className="gradient-bg relative overflow-hidden rounded-[28px] p-5 text-white sm:p-8">
             <div className="absolute -left-12 top-10 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
             <div className="absolute -right-10 bottom-4 h-40 w-40 rounded-full bg-[#d9b75f]/15 blur-3xl" />
             <div className="relative z-10 flex h-full flex-col justify-between">
               <div>
-                <div className="mb-10 flex items-center gap-3">
+                <div className="mb-6 flex items-center gap-3 sm:mb-10">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/12 text-lg font-black shadow-inner shadow-white/10">O</div>
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.3em] text-emerald-100/80">ORBIT</p>
                     <h1 className="text-2xl font-bold tracking-tight">Orbit Prep</h1>
                   </div>
                 </div>
-                <div className="mb-8 rounded-[24px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm">
+                <div className="mb-6 rounded-[24px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm sm:mb-8">
                   <div className="mb-3 flex items-center justify-between text-sm text-emerald-50">
                     <span>Student profile</span>
                     <span className="rounded-full bg-emerald-300/20 px-2 py-1 text-[10px] font-semibold text-emerald-50">Ready</span>
@@ -124,12 +124,12 @@ export default function Home() {
           </aside>
 
           {/* Right panel */}
-          <section className="rounded-[28px] bg-[#f8fafb] p-4 sm:p-6 lg:p-8">
+          <section className="rounded-[28px] bg-[#f8fafb] p-3 sm:p-6 lg:p-8">
 
             {/* ── LOGIN VIEW ── */}
             {view === "login" && (
               <>
-                <div className="mb-8 flex items-center justify-between gap-3">
+                <div className="mb-6 flex items-center justify-between gap-3 sm:mb-8">
                   <div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700">Welcome back</p>
                     <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Sign in</h2>
@@ -137,7 +137,7 @@ export default function Home() {
                   <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">Secure login</div>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.08fr_0.92fr]">
                   <form onSubmit={handleSubmit} className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 soft-shadow sm:p-6">
                     <div>
                       <label className="mb-2 block text-sm font-semibold text-slate-700">Email address</label>

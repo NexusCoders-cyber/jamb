@@ -10,6 +10,8 @@ import {
   getDMThread, sendDM, markDMsRead, getProfile,
   type DirectMessage,
 } from "@/lib/queries";
+import Avatar from "@/components/Avatar";
+import EmojiPicker from "@/components/EmojiPicker";
 import { Mail } from "lucide-react";
 
 function timeLabel(iso: string) {
@@ -19,7 +21,7 @@ function timeLabel(iso: string) {
   return d.toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
+function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   const sz = size === "sm" ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm";
   return (
     <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
@@ -33,6 +35,7 @@ export default function DMConversationPage() {
   const { user, loading: authLoading } = useUser();
 
   const [partnerName, setPartnerName] = useState("Student");
+  const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [body, setBody] = useState("");
@@ -50,7 +53,10 @@ export default function DMConversationPage() {
       getProfile(supabase, partnerId),
       getDMThread(supabase, user.id, partnerId),
     ]).then(([profile, dms]) => {
-      if (profile) setPartnerName(profile.full_name || "Student");
+      if (profile) {
+        setPartnerName(profile.full_name || "Student");
+        setPartnerAvatar(profile.avatar_url || null);
+      }
       setMessages(dms);
       markDMsRead(supabase, user.id, partnerId);
     }).finally(() => { setLoading(false); setTimeout(() => bottomRef.current?.scrollIntoView(), 50); });
@@ -142,7 +148,7 @@ export default function DMConversationPage() {
         </Link>
         {/* Tap avatar or name to view the partner's profile (Facebook-style) */}
         <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${partnerName}'s profile`}>
-          <Avatar name={partnerName} />
+          <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} />
         </Link>
         <Link href={`/profile/${partnerId}`} className="flex-1 min-w-0">
           <p className="font-black text-slate-900 truncate">{partnerName}</p>
@@ -188,7 +194,7 @@ export default function DMConversationPage() {
                       <div key={msg.id} className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
                         {!isMe && senderName && (
                           <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${senderName}'s profile`}>
-                            <Avatar name={senderName} size="sm" />
+                            <Avatar user={{ full_name: senderName, avatar_url: isMe ? null : partnerAvatar }} size="sm" />
                           </Link>
                         )}
                         <div className={`max-w-[75%] group`}>
@@ -220,7 +226,9 @@ export default function DMConversationPage() {
         <div className="mx-auto max-w-2xl">
           {sendError && <p className="mb-2 text-xs text-rose-600">{sendError}</p>}
           <div className="flex items-end gap-3">
-            <Avatar name={myName} size="sm" />
+            <Avatar user={{ full_name: myName, avatar_url: null }} size="sm" />
+          <div className="flex items-end gap-1">
+            <EmojiPicker onPick={(emoji) => setBody((b) => b + emoji)} />
             <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 focus-within:border-violet-400 transition">
               <textarea
                 ref={inputRef}
@@ -234,6 +242,7 @@ export default function DMConversationPage() {
                 style={{ fieldSizing: "content" } as React.CSSProperties}
               />
             </div>
+          </div>
             <button
               onClick={handleSend}
               disabled={sending || body.trim().length === 0}
