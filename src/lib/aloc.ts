@@ -193,31 +193,51 @@ export function classifySection(sectionText: string | null | undefined): "passag
   return "instruction";
 }
 
-const NOVEL_TITLE_PATTERNS: RegExp[] = [
+const NOVEL_TITLE_PATTERNS: { kind: "known" | "quoted" | "run"; re: RegExp }[] = [
+  // Explicit known JAMB/UTME set texts — cleanest signal, tried first
+  { kind: "known", re: /\b(The Lekki Headmaster|The Life Changer|Sweet Sixteen|The Last Days at Forcados High(?: School)?|The Successors|Independence|Nineteen Eighty-?Four|The Joys of Motherhood|Harvest of Corruption|Sons and Daughters|The Tempest|Romeo and Juliet|Hamlet|Macbeth|Ambush|The Proud King|The Anvil and the Hammer)\b/i },
   // Title in quotes: "based on Bolaji Abdullahi's 'Sweet Sixteen'"
-  /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["\u201c\u2018']([^"\u201d\u2019']{3,80})["\u201d\u2019']/i,
-  // Run of capitalized words after "based on/drawn from", e.g. "based on George Orwell's Nineteen Eighty-Four"
-  /(?:based on|drawn from|from)\s+([A-Z][\w'\u2019.\-]+(?:\s+[A-Z][\w'\u2019.\-]+){0,5})/,
-  // Explicit known JAMB/UTME set texts, even when the sentence is terse
-  /\b(The Lekki Headmaster|The Life Changer|Sweet Sixteen|The Last Days at Forcados High(?: School)?|The Successors|Independence|Nineteen Eighty-?Four|The Joys of Motherhood|Harvest of Corruption|Sons and Daughters|The Tempest|Romeo and Juliet|Hamlet|Macbeth|Ambush|The Proud King|The Anvil and the Hammer)\b/i,
+  { kind: "quoted", re: /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["\u201c\u2018']([^"\u201d\u2019']{3,80})["\u201d\u2019']/i },
+  // Run of 2+ capitalized words after "based on/drawn from", e.g. "based on George Orwell's Nineteen Eighty-Four"
+  { kind: "run", re: /(?:based on|drawn from|from)\s+([A-Z][\w'\u2019.\-]+(?:\s+[A-Z][\w'\u2019.\-]+){1,5})/ },
 ];
 
-/** Section phrases that look like titles but are really question categories. */
-const NOVEL_TITLE_STOPLIST = /literary appreciation|general literary|literary principles|oral english|lexis|structure|comprehension|register/i;
+/** Tail fragments that mean we matched an author/category, not a title. */
+const NOVEL_TITLE_STOPLIST = /literary appreciation|general literary|literary principles|oral english|lexis|structure|comprehension|register|^(?:the\s+)?(?:poems?|poetry|novel|book|play|prose|drama|text)$/i;
+const TRAILING_GENRE_WORD = /\s+(?:novel|book|play|poem|prose|drama|text)s?$/i;
 
 /**
  * Best-effort extraction of the novel/text a question is drawn from.
  * ALOC keeps this in free-form `section` text, so we parse known title
  * patterns. Returns a clean title or null.
  */
-export function detectNovel(sectionText: string | null | undefined, prompt?: string): string | null {
+export function detectNovel(
+  sectionText: string | null | undefined,
+  prompt?: string,
+  /** Strict mode: quoted titles or known set texts only — used for English */
+  opts: { strict?: boolean } = {},
+): string | null {
   const haystack = `${sectionText ?? ""}\n${prompt ?? ""}`;
-  for (const pattern of NOVEL_TITLE_PATTERNS) {
-    const match = haystack.match(pattern);
-    if (match?.[1]) {
-      let title = match[1].trim().replace(/^[\u201c\u2018"']|[\u201d\u2019"'.,\s]+$/g, "").trim();
+  // Strict mode (English subject): known set texts or quoted titles only —
+  // free-form "based on ..." prose is too noisy for the novel filter.
+  const patterns = opts.strict
+    ? NOVEL_TITLE_PATTERNS.filter((p) => p.kind === "known" || p.kind === "quoted")
+    : NOVEL_TITLE_PATTERNS;
+  for (const { kind, re } of patterns) {
+    const match = haystack.match(re);
+    const raw = kind === "known" ? match?.[0] : match?.[1];
+    if (raw) {
+      let title = raw
+        .trim()
+        .replace(/^[\u201c\u2018"']|[\u201d\u2019"'.,\s]+$/g, "")
+        .replace(/\s*[\u2019']s$/i, "") // trailing possessive → author, not title
+        .replace(/^[\w.\s]+[\u2019']s\s+(?=[A-Z])/, "") // author prefix: "Bolaji Abdullahi's X"
+        .replace(TRAILING_GENRE_WORD, "")
+        .trim();
       if (title.length < 3 || title.length > 80) continue;
       if (NOVEL_TITLE_STOPLIST.test(title)) continue;
+      // A single word is only trusted for known titles / quoted captures
+      if (!title.includes(" ") && kind === "run") continue;
       return title;
     }
   }
@@ -295,7 +315,7 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
   const novel =
     subject === "Literature in English" || subject === "English Language" || /novel/i.test(rawSection)
-      ? detectNovel(rawSection, subject === "Literature in English" ? prompt : undefined)
+      ? detectNovel(rawSection, subject === "Literature in English" ? prompt : undefined, { strict: subject === "English Language" })
       : null;
 
   return {
