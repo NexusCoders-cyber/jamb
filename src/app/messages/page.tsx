@@ -184,9 +184,17 @@ export default function MessagesPage() {
   return (
     <AppShell title="Messages">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:px-6">
-        <h1 className="mb-4 text-2xl font-black text-slate-900">
-          Messages {totalUnread > 0 && <span className="ml-2 rounded-full bg-violet-600 px-2 py-0.5 text-sm font-bold text-white">{totalUnread}</span>}
-        </h1>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-black text-slate-900">
+            Messages {totalUnread > 0 && <span className="ml-2 rounded-full bg-violet-600 px-2 py-0.5 text-sm font-bold text-white">{totalUnread}</span>}
+          </h1>
+          <Link
+            href="/community"
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-violet-300 hover:text-violet-700"
+          >
+            Community
+          </Link>
+        </div>
         <AuthGuard user={user} loading={authLoading}>
           <>
             {/* ── Tab switcher: separate Chats and Students navigation ── */}
