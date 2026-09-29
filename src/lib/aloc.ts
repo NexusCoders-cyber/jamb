@@ -194,11 +194,16 @@ export function classifySection(sectionText: string | null | undefined): "passag
 }
 
 const NOVEL_TITLE_PATTERNS: RegExp[] = [
+  // Title in quotes: "based on Bolaji Abdullahi's 'Sweet Sixteen'"
   /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["\u201c\u2018']([^"\u201d\u2019']{3,80})["\u201d\u2019']/i,
-  /(?:based on|drawn from|from)\s+((?:[A-Z]\w*[.,']?(?:\s+(?:and\s+)?){0,3}){1,6}(?:['\u2019]s)?\s+(?:novel|book|text|play|poem|prose|drama)[^.,\n]*)/i,
+  // Run of capitalized words after "based on/drawn from", e.g. "based on George Orwell's Nineteen Eighty-Four"
+  /(?:based on|drawn from|from)\s+([A-Z][\w'\u2019.\-]+(?:\s+[A-Z][\w'\u2019.\-]+){0,5})/,
   // Explicit known JAMB/UTME set texts, even when the sentence is terse
   /\b(The Lekki Headmaster|The Life Changer|Sweet Sixteen|The Last Days at Forcados High(?: School)?|The Successors|Independence|Nineteen Eighty-?Four|The Joys of Motherhood|Harvest of Corruption|Sons and Daughters|The Tempest|Romeo and Juliet|Hamlet|Macbeth|Ambush|The Proud King|The Anvil and the Hammer)\b/i,
 ];
+
+/** Section phrases that look like titles but are really question categories. */
+const NOVEL_TITLE_STOPLIST = /literary appreciation|general literary|literary principles|oral english|lexis|structure|comprehension|register/i;
 
 /**
  * Best-effort extraction of the novel/text a question is drawn from.
@@ -210,8 +215,9 @@ export function detectNovel(sectionText: string | null | undefined, prompt?: str
   for (const pattern of NOVEL_TITLE_PATTERNS) {
     const match = haystack.match(pattern);
     if (match?.[1]) {
-      let title = match[1].trim().replace(/^[\u201c\u2018"']|[\u201d\u2019"']$/g, "").trim();
-      if (title.length > 80) title = title.slice(0, 80).trim();
+      let title = match[1].trim().replace(/^[\u201c\u2018"']|[\u201d\u2019"'.,\s]+$/g, "").trim();
+      if (title.length < 3 || title.length > 80) continue;
+      if (NOVEL_TITLE_STOPLIST.test(title)) continue;
       return title;
     }
   }
