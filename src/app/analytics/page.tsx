@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getSubjectStats, getScoreHistory, getUserAttempts } from "@/lib/queries";
-import type { SubjectStats } from "@/lib/queries";
+import type { SubjectStats, ExamAttempt } from "@/lib/queries";
 
 type ScorePoint = { score: number; question_count: number; submitted_at: string };
 
@@ -19,6 +19,7 @@ export default function AnalyticsPage() {
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [totalCorrect, setTotalCorrect] = useState(0);
   const [totalExams, setTotalExams] = useState(0);
+  const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,11 +36,14 @@ export default function AnalyticsPage() {
       setSubjectStats(stats);
       setScoreHistory(history as ScorePoint[]);
 
-      const answered = attempts.reduce((s, a) => s + a.question_count, 0);
-      const correct = attempts.reduce((s, a) => s + a.score, 0);
+      // Null-guards: an attempt saved without a score/question_count must not
+      // poison the totals with NaN
+      const answered = attempts.reduce((s, a) => s + (a.question_count ?? 0), 0);
+      const correct = attempts.reduce((s, a) => s + (a.score ?? 0), 0);
       setTotalAnswered(answered);
       setTotalCorrect(correct);
       setTotalExams(attempts.length);
+      setAttempts(attempts);
     }).finally(() => setLoading(false));
   }, [user, authLoading]);
 
@@ -48,12 +52,12 @@ export default function AnalyticsPage() {
   const strongCount = subjectStats.filter((s) => s.accuracy >= 70).length;
 
   // Chart: normalize history scores to percentages for bar heights
-  const maxScore = scoreHistory.reduce((m, p) => Math.max(m, p.question_count), 1);
   const chartBars = scoreHistory.map((p) => ({
-    pct: Math.round((p.score / Math.max(p.question_count, 1)) * 100),
+    pct: Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100),
     label: new Date(p.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" }),
   }));
-  // Pad to at least 7 bars for visual consistency
+  // Pad to at least 7 bars for visual consistency (empties on the left,
+  // since history is ordered oldest → newest)
   while (chartBars.length < 7) chartBars.unshift({ pct: 0, label: "—" });
 
   const analyticsCards = [
@@ -62,7 +66,7 @@ export default function AnalyticsPage() {
     { label: "Questions answered", value: loading ? "…" : totalAnswered.toLocaleString() },
     { label: "Weak subjects", value: loading ? "…" : String(weakCount) },
     { label: "Strong subjects", value: loading ? "…" : String(strongCount) },
-    { label: "Best score", value: loading || scoreHistory.length === 0 ? "—" : `${Math.max(...scoreHistory.map((p) => Math.round((p.score / Math.max(p.question_count, 1)) * 100)))}%` },
+    { label: "Best score", value: loading || scoreHistory.length === 0 ? "—" : `${Math.max(...scoreHistory.map((p) => Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100)))}%` },
   ];
 
   return (
@@ -137,6 +141,46 @@ export default function AnalyticsPage() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Exam history — every submitted attempt */}
+            <div className="mt-8 rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-xl font-black text-slate-900">Exam history</h2>
+                <span className="text-xs font-semibold text-slate-400">{totalExams} submitted</span>
+              </div>
+              {loading ? (
+                <p className="text-sm text-slate-400">Loading…</p>
+              ) : attempts.length === 0 ? (
+                <p className="text-sm text-slate-400">No exams yet — your submitted attempts will appear here.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {attempts.map((a) => {
+                    const q = a.question_count ?? 0;
+                    const s = a.score ?? 0;
+                    const pct = q > 0 ? Math.round((s / q) * 100) : 0;
+                    return (
+                      <div key={a.id} className="flex items-center gap-4 py-3">
+                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${
+                          pct >= 70 ? "bg-emerald-100 text-emerald-700" : pct >= 50 ? "bg-violet-100 text-violet-700" : "bg-rose-100 text-rose-700"
+                        }`}>
+                          {pct}%
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold text-slate-900">{s}/{q} correct</p>
+                          <p className="text-xs text-slate-400">
+                            {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          </p>
+                        </div>
+                        <Link href={`/review?attemptId=${a.id}`}
+                          className="shrink-0 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700">
+                          Review
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </>
         </AuthGuard>

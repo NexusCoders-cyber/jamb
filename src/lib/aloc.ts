@@ -207,6 +207,19 @@ const NOVEL_TITLE_STOPLIST = /literary appreciation|general literary|literary pr
 const TRAILING_GENRE_WORD = /\s+(?:novel|book|play|poem|prose|drama|text)s?$/i;
 
 /**
+ * Fuzzy novel-title match: ignores punctuation/case so "Nineteen Eighty-Four",
+ * "Nineteen Eighty Four" and "Eightyfour" all resolve to the same set text.
+ */
+export function novelMatches(questionNovel: string | null | undefined, wanted: string): boolean {
+  if (!questionNovel || !wanted) return false;
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const a = norm(questionNovel);
+  const b = norm(wanted);
+  if (!a || !b) return false;
+  return a === b || a.includes(b) || b.includes(a);
+}
+
+/**
  * Best-effort extraction of the novel/text a question is drawn from.
  * ALOC keeps this in free-form `section` text, so we parse known title
  * patterns. Returns a clean title or null.

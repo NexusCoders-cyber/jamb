@@ -140,11 +140,14 @@ export default function DMConversationPage() {
         <Link href="/messages" className="rounded-full p-2 text-slate-600 hover:bg-slate-100">
           ←
         </Link>
-        <Avatar name={partnerName} />
-        <div className="flex-1 min-w-0">
+        {/* Tap avatar or name to view the partner's profile (Facebook-style) */}
+        <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${partnerName}'s profile`}>
+          <Avatar name={partnerName} />
+        </Link>
+        <Link href={`/profile/${partnerId}`} className="flex-1 min-w-0">
           <p className="font-black text-slate-900 truncate">{partnerName}</p>
-          <p className="text-xs text-slate-400">Student</p>
-        </div>
+          <p className="text-xs text-slate-400">View profile</p>
+        </Link>
         <Link href="/community" className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">
           Community
         </Link>
@@ -183,7 +186,11 @@ export default function DMConversationPage() {
                     const senderName = isMe ? myName : partnerName;
                     return (
                       <div key={msg.id} className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
-                        {!isMe && <Avatar name={senderName} size="sm" />}
+                        {!isMe && senderName && (
+                          <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${senderName}'s profile`}>
+                            <Avatar name={senderName} size="sm" />
+                          </Link>
+                        )}
                         <div className={`max-w-[75%] group`}>
                           <div className={`rounded-2xl px-4 py-2.5 text-sm leading-6 ${
                             isMe

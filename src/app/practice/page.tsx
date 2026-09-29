@@ -35,10 +35,10 @@ const modes: { id: StudyMode; label: string; detail: string; href: string }[] = 
 ];
 
 const NOVELS = [
-  { title: "The Lekki Headmaster", note: "Current JAMB English text" },
-  { title: "The Life Changer", note: "Recent JAMB English text" },
-  { title: "Sweet Sixteen", note: "JAMB English text" },
-  { title: "Nineteen Eighty-Four", note: "Literature set text" },
+  { title: "The Lekki Headmaster", slug: "the-lekki-headmaster", note: "Current JAMB English text" },
+  { title: "The Life Changer", slug: "the-life-changer", note: "Recent JAMB English text" },
+  { title: "Sweet Sixteen", slug: "sweet-sixteen", note: "JAMB English text" },
+  { title: "Nineteen Eighty-Four", slug: "nineteen-eighty-four", note: "Literature set text" },
 ];
 
 export default function PracticePage() {
@@ -78,7 +78,7 @@ export default function PracticePage() {
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {NOVELS.map((n) => (
-              <Link key={n.title} href="/practice/novel"
+              <Link key={n.slug} href={`/novels/${n.slug}`}
                 className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 text-left transition hover:border-amber-400">
                 <span>
                   <span className="block text-sm font-black text-slate-900">{n.title}</span>
@@ -87,6 +87,11 @@ export default function PracticePage() {
                 <ArrowRight className="h-4 w-4 shrink-0 text-amber-600" aria-hidden />
               </Link>
             ))}
+            <Link href="/novels"
+              className="col-span-full flex items-center justify-between gap-3 rounded-xl bg-amber-600 px-4 py-3 text-left text-sm font-black text-white transition hover:bg-amber-700">
+              Open the novel reader
+              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
+            </Link>
           </div>
         </div>
       </div>

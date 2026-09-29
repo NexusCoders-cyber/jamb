@@ -152,8 +152,12 @@ export default function MessagesPage() {
                           )}
                         </div>
                       </Link>
-                      <Link href={`/messages/${s.id}`}
-                        className="shrink-0 rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</Link>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Link href={`/messages/${s.id}`}
+                          className="rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</Link>
+                        <Link href={`/profile/${s.id}`}
+                          className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700" aria-label={`View ${s.full_name}'s profile`}>Profile</Link>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -211,28 +215,34 @@ export default function MessagesPage() {
                 <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Recent conversations</p>
                 <div className="divide-y divide-slate-100 rounded-[20px] border border-slate-200 overflow-hidden">
                   {threads.map((thread) => (
-                    <Link key={thread.partner_id} href={`/messages/${thread.partner_id}`}
-                      className="flex items-center gap-4 px-4 py-4 hover:bg-violet-50 transition">
-                      <div className="relative">
-                        <Avatar name={thread.partner_name} />
-                        {thread.unread > 0 && (
-                          <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
-                            {thread.unread}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className={`font-bold text-slate-900 ${thread.unread > 0 ? "text-violet-900" : ""}`}>
-                            {thread.partner_name}
-                          </p>
-                          <span className="text-xs text-slate-400 shrink-0 ml-2">{timeAgo(thread.last_at)}</span>
+                    <div key={thread.partner_id} className="group flex items-center gap-4 px-4 py-4 transition hover:bg-violet-50">
+                      <Link href={`/messages/${thread.partner_id}`} className="flex min-w-0 flex-1 items-center gap-4" aria-label={`Open chat with ${thread.partner_name}`}>
+                        <div className="relative">
+                          <Avatar name={thread.partner_name} />
+                          {thread.unread > 0 && (
+                            <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
+                              {thread.unread}
+                            </span>
+                          )}
                         </div>
-                        <p className={`text-sm truncate ${thread.unread > 0 ? "font-semibold text-slate-800" : "text-slate-500"}`}>
-                          {thread.last_message}
-                        </p>
-                      </div>
-                    </Link>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <p className={`font-bold text-slate-900 ${thread.unread > 0 ? "text-violet-900" : ""}`}>
+                              {thread.partner_name}
+                            </p>
+                            <span className="ml-2 shrink-0 text-xs text-slate-400">{timeAgo(thread.last_at)}</span>
+                          </div>
+                          <p className={`truncate text-sm ${thread.unread > 0 ? "font-semibold text-slate-800" : "text-slate-500"}`}>
+                            {thread.last_message}
+                          </p>
+                        </div>
+                      </Link>
+                      <Link href={`/profile/${thread.partner_id}`}
+                        className="shrink-0 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700"
+                        aria-label={`View ${thread.partner_name}'s profile`}>
+                        Profile
+                      </Link>
+                    </div>
                   ))}
                 </div>
               </div>

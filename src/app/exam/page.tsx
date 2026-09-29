@@ -9,6 +9,7 @@ import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/q
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
 import RichText from "@/components/RichText";
+import { novelMatches } from "@/lib/aloc";
 import {
   Calculator,
   Check,
@@ -332,8 +333,14 @@ function ExamPageContent() {
   const [preparing, setPreparing] = useState(false);
   const [prepareError, setPrepareError] = useState("");
 
+  // Arriving from a standalone setup page (subject/count/year already chosen)?
+  // Then show a compact confirmation instead of asking for everything again.
+  const urlHasSetup = Boolean(searchParams.get("subject") && searchParams.get("count")) || Boolean(urlNovel);
+  const [showFullSetup, setShowFullSetup] = useState(!urlHasSetup || isExamMode);
+
   const [plan, setPlan] = useState<string[]>([ENGLISH, "Biology", "Chemistry", "Physics"]);
-  const [examYear, setExamYear] = useState("random");
+  // Honour the year chosen on the setup page instead of asking again
+  const [examYear, setExamYear] = useState(urlYear !== "All years" ? urlYear : "random");
 
   const [studySubject, setStudySubject] = useState(urlSubject);
   const [studyCount, setStudyCount] = useState(urlCount);
@@ -445,8 +452,7 @@ function ExamPageContent() {
           let pool = await fetchPool(name, count * 2);
           // Novel mode: keep only questions drawn from the selected set text
           if (urlNovel) {
-            const wanted = urlNovel.toLowerCase();
-            pool = pool.filter((qn) => (qn.novel ?? "").toLowerCase() === wanted);
+            pool = pool.filter((qn) => novelMatches(qn.novel, urlNovel));
           }
           return pool.slice(0, count).map((qn) => ({ ...qn, subject: name }));
         }),
@@ -555,7 +561,29 @@ function ExamPageContent() {
             </p>
           </div>
 
-          {!isExamMode ? (
+          {!isExamMode && !showFullSetup ? (
+            <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+              <h2 className="mb-4 text-base font-black text-slate-900">Your session is ready</h2>
+              <div className="grid gap-3 text-sm sm:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{urlNovel ? "Novel" : "Subject"}</p>
+                  <p className="mt-0.5 font-black text-slate-900">{urlNovel || studySubject}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Questions</p>
+                  <p className="mt-0.5 font-black text-slate-900">{studyCount}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Year</p>
+                  <p className="mt-0.5 font-black text-slate-900">{examYear === "random" ? "Random mix" : examYear}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setShowFullSetup(true)}
+                className="mt-3 text-sm font-bold text-violet-600 hover:underline">
+                Adjust settings
+              </button>
+            </div>
+          ) : !isExamMode ? (
             <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
               <h2 className="mb-4 text-base font-black text-slate-900">Session settings</h2>
               <div className="grid gap-4 sm:grid-cols-2">

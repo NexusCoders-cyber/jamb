@@ -47,6 +47,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Daily Challenge", href: "/daily-challenge",     icon: Star },
       { label: "Analytics",       href: "/analytics",           icon: BarChart3 },
       { label: "Syllabus",        href: "/knowledge-hub",       icon: Library },
+      { label: "Novels",          href: "/novels",              icon: BookOpen },
       { label: "Mistakes",        href: "/mistakes",            icon: Target },
     ],
   },
