@@ -1,13 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";import AppShell from "@/components/AppShell";
-import {
-  getChannels, getPosts, createPost,
-  type Channel, type Post,
-} from "@/lib/queries";
+import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import { getChannels, type Channel } from "@/lib/queries";
+import { ArrowRight, MessagesSquare, Users } from "lucide-react";
 
 type Person = { id: string; full_name: string; streak_days?: number };
 
@@ -69,15 +68,6 @@ function PeopleBrowser({ myId }: { myId: string }) {
     </div>
   );
 }
-import { MessageCircle, Search, Users } from "lucide-react";
-
-function timeAgo(iso: string) {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
 
 function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
   const sz = size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
@@ -94,62 +84,19 @@ export default function CommunityPage() {
   // Join gate — first visit asks the student to pick interest channels
   const [joined, setJoined] = useState<boolean | null>(null); // null = loading
   const [pickedChannels, setPickedChannels] = useState<string[]>([]);
-
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loadingPosts, setLoadingPosts] = useState(false);
-
-  // New post form
-  const [showForm, setShowForm] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newBody, setNewBody] = useState("");
-  const [posting, setPosting] = useState(false);
-  const [postError, setPostError] = useState("");
-  const formRef = useRef<HTMLDivElement>(null);
 
   // Load channels on mount + check whether the student already joined
   useEffect(() => {
     if (authLoading) return;
     const supabase = createSupabaseBrowserClient();
-    getChannels(supabase).then((ch) => {
-      setChannels(ch);
-      if (ch.length > 0) setActiveChannel(ch[0]);
-    });
+    getChannels(supabase).then(setChannels);
     try {
       setJoined(localStorage.getItem("community_joined") === "1");
     } catch {
       setJoined(false);
     }
   }, [authLoading]);
-
-  // Load posts when channel changes
-  useEffect(() => {
-    if (!activeChannel) return;
-    let mounted = true;
-    setLoadingPosts(true);
-    const supabase = createSupabaseBrowserClient();
-    getPosts(supabase, activeChannel.id, 30).then((p) => {
-      if (mounted) setPosts(p);
-    }).finally(() => { if (mounted) setLoadingPosts(false); });
-    return () => { mounted = false; };
-  }, [activeChannel]);
-
-  async function handlePost() {
-    if (!user || !activeChannel) return;
-    if (newTitle.trim().length < 3) { setPostError("Title must be at least 3 characters."); return; }
-    if (newBody.trim().length < 1) { setPostError("Post body cannot be empty."); return; }
-    setPosting(true); setPostError("");
-    const supabase = createSupabaseBrowserClient();
-    const p = await createPost(supabase, user.id, activeChannel.id, newTitle.trim(), newBody.trim());
-    if (p) {
-      setPosts((prev) => [p, ...prev]);
-      setNewTitle(""); setNewBody(""); setShowForm(false);
-    } else {
-      setPostError("Could not create post. Try again.");
-    }
-    setPosting(false);
-  }
 
   const myName = user?.user_metadata?.full_name as string | undefined;
 
@@ -182,14 +129,12 @@ export default function CommunityPage() {
 
           <button type="button" onClick={() => {
             try { localStorage.setItem("community_joined", "1"); } catch { /* ignore */ }
-            const first = channels.find((c) => pickedChannels.includes(c.id));
-            if (first) setActiveChannel(first);
             setJoined(true);
           }}
             className="h-14 w-full rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700">
             Join community
           </button>
-          <p className="mt-3 text-center text-xs text-slate-400">You can change these anytime from the sidebar.</p>
+          <p className="mt-3 text-center text-xs text-slate-400">You can change these anytime from the channel list.</p>
         </div>
       </AppShell>
     );
@@ -215,22 +160,38 @@ export default function CommunityPage() {
           </Link>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[260px_1fr]">
-          {/* Channels sidebar */}
-          <aside className="space-y-4">
-            <div className="rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Channels</p>
-              <div className="space-y-1">
-                {channels.map((ch) => (
-                  <button key={ch.id} type="button" onClick={() => setActiveChannel(ch)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition ${activeChannel?.id === ch.id ? "bg-violet-100 text-violet-900" : "text-slate-600 hover:bg-slate-50"}`}>
-                    <span className="text-base">#</span>
-                    {ch.name}
-                  </button>
-                ))}
-              </div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          {/* Channel directory — click a channel to enter it */}
+          <div>
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Pick a channel to enter</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {channels.map((ch) => (
+                <Link key={ch.id} href={`/community/${ch.slug}`}
+                  className="group rounded-[24px] bg-white p-5 ring-1 ring-slate-200 transition hover:ring-violet-300 hover:shadow-md">
+                  <span className="flex items-center justify-between">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100 text-lg font-black text-violet-700">
+                      {ch.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-violet-600" aria-hidden />
+                  </span>
+                  <span className="mt-3 block text-base font-black text-slate-900">{ch.name}</span>
+                  <span className="mt-0.5 block text-xs font-semibold text-slate-400">#{ch.slug}</span>
+                  <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-violet-600">
+                    <MessagesSquare className="h-3.5 w-3.5" aria-hidden /> Enter channel
+                  </span>
+                </Link>
+              ))}
             </div>
+            {channels.length === 0 && (
+              <div className="rounded-[24px] bg-white p-8 text-center ring-1 ring-slate-200">
+                <p className="text-lg font-black text-slate-900">No channels yet</p>
+                <p className="mt-1 text-sm text-slate-500">Check back soon.</p>
+              </div>
+            )}
+          </div>
 
+          {/* Side column */}
+          <aside className="space-y-4">
             {user && (
               <>
                 <PeopleBrowser myId={user.id} />
@@ -250,106 +211,6 @@ export default function CommunityPage() {
               </>
             )}
           </aside>
-
-          {/* Main feed */}
-          <div className="space-y-4">
-            {/* Channel header + new post */}
-            <div className="rounded-[24px] bg-gradient-to-r from-violet-600 to-violet-500 p-5 text-white">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-violet-200">
-                    # {activeChannel?.slug ?? "channel"}
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black">{activeChannel?.name ?? "Select a channel"}</h2>
-                </div>
-                {user ? (
-                  <button onClick={() => { setShowForm((v) => !v); setPostError(""); }}
-                    className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold hover:bg-white/25 transition">
-                    {showForm ? "Cancel" : "New post"}
-                  </button>
-                ) : (
-                  <Link href="/" className="rounded-full bg-white/15 px-4 py-2 text-sm font-bold hover:bg-white/25">
-                    Sign in to post
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            {/* New post form */}
-            {showForm && user && (
-              <div ref={formRef} className="rounded-[24px] bg-white p-5 ring-1 ring-violet-200">
-                <p className="mb-4 text-sm font-black text-slate-900">New post in #{activeChannel?.slug}</p>
-                <input
-                  type="text" placeholder="Title (e.g. How do I solve probability quickly?)"
-                  value={newTitle} onChange={(e) => setNewTitle(e.target.value)} maxLength={200}
-                  className="mb-3 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-violet-400"
-                />
-                <textarea
-                  placeholder="Describe your question or share a tip…"
-                  value={newBody} onChange={(e) => setNewBody(e.target.value)} maxLength={5000} rows={4}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-violet-400 resize-none"
-                />
-                {postError && <p className="mt-2 text-xs text-rose-600">{postError}</p>}
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">{newBody.length}/5000</span>
-                  <button onClick={handlePost} disabled={posting}
-                    className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60">
-                    {posting ? "Posting…" : "Post"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Posts list */}
-            {loadingPosts ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((n) => <div key={n} className="animate-pulse rounded-[24px] bg-white h-24 ring-1 ring-slate-200" />)}
-              </div>
-            ) : posts.length === 0 ? (
-              <div className="rounded-[24px] bg-white p-10 text-center ring-1 ring-slate-200">
-                <p className="text-2xl font-black text-slate-900">No posts yet</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Be the first to start a discussion in this channel.
-                </p>
-                {user && (
-                  <button onClick={() => setShowForm(true)} className="mt-4 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">
-                    Start discussion
-                  </button>
-                )}
-              </div>
-            ) : (
-              posts.map((post) => (
-                <article key={post.id} className="rounded-[24px] bg-white p-5 ring-1 ring-slate-200 hover:ring-violet-200 transition">
-                  <div className="flex items-start gap-3">
-                    <Avatar name={(post.author as { full_name: string } | undefined)?.full_name ?? "U"} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="font-bold text-slate-900">
-                          {(post.author as { full_name: string } | undefined)?.full_name ?? "Student"}
-                        </span>
-                        <span className="text-xs text-slate-400">{timeAgo(post.created_at)}</span>
-                        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
-                          #{(post.channel as { slug: string } | undefined)?.slug ?? activeChannel?.slug}
-                        </span>
-                      </div>
-                      <Link href={`/community/${post.id}`}>
-                        <h3 className="text-lg font-black text-slate-900 hover:text-violet-700 transition">{post.title}</h3>
-                      </Link>
-                      <p className="mt-1 text-sm text-slate-600 line-clamp-2">{post.body}</p>
-                      <div className="mt-3 flex items-center gap-4">
-                        <Link href={`/community/${post.id}`} className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-violet-600 transition">
-                          <MessageCircle className="h-4 w-4" aria-hidden /> {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
-                        </Link>
-                        <Link href={`/community/${post.id}`} className="text-xs font-bold text-violet-600 hover:underline">
-                          Read &amp; reply →
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
         </div>
       </div>
     </AppShell>

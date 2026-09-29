@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getWrongAnswers } from "@/lib/queries";
+import RichText from "@/components/RichText";
 import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -123,7 +124,24 @@ export default function MistakesPage() {
                     <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-700">Mistake</span>
                   </div>
                   <div className="rounded-[20px] bg-white p-5 ring-1 ring-slate-200">
-                    <p className="text-lg leading-8 text-slate-800">{q.prompt}</p>
+                    {q.section && (
+                      <div className={`mb-4 max-h-56 overflow-y-auto whitespace-pre-line rounded-2xl p-3 ring-1 ${
+                        q.section_kind === "passage" ? "bg-amber-50 ring-amber-100" : "bg-slate-50 ring-slate-200"
+                      }`}>
+                        <p className={`mb-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                          q.section_kind === "passage" ? "text-amber-700" : "text-slate-400"
+                        }`}>{q.section_kind === "passage" ? "Passage" : "Instruction"}</p>
+                        <p className="text-sm leading-6 text-slate-700">{q.section}</p>
+                      </div>
+                    )}
+                    {q.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={q.image} alt="Question illustration" loading="lazy"
+                        className="mb-4 max-h-56 w-auto max-w-full rounded-2xl ring-1 ring-slate-200" />
+                    )}
+                    <p className="text-lg leading-8 text-slate-800">
+                      <RichText segments={q.prompt_segments} fallback={q.prompt} />
+                    </p>
                     <div className="mt-5 space-y-3 text-sm">
                       {(q.options as string[]).map((opt, idx) => {
                         const isCorrect = idx === q.correct_option;
@@ -139,7 +157,7 @@ export default function MistakesPage() {
                                   : "border-slate-200 text-slate-700"
                             }`}
                           >
-                            {String.fromCharCode(65 + idx)}. {opt}
+                            {String.fromCharCode(65 + idx)}. <RichText segments={q.option_segments?.[idx]} fallback={opt} />
                             {isCorrect && (
                               <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
                                 <Check className="h-3.5 w-3.5" aria-hidden /> Correct

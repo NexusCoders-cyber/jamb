@@ -88,42 +88,159 @@ export type AlocResponse = {
 export type NormalizedQuestion = {
   id: string;
   prompt: string;
+  /** Prompt split into rich segments so italics/bold survive rendering */
+  promptSegments?: RichSegment[] | null;
   options: string[];
+  /** Options split into rich segments, aligned with `options` by index */
+  optionSegments?: (RichSegment[] | null)[];
   answer: number;
   explanation: string | null;
   section?: string | null;
+  /** Classified role of `section` — comprehension passages get special rendering */
+  sectionKind?: "passage" | "instruction" | null;
+  /** Novel/title the question is drawn from (e.g. "Sweet Sixteen") when detectable */
+  novel?: string | null;
+  /** The exam body this question actually came from (e.g. utme, wassce) */
+  examtype?: string | null;
   image?: string | null;
   year?: string | null;
   subject?: string | null;
 };
 
-function stripHtml(input: string): string {
+export type RichSegment = { text: string; italic?: boolean; bold?: boolean };
+
+function unescapeEntities(input: string): string {
   return input
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&[a-z]+;/gi, "");
+}
+
+/**
+ * Convert a limited set of inline HTML tags into rich text segments.
+ * <em>/<i> become italic, <strong>/<b> become bold, everything else is
+ * stripped so words like "nearest" highlighted in ALOC instructions stay
+ * visible instead of silently disappearing.
+ */
+export function htmlToSegments(input: string): RichSegment[] {
+  const parts: RichSegment[] = [];
+  let italic = false;
+  let bold = false;
+  let buffer = "";
+
+  const flush = () => {
+    const text = unescapeEntities(buffer).replace(/\s+/g, " ");
+    if (text.trim().length > 0) {
+      parts.push({ text, italic: italic || undefined, bold: bold || undefined });
+    }
+    buffer = "";
+  };
+
+  const tags = input.split(/(<[^>]+>)/);
+  for (const part of tags) {
+    if (/^<[^>]+>$/.test(part)) {
+      const tag = part.toLowerCase();
+      if (/^<br\s*\/?>$/.test(tag) || tag === "</p>") {
+        buffer += " ";
+      } else if (tag === "<em>" || tag === "<i>") {
+        flush();
+        italic = true;
+      } else if (tag === "</em>" || tag === "</i>") {
+        flush();
+        italic = false;
+      } else if (tag === "<strong>" || tag === "<b>") {
+        flush();
+        bold = true;
+      } else if (tag === "</strong>" || tag === "</b>") {
+        flush();
+        bold = false;
+      }
+      // all other tags are ignored
+    } else {
+      buffer += part;
+    }
+  }
+  flush();
+  return parts.length > 0 ? parts : [{ text: unescapeEntities(input).replace(/\s+/g, " ").trim() }];
+}
+
+/** Plain-text version of htmlToSegments — joins rich segments back together. */
+function stripHtml(input: string): string {
+  return htmlToSegments(input)
+    .map((s) => s.text)
+    .join("")
     .trim();
 }
 
-function resolveOptions(q: AlocQuestion): string[] {
+/**
+ * Classify a `section` value: comprehension passages (long prose the
+ * questions refer to) get their own reader panel; short strings like
+ * "choose the option nearest in meaning..." are instructions.
+ */
+export function classifySection(sectionText: string | null | undefined): "passage" | "instruction" | null {
+  if (!sectionText) return null;
+  const text = sectionText.trim();
+  if (text.length === 0) return null;
+  // Long multi-sentence text = an actual passage to read
+  const sentences = (text.match(/[.!?:][\s"']/g) ?? []).length;
+  if (text.length >= 140 && sentences >= 3) return "passage";
+  if (text.length >= 400) return "passage";
+  return "instruction";
+}
+
+const NOVEL_TITLE_PATTERNS: RegExp[] = [
+  /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["\u201c\u2018']([^"\u201d\u2019']{3,80})["\u201d\u2019']/i,
+  /(?:based on|drawn from|from)\s+((?:[A-Z]\w*[.,']?(?:\s+(?:and\s+)?){0,3}){1,6}(?:['\u2019]s)?\s+(?:novel|book|text|play|poem|prose|drama)[^.,\n]*)/i,
+  // Explicit known JAMB/UTME set texts, even when the sentence is terse
+  /\b(The Lekki Headmaster|The Life Changer|Sweet Sixteen|The Last Days at Forcados High(?: School)?|The Successors|Independence|Nineteen Eighty-?Four|The Joys of Motherhood|Harvest of Corruption|Sons and Daughters|The Tempest|Romeo and Juliet|Hamlet|Macbeth|Ambush|The Proud King|The Anvil and the Hammer)\b/i,
+];
+
+/**
+ * Best-effort extraction of the novel/text a question is drawn from.
+ * ALOC keeps this in free-form `section` text, so we parse known title
+ * patterns. Returns a clean title or null.
+ */
+export function detectNovel(sectionText: string | null | undefined, prompt?: string): string | null {
+  const haystack = `${sectionText ?? ""}\n${prompt ?? ""}`;
+  for (const pattern of NOVEL_TITLE_PATTERNS) {
+    const match = haystack.match(pattern);
+    if (match?.[1]) {
+      let title = match[1].trim().replace(/^[\u201c\u2018"']|[\u201d\u2019"']$/g, "").trim();
+      if (title.length > 80) title = title.slice(0, 80).trim();
+      return title;
+    }
+  }
+  return null;
+}
+
+function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[] | null }[] {
+  const fromList = (opt: unknown): { text: string; segments: RichSegment[] | null } | null => {
+    const raw = String(opt ?? "");
+    if (raw.trim().length === 0) return null;
+    const segments = htmlToSegments(raw);
+    const text = segments.map((s) => s.text).join("").trim();
+    const hasRich = segments.some((s) => s.italic || s.bold);
+    return text ? { text, segments: hasRich ? segments : null } : null;
+  };
+
   if (Array.isArray(q.options)) {
-    return q.options.map((opt) => stripHtml(String(opt))).filter(Boolean);
+    return q.options.map(fromList).filter((o): o is { text: string; segments: RichSegment[] } => o !== null);
   }
   const optObj = q.option ?? (typeof q.options === "object" ? q.options : null);
   if (!optObj) return [];
 
   const keys: (keyof AlocRawOption)[] = ["a", "b", "c", "d", "e"];
-  const list: string[] = [];
+  const list: { text: string; segments: RichSegment[] | null }[] = [];
   for (const k of keys) {
     const val = optObj[k];
     if (typeof val === "string" && val.trim().length > 0) {
-      list.push(stripHtml(val));
+      const o = fromList(val);
+      if (o) list.push(o);
     }
   }
   return list;
@@ -136,8 +253,14 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const rawPrompt = stripHtml(q.question ?? "");
   const rawSection = stripHtml(q.section ?? "");
   const prompt = rawPrompt || rawSection;
-  const options = resolveOptions(q);
+  const resolved = resolveOptions(q);
+  const options = resolved.map((o) => o.text);
   if (!prompt || options.length < 2) return null;
+
+  // Keep italics/bold when present (English lexis questions mark keywords)
+  const rawPromptSegments = htmlToSegments(q.question ?? "");
+  const promptSegments = rawPromptSegments.some((s) => s.italic || s.bold) ? rawPromptSegments : null;
+  const optionSegments = resolved.map((o) => o.segments);
 
   let answerIdx = -1;
   if (typeof q.answer === "number") {
@@ -164,14 +287,23 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const image = q.image && typeof q.image === "string" && q.image.trim().length > 0 ? q.image.trim() : null;
   const year = q.examyear ? String(q.examyear) : null;
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
+  const novel =
+    subject === "Literature in English" || subject === "English Language" || /novel/i.test(rawSection)
+      ? detectNovel(rawSection, subject === "Literature in English" ? prompt : undefined)
+      : null;
 
   return {
     id: String(q.id ?? Math.random().toString(36).slice(2)),
     prompt,
+    promptSegments,
     options,
+    optionSegments,
     answer: answerIdx,
     explanation,
     section: section || null,
+    sectionKind: section ? classifySection(section) : null,
+    novel,
+    examtype: typeof q.examtype === "string" ? q.examtype : null,
     image,
     year,
     subject,

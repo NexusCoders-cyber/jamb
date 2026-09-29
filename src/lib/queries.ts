@@ -7,11 +7,25 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Rich text segment — italics/bold preserved from the ALOC API
+export type SnapshotSegment = { text: string; italic?: boolean; bold?: boolean };
+
 // Shape of the per-answer question snapshot stored in attempt_answers.question_data
 export type QuestionSnapshot = {
   id: string;
   prompt: string;
+  /** Italics/bold segments for the prompt (English lexis questions mark keywords) */
+  prompt_segments?: SnapshotSegment[] | null;
   options: string[];
+  /** Italics/bold segments per option, aligned with `options` by index */
+  option_segments?: (SnapshotSegment[] | null)[] | null;
+  /** Passage / instruction text shown above the question */
+  section?: string | null;
+  section_kind?: "passage" | "instruction" | null;
+  /** Question illustration image URL */
+  image?: string | null;
+  /** Set text the question is drawn from (e.g. "Sweet Sixteen") */
+  novel?: string | null;
   correct_option: number;
   explanation: string | null;
   difficulty: string;
@@ -445,6 +459,16 @@ export async function getPosts(
   if (channelId) q = q.eq("channel_id", channelId);
   const { data } = await q;
   return (data ?? []) as Post[];
+}
+
+/** Look up a community channel by its slug (used by /community/[slug]). */
+export async function getChannelBySlug(supabase: SupabaseClient, slug: string): Promise<Channel | null> {
+  const { data } = await supabase
+    .from("channels")
+    .select("*")
+    .eq("slug", slug)
+    .single();
+  return (data as Channel | null) ?? null;
 }
 
 export async function getPost(supabase: SupabaseClient, postId: string): Promise<Post | null> {

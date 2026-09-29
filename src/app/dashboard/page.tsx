@@ -14,7 +14,7 @@ import AppShell from "@/components/AppShell";
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
   { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: FileText },
   { label: "Practice", detail: "Past questions, your pace", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: PenLine },
-  { label: "Study mode", detail: "See answers as you go", href: "/practice?mode=study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: BookOpen },
+  { label: "Study mode", detail: "See answers as you go", href: "/practice/study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: BookOpen },
   { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: MessagesSquare },
 ];
 

@@ -125,7 +125,7 @@ export default function PostThreadPage() {
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
         {/* Back nav */}
         <div className="mb-4 flex items-center justify-between">
-          <Link href="/community" className="flex items-center gap-1.5 text-sm font-bold text-violet-600">
+          <Link href={channelSlug ? `/community/${channelSlug}` : "/community"} className="flex items-center gap-1.5 text-sm font-bold text-violet-600">
             ← {channelName}
           </Link>
           <Link href="/messages" className="rounded-full bg-violet-100 px-3 py-1.5 text-xs font-semibold text-violet-700">

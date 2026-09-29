@@ -8,6 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
+import RichText from "@/components/RichText";
 import {
   Calculator,
   Check,
@@ -43,11 +44,16 @@ const EXAM_YEARS = [
 type ExamQuestion = {
   id: string;
   prompt: string;
+  promptSegments?: import("@/components/RichText").Segment[] | null;
   options: string[];
+  optionSegments?: (import("@/components/RichText").Segment[] | null)[];
   answer: number;
   explanation: string | null;
   image?: string | null;
   section?: string | null;
+  sectionKind?: "passage" | "instruction" | null;
+  novel?: string | null;
+  examtype?: string | null;
   year?: string | null;
   subject?: string | null; // set at combine time
 };
@@ -116,12 +122,21 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
 // ─── Media (passage + image) ──────────────────────────────────────────────────
 
 function QuestionMedia({ question }: { question: ExamQuestion }) {
+  const isPassage = question.sectionKind === "passage";
   return (
     <>
       {question.section && (
-        <div className="mb-4 max-h-72 overflow-y-auto whitespace-pre-line rounded-[20px] bg-amber-50 p-4 ring-1 ring-amber-100">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">Passage</p>
-          <p className="text-sm leading-7 text-slate-800">{question.section}</p>
+        <div className={`mb-4 overflow-y-auto whitespace-pre-line rounded-[20px] p-4 ring-1 ${
+          isPassage ? "max-h-[480px] bg-amber-50 ring-amber-100" : "max-h-40 bg-slate-50 ring-slate-200"
+        }`}>
+          <p className={`mb-2 text-[10px] font-black uppercase tracking-[0.18em] ${
+            isPassage ? "text-amber-700" : "text-slate-400"
+          }`}>
+            {isPassage ? "Passage — read carefully" : "Instruction"}
+          </p>
+          <p className={`leading-7 text-slate-800 ${isPassage ? "text-[15px]" : "text-sm font-medium text-slate-600"}`}>
+            {question.section}
+          </p>
         </div>
       )}
       {question.image && (
@@ -250,7 +265,7 @@ function InlineReview({
                             : "bg-slate-100 text-slate-500"}`}>
                           {String.fromCharCode(65 + idx)}
                         </span>
-                        {opt}
+                        <RichText segments={q.optionSegments?.[idx]} fallback={opt} />
                         {isCorrectOpt && (
                           <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
                             <Check className="h-3.5 w-3.5" aria-hidden /> Correct answer
@@ -306,6 +321,10 @@ function ExamPageContent() {
   const urlCount = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 60));
   const urlTimer = searchParams.get("timer") ?? "Recommended timer";
   const urlYear = searchParams.get("year") ?? "All years";
+  // Novel study: only questions drawn from this set text
+  const urlNovel = searchParams.get("novel") ?? "";
+  // Standalone setup page this session was launched from (Learn hub modes)
+  const setupHref = urlNovel ? "/practice/novel" : isPracticeMode ? "/practice/past-questions" : isStudyMode ? "/practice/study" : "/practice";
 
   // ── Lobby state ──
   const [started, setStarted] = useState(false);
@@ -423,13 +442,24 @@ function ExamPageContent() {
 
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
-          const pool = await fetchPool(name, count);
+          let pool = await fetchPool(name, count * 2);
+          // Novel mode: keep only questions drawn from the selected set text
+          if (urlNovel) {
+            const wanted = urlNovel.toLowerCase();
+            pool = pool.filter((qn) => (qn.novel ?? "").toLowerCase() === wanted);
+          }
           return pool.slice(0, count).map((qn) => ({ ...qn, subject: name }));
         }),
       );
 
       const combined = perSubject.flat();
-      if (combined.length === 0) throw new Error("Could not load any questions. Check your connection.");
+      if (combined.length === 0) {
+        throw new Error(
+          urlNovel
+            ? `No questions found for "${urlNovel}" in this pool yet. Try another year.`
+            : "Could not load any questions. Check your connection.",
+        );
+      }
 
       const tabs: { name: string; start: number }[] = [];
       let offset = 0;
@@ -502,7 +532,7 @@ function ExamPageContent() {
   if (!started && !reviewEntries) {
     if (!user) {
       return (
-        <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back="/practice">
+        <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back={setupHref}>
           <div className="mx-auto max-w-md px-4 py-16">
             <div className="rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200 shadow-lg">
               <h2 className="text-xl font-black text-slate-900">Sign in to start</h2>
@@ -516,13 +546,13 @@ function ExamPageContent() {
       );
     }
     return (
-      <AppShell title={isStudyMode ? "Study Mode" : "Mock Exam"} back="/practice">
+      <AppShell title={urlNovel ? "Novel Study" : isStudyMode ? "Study Mode" : "Mock Exam"} back={setupHref}>
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
           <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">
               {isStudyMode ? "Study mode · answers shown as you go" : isPracticeMode ? "Practice · answers shown as you go" : "JAMB standard · 4 subjects"}
             </p>
-            <h1 className="mt-2 text-3xl font-black">Ready to begin?</h1>
+            <h1 className="mt-2 text-3xl font-black">{urlNovel ? urlNovel : "Ready to begin?"}</h1>
             <p className="mt-2 text-sm text-violet-100">
               {isExamMode
                 ? "Use of English is compulsory. Choose your three other subjects and the year you want to practise."
@@ -626,8 +656,8 @@ function ExamPageContent() {
             <Play className="h-5 w-5" aria-hidden />
             {preparing ? "Preparing questions…" : "Start now"}
           </button>
-          <Link href="/practice" className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
-            Back to practice settings
+          <Link href={setupHref} className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+            Change session setup
           </Link>
         </div>
       </AppShell>
@@ -658,7 +688,13 @@ function ExamPageContent() {
             question: {
               id: e.question.id,
               prompt: e.question.prompt,
+              prompt_segments: e.question.promptSegments ?? undefined,
               options: e.question.options,
+              option_segments: e.question.optionSegments ?? undefined,
+              section: e.question.section ?? undefined,
+              section_kind: e.question.sectionKind ?? undefined,
+              image: e.question.image ?? undefined,
+              novel: e.question.novel ?? undefined,
               correct_option: e.question.answer,
               explanation: e.question.explanation,
               difficulty: "medium",
@@ -778,7 +814,9 @@ function ExamPageContent() {
             {q && <QuestionMedia question={q} />}
 
             <div className={`rounded-[24px] p-5 ring-1 ${isStudyMode ? "bg-violet-50 ring-violet-100" : "bg-slate-50 ring-slate-200"}`}>
-              <p className="text-lg leading-8 text-slate-800">{q?.prompt ?? ""}</p>
+              <p className="text-lg leading-8 text-slate-800">
+                <RichText segments={q?.promptSegments} fallback={q?.prompt ?? ""} />
+              </p>
             </div>
 
             <div className="mt-6 grid gap-3">
@@ -912,7 +950,7 @@ function ExamPageContent() {
               className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
               {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
             </button>
-            <Link href="/practice" className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
+            <Link href={setupHref} className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
           </aside>
         </div>
