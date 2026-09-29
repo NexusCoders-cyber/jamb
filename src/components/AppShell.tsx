@@ -103,9 +103,13 @@ function useUnreadDMCount(): number {
     };
     load();
 
-    // Refresh on realtime DM inserts + when the tab regains focus
+    // Refresh on realtime DM inserts + when the tab regains focus.
+    // Unique name per mount — a fixed name can return an already-subscribed
+    // channel on StrictMode/Fast Refresh remounts (removeChannel is async),
+    // which throws "cannot add postgres_changes callbacks after subscribe()".
+    const channelName = `dm-unread-badge-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel("dm-unread-badge")
+      .channel(channelName)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "direct_messages" }, () => load())
       .subscribe();
     const onFocus = () => load();

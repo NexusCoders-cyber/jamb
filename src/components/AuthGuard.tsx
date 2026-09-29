@@ -14,6 +14,7 @@
  */
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Lock } from "lucide-react";
 
 interface Props {
@@ -25,6 +26,8 @@ interface Props {
 }
 
 export default function AuthGuard({ user, loading, children, fallback }: Props) {
+  const pathname = usePathname();
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
@@ -46,7 +49,7 @@ export default function AuthGuard({ user, loading, children, fallback }: Props) 
             </div>
             <h2 className="text-xl font-black text-slate-900">Sign in required</h2>
             <p className="mt-2 text-sm text-slate-500">You need to be signed in to view this page.</p>
-            <Link href="/" className="mt-6 flex h-11 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700">
+            <Link href={`/?next=${encodeURIComponent(pathname)}`} className="mt-6 flex h-11 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700">
               Sign in
             </Link>
           </div>

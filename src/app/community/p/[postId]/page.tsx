@@ -52,8 +52,11 @@ export default function PostThreadPage() {
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
     try { supabase = createSupabaseBrowserClient(); } catch (_e) { return; }
 
+    // Unique suffix per mount — a fixed channel name can be returned already
+    // subscribed on StrictMode/Fast Refresh remounts, and re-adding .on()
+    // callbacks then throws (supabase-js RealtimeClient contract).
     const channel = supabase
-      .channel(`replies-${postId}`)
+      .channel(`replies-${postId}-${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "post_replies", filter: `post_id=eq.${postId}` },
@@ -207,7 +210,7 @@ export default function PostThreadPage() {
         ) : (
           <div className="rounded-[24px] bg-slate-50 p-5 text-center ring-1 ring-slate-200">
             <p className="text-sm font-semibold text-slate-700">
-              <Link href="/" className="text-violet-600 underline">Sign in</Link> to join the discussion
+              <Link href={`/?next=${encodeURIComponent(`/community/p/${postId}`)}`} className="text-violet-600 underline">Sign in</Link> to join the discussion
             </p>
           </div>
         )}

@@ -119,7 +119,7 @@ export default function ChannelPage() {
               {showForm ? "Cancel" : "New post"}
             </button>
           ) : (
-            <Link href="/" className="rounded-full bg-violet-100 px-4 py-2 text-sm font-bold text-violet-700">
+            <Link href={`/?next=${encodeURIComponent(`/community/${slug}`)}`} className="rounded-full bg-violet-100 px-4 py-2 text-sm font-bold text-violet-700">
               Sign in to post
             </Link>
           )}

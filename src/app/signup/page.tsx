@@ -94,7 +94,10 @@ export default function SignUpPage() {
         return;
       }
 
-      router.push("/dashboard");
+      // Respect ?next= so users return to the page that asked them to sign up
+      const params = new URLSearchParams(window.location.search);
+      const next = params.get("next");
+      router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to create account.");
     } finally {

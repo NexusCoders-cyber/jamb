@@ -532,7 +532,7 @@ function ExamPageContent() {
             <div className="rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200 shadow-lg">
               <h2 className="text-xl font-black text-slate-900">Sign in to start</h2>
               <p className="mt-2 text-sm text-slate-500">Mock exams save your score, streak, and correction history — sign in to begin.</p>
-              <Link href="/" className="mt-6 flex h-11 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700">
+              <Link href={`/?next=${encodeURIComponent(`/exam?mode=${mode}${urlSubject ? `&subject=${encodeURIComponent(urlSubject)}` : ""}${urlNovel ? `&novel=${encodeURIComponent(urlNovel)}` : ""}`)}`} className="mt-6 flex h-11 items-center justify-center rounded-2xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700">
                 Sign in
               </Link>
             </div>

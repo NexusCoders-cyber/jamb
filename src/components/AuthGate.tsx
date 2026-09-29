@@ -1,20 +1,29 @@
 "use client";
 
 /**
- * AuthGate — wraps client pages that should redirect when auth state is known.
+ * AuthGate — wraps auth-only pages (/, /signup).
  *
- * Usage on auth-only pages (/, /signup):
- *   Renders a full-screen spinner while the session is loading.
- *   Once resolved, renders children (middleware handles the actual redirect).
- *
- * This prevents the flash of the login form for already-authenticated users
- * while the middleware redirect is in flight.
+ * - Spinner while the session resolves (no flash of the login form).
+ * - Already signed in → redirect to ?next= (or /dashboard). There is no
+ *   middleware in this app, so this is what keeps signed-in users off the
+ *   login screen.
+ * - Signed out → render children (the login/signup form).
  */
 
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useUser } from "@/lib/useUser";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
-  const { loading } = useUser();
+  const { user, loading } = useUser();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading || !user) return;
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+    router.replace(next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard");
+  }, [loading, user, router]);
 
   if (loading) {
     return (

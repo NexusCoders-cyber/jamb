@@ -62,8 +62,11 @@ export default function DMConversationPage() {
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
     try { supabase = createSupabaseBrowserClient(); } catch (_e) { return; }
 
+    // Unique suffix per mount — a fixed channel name can be returned already
+    // subscribed on StrictMode/Fast Refresh remounts, and re-adding .on()
+    // callbacks then throws (supabase-js RealtimeClient contract).
     const channel = supabase
-      .channel(`dm-${[user.id, partnerId].sort().join("-")}`)
+      .channel(`dm-${[user.id, partnerId].sort().join("-")}-${Math.random().toString(36).slice(2)}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "direct_messages" },
