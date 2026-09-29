@@ -32,8 +32,6 @@ import {
   Trophy,
   Settings,
   UserRound,
-  ShieldCheck,
-  Newspaper,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -68,13 +66,6 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Achievements",  href: "/achievements",  icon: Trophy },
       { label: "Streaks",       href: "/streaks",       icon: Flame },
       { label: "Settings",      href: "/settings",      icon: Settings },
-    ],
-  },
-  {
-    label: "Admin",
-    items: [
-      { label: "Admin Portal",  href: "/admin",         icon: ShieldCheck },
-      { label: "Blog",          href: "/blog",          icon: Newspaper },
     ],
   },
 ];
@@ -269,16 +260,24 @@ interface AppShellProps {
   back?: string;
   /** Hide the top bar on mobile (use for pages with their own immersive header) */
   hideTopBar?: boolean;
+  /**
+   * Hide the mobile bottom tab bar (use while an exam / test is in progress so
+   * the student can't tap away and the full screen height is usable).
+   */
+  hideBottomNav?: boolean;
 }
 
-export default function AppShell({ children, title, back, hideTopBar = false }: AppShellProps) {
+export default function AppShell({ children, title, back, hideTopBar = false, hideBottomNav = false }: AppShellProps) {
   const pathname = usePathname();
   // Single subscription instance — mounting the realtime channel from more
   // than one component throws "cannot add callbacks after subscribe()".
   const unread = useUnreadDMCount();
 
   return (
-    <div className="min-h-screen bg-[#f5f4ff] lg:pl-64">
+    // dvh (not vh) so the layout matches the *visible* height on iPhone Safari and
+    // Android Chrome, where the browser bars make 100vh taller than the screen.
+    // pt-safe keeps content clear of the notch / status bar when installed as a PWA.
+    <div className={`bg-[#f5f4ff] lg:pl-64 ${hideBottomNav ? "min-h-dvh pt-safe" : "min-h-screen"}`}>
       {/* Desktop sidebar */}
       <Sidebar pathname={pathname} />
 
@@ -286,12 +285,12 @@ export default function AppShell({ children, title, back, hideTopBar = false }: 
       {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
 
       {/* Page content — add bottom padding on mobile so content clears the tab bar */}
-      <main className="min-h-screen pb-20 lg:pb-0">
+      <main className={`${hideBottomNav ? "pb-0" : "min-h-screen pb-20"} lg:pb-0`}>
         {children}
       </main>
 
       {/* Mobile bottom tabs */}
-      <BottomNav pathname={pathname} unread={unread} />
+      {!hideBottomNav && <BottomNav pathname={pathname} unread={unread} />}
     </div>
   );
 }
