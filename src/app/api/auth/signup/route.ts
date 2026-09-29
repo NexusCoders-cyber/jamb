@@ -21,6 +21,16 @@ export async function POST(request: Request) {
     options: { data: { full_name: fullName } },
   });
 
+  // Hand the session cookies to the browser (no-op when confirmation is
+  // enabled and no session was returned). Without this the user must
+  // confirm by email before any login works — we auto-login instead.
+  if (data.session) {
+    await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  }
+
   if (error) {
     // Map Supabase error messages to user-friendly ones
     const msg = error.message.toLowerCase();
@@ -49,6 +59,11 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json({
-    user: { email: data.user?.email, user_metadata: data.user?.user_metadata },
+    user: data.user
+      ? { id: data.user.id, email: data.user.email, user_metadata: data.user.user_metadata }
+      : null,
+    // Tokens let the client setSession() directly for instant auto-login
+    access_token: data.session?.access_token ?? null,
+    refresh_token: data.session?.refresh_token ?? null,
   });
 }

@@ -140,9 +140,9 @@ export default function DMConversationPage() {
   }
 
   return (
-    <main className="flex h-screen flex-col bg-[#eef2ff]">
-      {/* Top bar */}
-      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
+    <main className="flex h-[100dvh] flex-col overflow-hidden bg-[#eef2ff]">
+      {/* Top bar — sticky: never scrolls away (WhatsApp style) */}
+      <header className="sticky top-0 z-30 flex shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
         <Link href="/messages" className="rounded-full p-2 text-slate-600 hover:bg-slate-100">
           ←
         </Link>
@@ -159,8 +159,8 @@ export default function DMConversationPage() {
         </Link>
       </header>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+      {/* Messages area — the only scrollable region */}
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-6">
           {loading ? (
             <div className="space-y-3 pt-8">
@@ -221,8 +221,8 @@ export default function DMConversationPage() {
         </div>
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-slate-200 bg-white px-4 py-3 sm:px-6">
+      {/* Input bar — sticky: always pinned to the bottom (WhatsApp style) */}
+      <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto max-w-2xl">
           {sendError && <p className="mb-2 text-xs text-rose-600">{sendError}</p>}
           <div className="flex items-end gap-3">

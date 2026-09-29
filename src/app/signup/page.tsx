@@ -23,6 +23,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmNotice, setShowConfirmNotice] = useState(false);
+  void setShowConfirmNotice;
 
   function toggleSubject(name: string) {
     setSubjects((cur) => {
@@ -60,10 +61,17 @@ export default function SignUpPage() {
 
       // Persist interests (the 4 UTME subjects) + course directly to the
       // profile so other students can discover them in the friends browser.
-      if (data?.user?.id) {
+      // The signup API returns the user's access token, so this runs as the
+      // new user even before any session cookie is observed client-side.
+      if (data?.user?.id && data?.access_token) {
         try {
-          const supabase = createSupabaseBrowserClient();
-          await supabase
+          const { createClient } = await import("@supabase/supabase-js");
+          const { getSupabasePublicEnv } = await import("@/lib/env");
+          const { url, anonKey } = getSupabasePublicEnv();
+          const scoped = createClient(url, anonKey, {
+            global: { headers: { Authorization: `Bearer ${data.access_token}` } },
+          });
+          await scoped
             .from("profiles")
             .update({ interests: subjects, course: course.trim() })
             .eq("id", data.user.id);
@@ -83,16 +91,24 @@ export default function SignUpPage() {
         );
       } catch { /* ignore */ }
 
-      // If Supabase email confirmation is enabled, the session will be null.
-      // In that case show a success message instead of redirecting.
-      if (!data?.session) {
-        setError(""); // clear any error
-        // Re-use error state to show success (green styling handled below)
+      // If Supabase email confirmation is enabled the API returns no token —
+      // fall back to the confirmation notice instead of redirecting.
+      if (!data?.access_token) {
+        setError("");
         setIsSubmitting(false);
-        // Show confirmation notice instead of redirecting
         setShowConfirmNotice(true);
         return;
       }
+
+      // Auto-login: persist the session returned by our API so the user
+      // lands straight on the dashboard without a confirmation email step.
+      try {
+        const supabase = createSupabaseBrowserClient();
+        await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+        });
+      } catch { /* non-fatal — proxy will still read the cookie from the API response */ }
 
       // Respect ?next= so users return to the page that asked them to sign up
       const params = new URLSearchParams(window.location.search);

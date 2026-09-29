@@ -2,16 +2,107 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
-import { Flame, Inbox } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Flame, Inbox, Trophy, Target, ChartLine, Users } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGate from "@/components/AuthGate";
 
-type View = "login" | "forgot" | "forgot-sent";
+type View = "intro" | "login" | "forgot" | "forgot-sent";
+
+/** Auto-advancing intro slides — shown once per device for ~6 seconds. */
+const SLIDES = [
+  {
+    icon: Target,
+    title: "Practise real past questions",
+    text: "20,000+ JAMB/UTME questions across 17 subjects — with the exact exam-year feel.",
+  },
+  {
+    icon: ChartLine,
+    title: "See where you're weak",
+    text: "Per-subject accuracy, score trends and a correction room for every mistake.",
+  },
+  {
+    icon: Flame,
+    title: "Build an unbreakable streak",
+    text: "Daily challenges and streak tracking keep you studying, even on bad days.",
+  },
+  {
+    icon: Trophy,
+    title: "Compete with friends",
+    text: "Mock exams, leaderboards and a community of candidates chasing the same score.",
+  },
+];
+
+const INTRO_MS = 1600; // per slide — 4 slides ≈ 6.4s total
+
+function IntroCarousel({ onDone }: { onDone: () => void }) {
+  const [index, setIndex] = useState(0);
+  const doneRef = useRef(false);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setIndex((v) => Math.min(v + 1, SLIDES.length - 1));
+    }, INTRO_MS);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Hand control back to the login view after the last slide — scheduled in
+  // an effect (never inside a state updater, which React forbids).
+  useEffect(() => {
+    if (index >= SLIDES.length - 1 && !doneRef.current) {
+      doneRef.current = true;
+      const t = window.setTimeout(onDone, INTRO_MS);
+      return () => window.clearTimeout(t);
+    }
+  }, [index, onDone]);
+
+  const slide = SLIDES[index];
+  const Icon = slide.icon;
+
+  return (
+    <div className="flex min-h-dvh flex-col bg-gradient-to-b from-[#41348f] via-[#6557d9] to-[#779fe4] px-6 py-10 text-white">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-lg font-black shadow-inner shadow-white/10">O</div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-100/80">ORBIT</p>
+          <h1 className="text-xl font-bold tracking-tight">Orbit Prep</h1>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col items-center justify-center text-center">
+        <div key={index} className="animate-fade-up">
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-[28px] bg-white/12 shadow-2xl shadow-black/20 ring-1 ring-white/20 backdrop-blur">
+            <Icon className="h-12 w-12 text-amber-300" aria-hidden />
+          </div>
+          <h2 className="mt-8 text-3xl font-black tracking-tight sm:text-4xl">{slide.title}</h2>
+          <p className="mx-auto mt-3 max-w-sm text-base leading-7 text-emerald-50/90">{slide.text}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-center gap-2 pb-8">
+        {SLIDES.map((_, i) => (
+          <span
+            key={i}
+            className={`h-2 rounded-full transition-all duration-300 ${i === index ? "w-6 bg-white" : "w-2 bg-white/40"}`}
+            aria-hidden
+          />
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={onDone}
+        className="mx-auto block rounded-full px-6 py-2 text-sm font-bold text-white/80 transition hover:bg-white/10 hover:text-white"
+      >
+        Skip
+      </button>
+    </div>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
-  const [view, setView] = useState<View>("login");
+  const [view, setView] = useState<View>("intro");
 
   // Login state
   const [email, setEmail] = useState("");
@@ -70,180 +161,100 @@ export default function Home() {
 
   return (
     <AuthGate>
-    <main className="min-h-screen px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto max-w-6xl overflow-hidden rounded-[32px] border border-slate-200 bg-white/85 p-3 shadow-[0_20px_70px_rgba(14,33,33,0.08)] backdrop-blur-sm sm:p-6 lg:p-8">
-        <div className="grid gap-6 lg:min-h-[820px] lg:grid-cols-[0.98fr_1.42fr]">
+      {view === "intro" && <IntroCarousel onDone={() => setView("login")} />}
 
-          {/* Left panel */}
-          <aside className="gradient-bg relative overflow-hidden rounded-[28px] p-5 text-white sm:p-8">
-            <div className="absolute -left-12 top-10 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute -right-10 bottom-4 h-40 w-40 rounded-full bg-[#d9b75f]/15 blur-3xl" />
-            <div className="relative z-10 flex h-full flex-col justify-between">
-              <div>
-                <div className="mb-6 flex items-center gap-3 sm:mb-10">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/12 text-lg font-black shadow-inner shadow-white/10">O</div>
-                  <div>
-                    <p className="text-[11px] uppercase tracking-[0.3em] text-emerald-100/80">ORBIT</p>
-                    <h1 className="text-2xl font-bold tracking-tight">Orbit Prep</h1>
-                  </div>
-                </div>
-                <div className="mb-6 rounded-[24px] border border-white/10 bg-white/8 p-4 backdrop-blur-sm sm:mb-8">
-                  <div className="mb-3 flex items-center justify-between text-sm text-emerald-50">
-                    <span>Student profile</span>
-                    <span className="rounded-full bg-emerald-300/20 px-2 py-1 text-[10px] font-semibold text-emerald-50">Ready</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-200 to-emerald-500 text-xl font-black text-emerald-950">S</div>
-                    <div>
-                      <h2 className="text-xl font-bold">Student</h2>
-                      <p className="text-sm text-emerald-50/85">Your next milestone is waiting</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded-[22px] border border-white/10 bg-[#11392c]/40 p-4">
-                  <p className="text-sm text-emerald-50/80">Target score</p>
-                  <div className="mt-3 flex items-end justify-between">
-                    <div>
-                      <p className="text-4xl font-black tracking-tight">—</p>
-                      <p className="text-sm text-emerald-50/80">Set after sign up</p>
-                    </div>
-                    <div className="rounded-full bg-[#d9b75f]/18 px-3 py-1 text-sm font-semibold text-[#f7e8b3]">New goal</div>
-                  </div>
-                </div>
-                <div className="rounded-[22px] bg-[#f4fefe] p-4 text-slate-900">
-                  <p className="text-sm font-medium text-slate-500">Daily streak</p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-3xl font-black tracking-tight">0 days</span>
-                    <Flame className="h-8 w-8 text-amber-500" aria-hidden />
-                  </div>
-                </div>
-              </div>
+      {view !== "intro" && (
+        <main className="flex min-h-dvh items-center justify-center bg-[#f5f4ff] px-4 py-8">
+          <div className="w-full max-w-sm">
+            {/* Logo header */}
+            <div className="mb-8 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-[#41348f] to-[#6557d9] text-2xl font-black text-white shadow-xl shadow-violet-300/40">O</div>
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900">Orbit Prep</h1>
+              <p className="mt-1 text-sm font-semibold text-slate-500">Smart preparation for UTME &amp; JAMB</p>
             </div>
-          </aside>
 
-          {/* Right panel */}
-          <section className="rounded-[28px] bg-[#f8fafb] p-3 sm:p-6 lg:p-8">
-
-            {/* ── LOGIN VIEW ── */}
-            {view === "login" && (
-              <>
-                <div className="mb-6 flex items-center justify-between gap-3 sm:mb-8">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700">Welcome back</p>
-                    <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Sign in</h2>
-                  </div>
-                  <div className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">Secure login</div>
-                </div>
-
-                <div className="grid gap-4 sm:gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-                  <form onSubmit={handleSubmit} className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-5 soft-shadow sm:p-6">
+            <div className="rounded-[28px] bg-white p-6 shadow-xl shadow-violet-200/40 ring-1 ring-slate-100">
+              {/* ── LOGIN VIEW ── */}
+              {view === "login" && (
+                <>
+                  <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">Email address</label>
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com"
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white" />
+                      <label htmlFor="login-email" className="mb-1.5 block text-sm font-semibold text-slate-700">Email address</label>
+                      <input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-violet-500 focus:bg-white" />
                     </div>
                     <div>
-                      <label className="mb-2 block text-sm font-semibold text-slate-700">Password</label>
-                      <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Your password"
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white" />
-                    </div>
-                    <div className="flex items-center justify-between gap-4 text-sm">
-                      <label className="inline-flex items-center gap-2 text-slate-600">
-                        <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-emerald-600" />
-                        Remember me
-                      </label>
-                      <button type="button" onClick={() => { setResetEmail(email); setView("forgot"); setError(""); }}
-                        className="font-semibold text-emerald-700 hover:text-emerald-800">
-                        Forgot password?
-                      </button>
+                      <label htmlFor="login-password" className="mb-1.5 block text-sm font-semibold text-slate-700">Password</label>
+                      <input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="Your password"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-violet-500 focus:bg-white" />
                     </div>
                     {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-                    <div className="space-y-3 pt-2">
-                      <button type="submit" disabled={isSubmitting}
-                        className="flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-700 to-emerald-600 text-base font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-70">
-                        {isSubmitting ? "Signing in…" : "Sign in"}
-                      </button>
-                      <Link href="/signup" className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-base font-semibold text-slate-700 transition hover:border-emerald-200 hover:bg-emerald-50">
-                        Create account
-                      </Link>
-                    </div>
+                    <button type="submit" disabled={isSubmitting}
+                      className="flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-base font-bold text-white shadow-lg shadow-violet-300/30 transition hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-70">
+                      {isSubmitting ? "Signing in…" : "Sign in"}
+                    </button>
+                    <button type="button" onClick={() => { setResetEmail(email); setView("forgot"); setError(""); }}
+                      className="block w-full text-center text-sm font-semibold text-violet-600 hover:text-violet-800">
+                      Forgot password?
+                    </button>
                   </form>
 
-                  <div className="space-y-5">
-                    <div className="rounded-[24px] bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-5 ring-1 ring-emerald-100">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="text-sm font-semibold text-emerald-700">Quick stats</span>
-                        <span className="text-xs font-medium text-slate-500">Your progress</span>
-                      </div>
-                      <div className="space-y-4">
-                        <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-100">
-                          <p className="text-sm text-slate-500">Study time</p>
-                          <p className="mt-1 text-2xl font-black text-slate-900">—</p>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-100"><p className="text-sm text-slate-500">Questions</p><p className="mt-1 text-xl font-black text-slate-900">0</p></div>
-                          <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-100"><p className="text-sm text-slate-500">Accuracy</p><p className="mt-1 text-xl font-black text-slate-900">—</p></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="rounded-[24px] bg-[#10263c] p-5 text-white">
-                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-300">Today</p>
-                      <h3 className="mt-3 text-2xl font-black tracking-tight">Your next study plan</h3>
-                      <p className="mt-2 text-sm text-slate-300">Start your first practice session to unlock a personalised study recommendation.</p>
-                    </div>
+                  <div className="my-5 flex items-center gap-3">
+                    <div className="h-px flex-1 bg-slate-200" />
+                    <span className="text-xs font-semibold text-slate-400">New here?</span>
+                    <div className="h-px flex-1 bg-slate-200" />
                   </div>
-                </div>
-              </>
-            )}
 
-            {/* ── FORGOT PASSWORD VIEW ── */}
-            {view === "forgot" && (
-              <div className="flex h-full flex-col justify-center">
-                <div className="mb-8">
-                  <button onClick={() => setView("login")} className="mb-6 flex items-center gap-2 text-sm font-semibold text-emerald-700 hover:underline">
+                  <Link href="/signup" className="flex h-12 w-full items-center justify-center rounded-2xl border border-violet-200 bg-violet-50 text-base font-bold text-violet-700 transition hover:bg-violet-100">
+                    Create account
+                  </Link>
+                </>
+              )}
+
+              {/* ── FORGOT PASSWORD VIEW ── */}
+              {view === "forgot" && (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <button type="button" onClick={() => setView("login")} className="text-sm font-semibold text-violet-600 hover:underline">
                     ← Back to sign in
                   </button>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-700">Account recovery</p>
-                  <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Forgot password?</h2>
-                  <p className="mt-2 text-sm text-slate-500">Enter your email and we'll send you a reset link.</p>
-                </div>
-                <form onSubmit={handleForgotPassword} className="space-y-5 rounded-[24px] border border-slate-200 bg-white p-6 soft-shadow">
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900">Reset password</h2>
+                  <p className="text-sm text-slate-500">Enter your email and we&apos;ll send you a reset link.</p>
                   <div>
-                    <label className="mb-2 block text-sm font-semibold text-slate-700">Email address</label>
-                    <input type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required placeholder="you@example.com"
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white" />
+                    <label htmlFor="reset-email" className="mb-1.5 block text-sm font-semibold text-slate-700">Email address</label>
+                    <input id="reset-email" type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} required placeholder="you@example.com"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-base text-slate-900 outline-none transition focus:border-violet-500 focus:bg-white" />
                   </div>
                   {resetError && <div className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{resetError}</div>}
                   <button type="submit" disabled={resetLoading}
-                    className="flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-700 to-emerald-600 text-base font-bold text-white disabled:opacity-70">
+                    className="flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-base font-bold text-white disabled:opacity-70">
                     {resetLoading ? "Sending…" : "Send reset link"}
                   </button>
                 </form>
-              </div>
-            )}
+              )}
 
-            {/* ── FORGOT SENT VIEW ── */}
-            {view === "forgot-sent" && (
-              <div className="flex h-full flex-col items-center justify-center text-center">
-                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
-                  <Inbox className="h-10 w-10 text-emerald-700" aria-hidden />
+              {/* ── FORGOT SENT VIEW ── */}
+              {view === "forgot-sent" && (
+                <div className="py-4 text-center">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-100">
+                    <Inbox className="h-8 w-8 text-violet-700" aria-hidden />
+                  </div>
+                  <h2 className="text-xl font-black text-slate-900">Check your inbox</h2>
+                  <p className="mt-2 text-sm text-slate-500">
+                    We sent a password reset link to <strong>{resetEmail}</strong>.
+                  </p>
+                  <button onClick={() => setView("login")} className="mt-6 w-full rounded-2xl bg-violet-600 py-3 text-sm font-bold text-white">
+                    Back to sign in
+                  </button>
                 </div>
-                <h2 className="text-3xl font-black text-slate-900">Check your inbox</h2>
-                <p className="mt-3 max-w-sm text-sm text-slate-500">
-                  We sent a password reset link to <strong>{resetEmail}</strong>. Click the link in the email to set a new password.
-                </p>
-                <p className="mt-2 text-xs text-slate-400">Didn't receive it? Check your spam folder.</p>
-                <button onClick={() => setView("login")} className="mt-8 rounded-2xl bg-emerald-700 px-6 py-3 text-sm font-bold text-white">
-                  Back to sign in
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
-      </div>
-    </main>
+              )}
+            </div>
+
+            <p className="mt-6 text-center text-xs text-slate-400">
+              Free forever · No card required
+            </p>
+          </div>
+        </main>
+      )}
     </AuthGate>
   );
 }

@@ -186,7 +186,25 @@ export function classifySection(sectionText: string | null | undefined): "passag
   if (!sectionText) return null;
   const text = sectionText.trim();
   if (text.length === 0) return null;
-  // Long multi-sentence text = an actual passage to read
+
+  // Instruction tell-tales — ALOC prefixes like "In each of questions 68 to 84,"
+  // or "choose the option nearest in meaning" are never passages.
+  const looksLikeInstruction =
+    /^(?:in (?:each|all) of|choose |select |fill |answer |questions? \d+|section [a-d]|lexis|structure|oral forms|comprehension|from the words|from the options|the questions? below|read the following)/i.test(text) ||
+    /(?:choose|select|nearest in meaning|opposite in meaning|fill (?:each|the) gap|best completes|most appropriate|option that best)/i.test(text);
+
+  if (looksLikeInstruction) return "instruction";
+
+  // Dialogue tell-tales — a speaker label followed by a colon, possibly
+  // several times ("BEP0: ...\nSERI: ..."). These are often short, so we
+  // check before the length thresholds.
+  const speakerLines = text.match(/^[A-Z][A-Z0-9 .\u2019']{1,24}:/gm) ?? [];
+  if (speakerLines.length >= 1) return "passage";
+
+  // Screenplay/résumé tell-tales — long dashes with action cues
+  if (/\s[-\u2013\u2014]\s/.test(text) && text.length >= 200) return "passage";
+
+  // Sentence-count and length signals (previous logic, kept as fallback)
   const sentences = (text.match(/[.!?:][\s"']/g) ?? []).length;
   if (text.length >= 140 && sentences >= 3) return "passage";
   if (text.length >= 400) return "passage";
@@ -285,7 +303,12 @@ function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[
   return list;
 }
 
-export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string): NormalizedQuestion | null {
+export function normalizeAlocQuestion(
+  q: AlocQuestion,
+  defaultSubject?: string,
+  /** Passage carried forward from the previous question in the same batch (see below) */
+  passage?: { text: string; kind: "passage" | "instruction" } | null,
+): NormalizedQuestion | null {
   if (!q) return null;
   // Some ALOC questions (e.g. stress-pattern) put the actual prompt in `section`
   // and leave `question` empty. Fall back to section when that happens.
@@ -323,6 +346,12 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const explanation = rawSolution ? stripHtml(rawSolution) : null;
   // Only include section as a separate field if it wasn't already used as the prompt
   const section = rawSection && rawSection !== prompt ? rawSection : null;
+  const sectionKind = section ? classifySection(section) : null;
+  // Passage continuity: ALOC 2022 English leaves `section` EMPTY on the 2nd-Nth
+  // questions of a comprehension set — the passage text only ships on the first
+  // question. Carry the most recent passage forward so every question in the
+  // set renders with its passage instead of orphaned bare prompts.
+  const carrySection = !section && passage && passage.text && passage.kind === "passage" ? passage.text : null;
   const image = q.image && typeof q.image === "string" && q.image.trim().length > 0 ? q.image.trim() : null;
   const year = q.examyear ? String(q.examyear) : null;
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
@@ -339,8 +368,8 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
     optionSegments,
     answer: answerIdx,
     explanation,
-    section: section || null,
-    sectionKind: section ? classifySection(section) : null,
+    section: (section || carrySection) || null,
+    sectionKind: sectionKind ?? (carrySection ? "passage" : null),
     novel,
     examtype: typeof q.examtype === "string" ? q.examtype : null,
     image,
@@ -396,8 +425,19 @@ export async function fetchAlocQuestionCount(
       ? [json.data]
       : [];
 
+  // Thread the last-seen passage forward: comprehension sets repeat the passage
+  // only on their first question, later ones carry an empty `section`.
+  let carry: { text: string; kind: "passage" | "instruction" } | null = null;
   const normalized = rawList
-    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
+    .map((q) => {
+      const nq = normalizeAlocQuestion(q, slugToName(slug), carry);
+      if (nq?.section && nq.sectionKind === "passage") {
+        carry = { text: nq.section, kind: "passage" };
+      } else if (nq?.section) {
+        carry = null; // a new instruction block ends the previous passage set
+      }
+      return nq;
+    })
     .filter((q): q is NormalizedQuestion => q !== null);
 
   return normalized.slice(0, count);
@@ -436,7 +476,17 @@ export async function fetchAlocQuestions(
       ? [json.data]
       : [];
 
+  // Thread the last-seen passage forward (same rule as /q/{count} above)
+  let carry: { text: string; kind: "passage" | "instruction" } | null = null;
   return rawList
-    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
+    .map((q) => {
+      const nq = normalizeAlocQuestion(q, slugToName(slug), carry);
+      if (nq?.section && nq.sectionKind === "passage") {
+        carry = { text: nq.section, kind: "passage" };
+      } else if (nq?.section) {
+        carry = null;
+      }
+      return nq;
+    })
     .filter((q): q is NormalizedQuestion => q !== null);
 }

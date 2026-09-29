@@ -19,12 +19,9 @@ export async function POST(request: Request) {
     if (msg.includes("invalid") || msg.includes("credentials") || msg.includes("password") || msg.includes("not found")) {
       return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
     }
-    if (msg.includes("email not confirmed") || msg.includes("confirm")) {
-      return NextResponse.json(
-        { error: "Please confirm your email address before signing in. Check your inbox." },
-        { status: 401 },
-      );
-    }
+    // NOTE: "email not confirmed" is deliberately NOT blocked — accounts are
+    // auto-confirmed at signup, so this error would only appear for legacy
+    // accounts, and blocking it locks those users out entirely.
     if (msg.includes("rate limit") || msg.includes("too many")) {
       return NextResponse.json(
         { error: "Too many login attempts. Please wait a few minutes and try again." },
