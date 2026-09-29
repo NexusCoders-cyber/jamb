@@ -672,3 +672,34 @@ export async function getUnreadDMCount(
     .is("read_at", null);
   return count ?? 0;
 }
+
+// ─── People you may know (real chat-graph mutuals) ───────────────────────────
+
+export type SuggestedPerson = {
+  id: string;
+  full_name: string;
+  avatar_url: string | null;
+  course: string | null;
+  interests: string[] | null;
+  streak_days: number | null;
+  /** How many of MY chat partners have also chatted with this person */
+  mutual_count: number;
+};
+
+/**
+ * Suggested people ranked by real mutual-friend count, computed server-side
+ * by the suggested_people() RPC (SECURITY DEFINER — the client can only ever
+ * see its own DMs, so the chat-graph walk must happen in the database).
+ * Excludes existing chat partners. Returns [] when the migration hasn't run.
+ */
+export async function getSuggestedPeople(
+  supabase: SupabaseClient,
+): Promise<SuggestedPerson[]> {
+  const { data, error } = await supabase.rpc("suggested_people");
+  if (error) {
+    // 404/undefined function = migration not applied yet — degrade silently
+    console.warn("suggested_people unavailable:", error.message);
+    return [];
+  }
+  return (data ?? []) as SuggestedPerson[];
+}

@@ -25,6 +25,7 @@ const ENGLISH = "English Language";
 const NEEDS_CALCULATOR = new Set(["Mathematics", "Physics", "Chemistry", "Economics", "Accounting", "Commerce", "Insurance"]);
 const OTHER_SUBJECTS = ALOC_SUBJECTS.filter((s) => s.name !== ENGLISH).map((s) => s.name);
 
+// JAMB-standard subject split: Use of English 60, three other subjects 40 each
 const ENGLISH_COUNT = 60;
 const OTHER_COUNT = 40;
 
@@ -362,6 +363,10 @@ function ExamPageContent() {
   const [submitting, setSubmitting] = useState(false);
   const attemptIdRef = useRef<string | null>(null);
 
+  // Navigator auto-hide: slides out while answering in exam mode, returns
+  // after submission (or when the question is answered in study/practice).
+  const [navOpen, setNavOpen] = useState(true);
+
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
   const [reviewScore, setReviewScore] = useState(0);
 
@@ -375,6 +380,15 @@ function ExamPageContent() {
     setShowCalc(NEEDS_CALCULATOR.has(activeSubjectName));
   }, [activeSubjectName, started, calcManuallySet]);
   const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
+
+  // Exam mode: navigator hides while answering, reappears on submission.
+  // Study/practice: navigator shows when the current question is answered.
+  useEffect(() => {
+    if (reviewEntries) { setNavOpen(true); return; }
+    if (!started) { setNavOpen(true); return; }
+    if (isExamMode) setNavOpen(false);
+    else setNavOpen(answers[currentQuestion] !== undefined);
+  }, [started, isExamMode, reviewEntries, currentQuestion, answers]);
 
   const planTotal = ENGLISH_COUNT + OTHER_COUNT * 3;
   const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3));
@@ -778,7 +792,7 @@ function ExamPageContent() {
   return (
     <AppShell hideTopBar>
       <main className="px-2 py-4 sm:px-4 lg:px-6">
-      <div className="mx-auto max-w-7xl">
+      <div className="w-full">
         <header className="mb-4 rounded-[24px] border border-slate-200 bg-white/90 p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
@@ -813,13 +827,22 @@ function ExamPageContent() {
           )}
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[1.7fr_0.7fr]">
+        {/* When the navigator is hidden the question column takes the full width */}
+        <div className={`grid gap-6 ${navOpen ? "xl:grid-cols-[1.7fr_0.7fr]" : "xl:grid-cols-1"}`}>
           <section className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200 sm:p-6">
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isStudyMode ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{currentQuestion + 1}</span>
                 <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
-                  Q {currentQuestion + 1} / {questionTotal}
+                  Q {currentQuestion + 1}
+                  {activeSubjectName && subjectTabs.length > 1 && (() => {
+                    const tab = [...subjectTabs].reverse().find((t) => currentQuestion >= t.start);
+                    const nextStart = tab ? subjectTabs[subjectTabs.indexOf(tab) + 1]?.start ?? questionTotal : questionTotal;
+                    const within = currentQuestion - (tab?.start ?? 0) + 1;
+                    const subjectTotal = nextStart - (tab?.start ?? 0);
+                    return <span className="text-violet-600"> · {tab?.name.replace(" Language", "")} {within}/{subjectTotal}</span>;
+                  })()}
+                  {!(activeSubjectName && subjectTabs.length > 1) && <span> / {questionTotal}</span>}
                 </span>
               </div>
               {q?.subject && (
@@ -905,9 +928,22 @@ function ExamPageContent() {
                 <ChevronRight className="h-4 w-4" aria-hidden />
               </button>
             </div>
+
+            {/* Always-visible submit/exit — independent of the animated navigator */}
+            <div className="mt-6 flex flex-wrap gap-3 border-t border-slate-100 pt-5">
+              <button type="button" onClick={doSubmit} disabled={submitting}
+                className={`flex h-12 flex-1 items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
+                {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
+              </button>
+              <Link href={setupHref} className="flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-6 text-sm font-semibold text-slate-700">Exit</Link>
+            </div>
           </section>
 
-          <aside className="space-y-5">
+          {/* Animated navigator — slides out while answering (exam mode),
+              returns after submission or when the question is answered. */}
+          <aside className={`min-w-0 space-y-5 transition-all duration-500 ease-in-out xl:overflow-hidden ${
+            navOpen ? "xl:translate-x-0 xl:opacity-100" : "xl:pointer-events-none xl:translate-x-8 xl:opacity-0"
+          }`}>
             <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-base font-black text-slate-900">Navigator</h3>
@@ -962,13 +998,6 @@ function ExamPageContent() {
                     )}
               </div>
             </div>
-
-            <button type="button" onClick={doSubmit} disabled={submitting}
-              className={`flex h-12 w-full items-center justify-center rounded-2xl text-sm font-bold text-white disabled:opacity-60 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-rose-500 hover:bg-rose-600"}`}>
-              {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
-            </button>
-            <Link href={setupHref} className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
-
           </aside>
         </div>
       </div>

@@ -47,20 +47,20 @@ export default function EmojiPicker({ onPick }: { onPick: (emoji: string) => voi
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Insert emoji"
-        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
+        className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-violet-50 hover:text-violet-600"
       >
-        <Smile className="h-5 w-5" aria-hidden />
+        <Smile className="h-6 w-6" aria-hidden />
       </button>
 
       {open && (
-        <div className="absolute bottom-10 left-0 z-50 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+        <div className="absolute bottom-11 left-0 z-50 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
           <div className="mb-2 flex gap-1">
             {GROUPS.map((g, i) => (
               <button
                 key={g.label}
                 type="button"
                 onClick={() => setTab(i)}
-                className={`flex-1 rounded-lg px-2 py-1 text-[11px] font-bold transition ${
+                className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold transition ${
                   tab === i ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:bg-slate-50"
                 }`}
               >
@@ -68,13 +68,13 @@ export default function EmojiPicker({ onPick }: { onPick: (emoji: string) => voi
               </button>
             ))}
           </div>
-          <div className="grid max-h-44 grid-cols-8 gap-0.5 overflow-y-auto">
+          <div className="grid max-h-52 grid-cols-7 gap-1 overflow-y-auto">
             {GROUPS[tab].emojis.map((e, i) => (
               <button
                 key={`${e}-${i}`}
                 type="button"
                 onClick={() => { onPick(e.trim()); }}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-lg transition hover:bg-violet-50"
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-2xl transition hover:bg-violet-50 active:bg-violet-100"
                 aria-label={`Insert ${e.trim()}`}
               >
                 {e.trim()}

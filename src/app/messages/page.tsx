@@ -16,7 +16,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
-import { getDMInbox, type DMThread } from "@/lib/queries";
+import { getDMInbox, getSuggestedPeople, type DMThread, type SuggestedPerson } from "@/lib/queries";
 import { Search, Users, MessageSquare, Sparkles, GraduationCap } from "lucide-react";
 
 type Student = {
@@ -56,6 +56,7 @@ export default function MessagesPage() {
   // My profile (course + interests power recommendations)
   const [me, setMe] = useState<Student | null>(null);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestedPerson[]>([]);
 
   // Chats search
   const [chatQuery, setChatQuery] = useState("");
@@ -66,13 +67,14 @@ export default function MessagesPage() {
   const [searching, setSearching] = useState(false);
   const [remoteResults, setRemoteResults] = useState<Student[] | null>(null);
 
-  // ── Load my profile, inbox and the student directory ──────────────────────
+  // ── Load my profile, inbox, the student directory and mutual-based suggestions ─
   useEffect(() => {
     if (authLoading) return;
     if (!user) { setLoading(false); return; }
     const supabase = createSupabaseBrowserClient();
     Promise.all([
       getDMInbox(supabase, user.id),
+      getSuggestedPeople(supabase),
       supabase
         .from("profiles")
         .select("id, full_name, avatar_url, course, interests, streak_days")
@@ -85,8 +87,9 @@ export default function MessagesPage() {
         .order("full_name")
         .limit(200),
     ])
-      .then(([inbox, profileRes, studentsRes]) => {
+      .then(([inbox, suggested, profileRes, studentsRes]) => {
         setThreads(inbox);
+        setSuggestions(suggested);
         setMe((profileRes.data ?? null) as Student | null);
         setAllStudents((studentsRes.data ?? []) as Student[]);
       })
@@ -118,18 +121,26 @@ export default function MessagesPage() {
     return () => { mounted = false; clearTimeout(t); };
   }, [studentQuery, courseFilter, user]);
 
-  // ── Recommendations: students who share my course/subjects, not yet chats ──
+  // ── Recommendations: real mutuals from the chat graph (RPC), with a
+  // course/subject-affinity fallback for when the migration hasn't run yet ──
   const recommendations = useMemo(() => {
     if (!user) return [];
     const chatted = new Set(threads.map((t) => t.partner_id));
+
+    if (suggestions.length > 0) {
+      // RPC excludes existing partners already; keep that guard anyway
+      return suggestions.filter((s) => !chatted.has(s.id)).slice(0, 8);
+    }
+
+    // Fallback: heuristic affinity (pre-migration)
     return allStudents
       .filter((s) => !chatted.has(s.id))
       .map((s) => ({ s, score: affinity(me, s) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, 8)
-      .map(({ s }) => s);
-  }, [allStudents, threads, me, user]);
+      .map(({ s }) => ({ ...s, mutual_count: 0 }));
+  }, [allStudents, threads, me, user, suggestions]);
 
   // ── Chats tab filtering ────────────────────────────────────────────────────
   const visibleThreads = threads.filter((t) => {
@@ -279,6 +290,11 @@ export default function MessagesPage() {
                             <span className="mx-auto block w-fit"><Avatar user={s} size="lg" /></span>
                             <p className="mt-2 truncate text-xs font-black text-slate-900">{s.full_name}</p>
                             {s.course && <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">{s.course}</p>}
+                            {s.mutual_count > 0 && (
+                              <p className="mt-0.5 text-[10px] font-bold text-violet-600">
+                                {s.mutual_count} mutual {s.mutual_count === 1 ? "friend" : "friends"}
+                              </p>
+                            )}
                           </Link>
                           <Link href={`/messages/${s.id}`}
                             className="mt-2 block rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-violet-700">
@@ -288,7 +304,7 @@ export default function MessagesPage() {
                       ))}
                     </div>
                     <p className="mt-1 text-[11px] text-slate-400">
-                      Based on your course{me?.course ? ` (${me.course})` : ""} and UTME subjects.
+                      Ranked by mutual friends{me?.course ? ` and your course (${me.course})` : ""}.
                     </p>
                   </section>
                 )}
