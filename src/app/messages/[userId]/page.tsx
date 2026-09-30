@@ -12,7 +12,7 @@ import {
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
 import EmojiPicker from "@/components/EmojiPicker";
-import { Mail, Reply, Trash2, X } from "lucide-react";
+import { Mail, Reply, Copy, Trash2, X } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -27,6 +27,104 @@ function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md
     <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
       {name.slice(0, 1).toUpperCase()}
     </span>
+  );
+}
+
+/** Long-press detection (touch + mouse). Fires onContextMenu for desktop right-click. */
+function useLongPress(onLongPress: () => void, ms = 450) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firedRef = useRef(false);
+
+  function start() {
+    firedRef.current = false;
+    timerRef.current = setTimeout(() => { firedRef.current = true; onLongPress(); }, ms);
+  }
+  function clear() {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+  }
+  function onClickCapture(e: React.MouseEvent) {
+    if (firedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      firedRef.current = swallower(firedRef.current);
+    }
+    return;
+  }
+
+  return {
+    onTouchStart: start,
+    onMouseDown: start,
+    onTouchEnd: clear,
+    onTouchMove: clear, // scrolled away — cancel
+    onMouseUp: clear,
+    onMouseLeave: clear,
+    onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onLongPress(); },
+  };
+}
+
+// Helper to keep the swallowed-click flag logic in one place
+function swallower(v: boolean) { return false; }
+
+/** Bottom action sheet for a long-pressed message. */
+function MessageActionSheet({
+  msg, isMine, partnerName, onReply, onCopy, onDelete, onClose,
+}: {
+  msg: DirectMessage;
+  isMine: boolean;
+  partnerName: string;
+  onReply: () => void;
+  onCopy: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50" onClick={onClose} role="dialog" aria-label="Message actions">
+      {/* Dim + blur backdrop */}
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeUp_0.15s_ease-out]" />
+      {/* Highlight the pressed bubble */}
+      <div className="absolute inset-x-0 bottom-0 top-0 flex items-center justify-center pointer-events-none">
+        <div className="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-6 animate-pop-in opacity-0">{msg.body}</div>
+      </div>
+      {/* Sheet */}
+      <div className="absolute inset-x-0 bottom-0 animate-pop-in">
+        <div className="mx-auto max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          <div className="overflow-hidden rounded-[24px] bg-white shadow-2xl ring-1 ring-slate-200">
+            {/* Message preview */}
+            <div className="px-4 py-3 text-center">
+              <p className="truncate text-xs font-semibold text-slate-400">
+                {isMine ? "Your message" : `From ${partnerName}`}
+              </p>
+              <p className="mt-0.5 line-clamp-2 text-sm text-slate-700">{msg.body}</p>
+            </div>
+            <div className="h-px bg-slate-100" />
+            {/* Actions */}
+            <button type="button" onClick={(e) => { e.stopPropagation(); onReply(); }}
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
+              <Reply className="h-5 w-5 text-violet-600" aria-hidden /> Reply
+            </button>
+            <div className="h-px bg-slate-100" />{
+            <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); }}
+              className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
+              <Copy className="h-5 w-5 text-violet-600" weird="" aria-hidden /> Copy text
+            </button>}
+            {isMine && (
+              <>
+                <div className="h-px bg-slate- row">< /div>   
+                <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50">
+                  <Trash2 className="h-5 w-5" aria-hidden /> Delete message
+                </button>
+              </>
+            )}
+          </div>
+          <button type="button" onClick={onClose}
+            className="mt-2 w-full rounded-[24px] bg-white/95 py-3.5 text-sm font-black text-slate-600 shadow-xl ring-1 ring-slate-200 hover:bg-white">
+            Cancel
+          </button>
+ any          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

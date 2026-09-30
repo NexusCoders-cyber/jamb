@@ -111,3 +111,21 @@ button:active, a:active {
 .animate-fade-up {
   animation: fadeUp 0.25s ease both;
 }
+
+/* ── Action sheet / popover entrance (DM long-press menu) ──────────────────── */
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-pop-in {
+  animation: popIn 0.18s ease-out both;
+}
+
+/* Suppress the iOS/Android native callout during message long-press —
+   the in-app action sheet replaces it. */
+.no-callout {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
