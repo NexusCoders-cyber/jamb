@@ -433,16 +433,11 @@ export type DirectMessage = {
   body: string;
   read_at: string | null;
   created_at: string;
-<<<<<<< HEAD
   sender?: { full_name: string; avatar_url?: string | null };
   receiver?: { full_name: string; avatar_url?: string | null };
   /** Message this one replies to (WhatsApp-style quote) */
   reply_to_id?: string | null;
   reply_to?: { id: string; body: string; sender_id: string } | null;
-=======
-  sender?: { full_name: string };
-  receiver?: { full_name: string };
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418
 };
 
 export type DMThread = {
@@ -556,13 +551,8 @@ export async function sendDM(
 ): Promise<DirectMessage | null> {
   const { data } = await supabase
     .from("direct_messages")
-<<<<<<< HEAD
     .insert({ sender_id: senderId, receiver_id: receiverId, body, reply_to_id: replyToId ?? null })
     .select("*, reply_to:direct_messages!reply_to_id(id, body, sender_id), sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
-=======
-    .insert({ sender_id: senderId, receiver_id: receiverId, body })
-    .select("*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)")
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418
     .single();
   return data as DirectMessage | null;
 }
@@ -761,7 +751,6 @@ export async function getUnreadDMCount(
     .is("read_at", null);
   return count ?? 0;
 }
-<<<<<<< HEAD
 
 // ─── People you may know (real chat-graph mutuals) ───────────────────────────
 
@@ -815,5 +804,3 @@ export async function sendAnnouncement(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
-=======
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418

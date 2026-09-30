@@ -21,51 +21,52 @@ function timeLabel(iso: string) {
   return d.toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
-  const sz = size === "sm" ? "h-7 w-7 text-xs" : "h-9 w-9 text-sm";
-  return (
-    <span className={`inline-flex shrink-0 items-center justify-center rounded-full bg-violet-100 font-black text-violet-700 ${sz}`}>
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  );
-}
+// ─── Long-press detection (touch + mouse; right-click opens it on desktop) ───
 
-/** Long-press detection (touch + mouse). Fires onContextMenu for desktop right-click. */
-function useLongPress(onLongPress: () => void, ms = 450) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const firedRef = useRef(false);
+// Plain handler factory — deliberately NOT a hook, so it can be used inside
+// .map() loops. Timer state lives in module-level maps keyed by message id,
+// so a re-render between press and release can never orphan a timer.
+const pressTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const pressFired = new Set<string>();
 
-  function start() {
-    firedRef.current = false;
-    timerRef.current = setTimeout(() => { firedRef.current = true; onLongPress(); }, ms);
-  }
+function longPressHandlers(id: string, onLongPress: () => void, ms = 450) {
   function clear() {
-    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    const t = pressTimers.get(id);
+    if (t) { clearTimeout(t); pressTimers.delete(id); }
   }
+  function start() {
+    clear();
+    pressFired.delete(id);
+    pressTimers.set(id, setTimeout(() => {
+      pressTimers.delete(id);
+      pressFired.add(id);
+      onLongPress();
+    }, ms));
+  }
+  // After a long-press fires, swallow the click that follows so the sheet
+  // doesn't close instantly from the release tap.
   function onClickCapture(e: React.MouseEvent) {
-    if (firedRef.current) {
+    if (pressFired.has(id)) {
       e.preventDefault();
       e.stopPropagation();
-      firedRef.current = swallower(firedRef.current);
+      pressFired.delete(id);
     }
-    return;
   }
 
   return {
     onTouchStart: start,
     onMouseDown: start,
     onTouchEnd: clear,
-    onTouchMove: clear, // scrolled away — cancel
+    onTouchMove: clear, // finger scrolled away — cancel
     onMouseUp: clear,
     onMouseLeave: clear,
+    onClickCapture,
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onLongPress(); },
   };
 }
 
-// Helper to keep the swallowed-click flag logic in one place
-function swallower(v: boolean) { return false; }
+// ─── Bottom action sheet (WhatsApp style) ─────────────────────────────────────
 
-/** Bottom action sheet for a long-pressed message. */
 function MessageActionSheet({
   msg, isMine, partnerName, onReply, onCopy, onDelete, onClose,
 }: {
@@ -78,13 +79,10 @@ function MessageActionSheet({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50" onClick={onClose} role="dialog" aria-label="Message actions">
-      {/* Dim + blur backdrop */}
-      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeUp_0.15s_ease-out]" />
-      {/* Highlight the pressed bubble */}
-      <div className="absolute inset-x-0 bottom-0 top-0 flex items-center justify-center pointer-events-none">
-        <div className="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-6 animate-pop-in opacity-0">{msg.body}</div>
-      </div>
+    <div className="fixed inset-0 z-50" role="dialog" aria-label="Message actions">
+      {/* Dim + blur backdrop — tap to dismiss */}
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+
       {/* Sheet */}
       <div className="absolute inset-x-0 bottom-0 animate-pop-in">
         <div className="mx-auto max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
@@ -97,36 +95,39 @@ function MessageActionSheet({
               <p className="mt-0.5 line-clamp-2 text-sm text-slate-700">{msg.body}</p>
             </div>
             <div className="h-px bg-slate-100" />
+
             {/* Actions */}
-            <button type="button" onClick={(e) => { e.stopPropagation(); onReply(); }}
+            <button type="button" onClick={onReply}
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
               <Reply className="h-5 w-5 text-violet-600" aria-hidden /> Reply
             </button>
-            <div className="h-px bg-slate-100" />{
-            <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); }}
+            <div className="h-px bg-slate-100" />
+            <button type="button" onClick={onCopy}
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
-              <Copy className="h-5 w-5 text-violet-600" weird="" aria-hidden /> Copy text
-            </button>}
+              <Copy className="h-5 w-5 text-violet-600" aria-hidden /> Copy text
+            </button>
             {isMine && (
               <>
-                <div className="h-px bg-slate- row">< /div>   
-                <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                <div className="h-px bg-slate-100" />
+                <button type="button" onClick={onDelete}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50">
                   <Trash2 className="h-5 w-5" aria-hidden /> Delete message
                 </button>
               </>
             )}
           </div>
+
           <button type="button" onClick={onClose}
             className="mt-2 w-full rounded-[24px] bg-white/95 py-3.5 text-sm font-black text-slate-600 shadow-xl ring-1 ring-slate-200 hover:bg-white">
             Cancel
           </button>
- any          </div>
         </div>
       </div>
     </div>
   );
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DMConversationPage() {
   const { userId: partnerId } = useParams<{ userId: string }>();
@@ -140,6 +141,8 @@ export default function DMConversationPage() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
+  const [sheetMsg, setSheetMsg] = useState<DirectMessage | null>(null);
+  const [copied, setCopied] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -228,6 +231,14 @@ export default function DMConversationPage() {
     }
   }
 
+  async function handleCopy(msg: DirectMessage) {
+    try {
+      await navigator.clipboard.writeText(msg.body);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard unavailable (e.g. insecure context) */ }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void handleSend(); }
   }
@@ -312,6 +323,7 @@ export default function DMConversationPage() {
                   {group.messages.map((msg) => {
                     const isMe = msg.sender_id === user?.id;
                     const quote = replySource(msg);
+                    const longPress = longPressHandlers(msg.id, () => setSheetMsg(msg));
                     return (
                       <div key={msg.id} className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
                         {!isMe && partnerName && (
@@ -319,7 +331,11 @@ export default function DMConversationPage() {
                             <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} size="sm" />
                           </Link>
                         )}
-                        <div className={`max-w-[75%] group`}>
+                        <div
+                          {...longPress}
+                          className="max-w-[75%] cursor-pointer select-none no-callout active:opacity-90"
+                          title="Long-press for actions"
+                        >
                           <div className={`rounded-2xl px-4 py-2.5 text-sm leading-6 ${
                             isMe
                               ? "rounded-br-sm bg-violet-600 text-white"
@@ -336,18 +352,9 @@ export default function DMConversationPage() {
                             )}
                             {msg.body}
                           </div>
-                          <p className={`mt-0.5 flex items-center gap-2 text-[10px] text-slate-400 ${isMe ? "justify-end" : ""}`}>
-                            <span>{timeLabel(msg.created_at)}{isMe && msg.read_at ? " · Read" : ""}</span>
-                            <button type="button" onClick={() => { setReplyTo(msg); inputRef.current?.focus(); }}
-                              className="inline-flex items-center gap-0.5 font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-violet-600 focus:opacity-100">
-                              <Reply className="h-3 w-3" aria-hidden /> Reply
-                            </button>
-                            {isMe && (
-                              <button type="button" onClick={() => void handleDelete(msg)}
-                                className="inline-flex items-center gap-0.5 font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-rose-500 focus:opacity-100">
-                                <Trash2 className="h-3 w-3" aria-hidden /> Delete
-                              </button>
-                            )}
+                          <p className={`mt-0.5 text-[10px] text-slate-400 ${isMe ? "text-right" : ""}`}>
+                            {timeLabel(msg.created_at)}
+                            {isMe && msg.read_at && " · Read"}
                           </p>
                         </div>
                       </div>
@@ -418,6 +425,26 @@ export default function DMConversationPage() {
           <p className="mt-1 text-right text-[10px] text-slate-400">Ctrl+Enter to send</p>
         </div>
       </div>
+
+      {/* Long-press action sheet */}
+      {sheetMsg && (
+        <MessageActionSheet
+          msg={sheetMsg}
+          isMine={sheetMsg.sender_id === user.id}
+          partnerName={partnerName}
+          onReply={() => { setReplyTo(sheetMsg); setSheetMsg(null); setTimeout(() => inputRef.current?.focus(), 60); }}
+          onCopy={() => { void handleCopy(sheetMsg); setSheetMsg(null); }}
+          onDelete={() => { void handleDelete(sheetMsg); setSheetMsg(null); }}
+          onClose={() => setSheetMsg(null)}
+        />
+      )}
+
+      {/* Copied toast */}
+      {copied && (
+        <div className="pointer-events-none fixed left-1/2 top-16 z-[60] -translate-x-1/2 animate-pop-in rounded-full bg-slate-900/90 px-4 py-2 text-xs font-bold text-white shadow-xl">
+          Copied to clipboard
+        </div>
+      )}
     </main>
   );
 }
