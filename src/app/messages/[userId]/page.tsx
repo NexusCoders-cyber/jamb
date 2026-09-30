@@ -30,7 +30,6 @@ function AvatarInitials({ name, size = "md" }: { name: string; size?: "sm" | "md
   );
 }
 
-/** Long-press detection (touch + mouse). Fires onContextMenu for desktop right-click. */
 function useLongPress(onLongPress: () => void, ms = 450) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firedRef = useRef(false);
@@ -55,17 +54,15 @@ function useLongPress(onLongPress: () => void, ms = 450) {
     onTouchStart: start,
     onMouseDown: start,
     onTouchEnd: clear,
-    onTouchMove: clear, // scrolled away — cancel
+    onTouchMove: clear,
     onMouseUp: clear,
     onMouseLeave: clear,
     onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); onLongPress(); },
   };
 }
 
-// Helper to keep the swallowed-click flag logic in one place
 function swallower(v: boolean) { return false; }
 
-/** Bottom action sheet for a long-pressed message. */
 function MessageActionSheet({
   msg, isMine, partnerName, onReply, onCopy, onDelete, onClose,
 }: {
@@ -79,17 +76,13 @@ function MessageActionSheet({
 }) {
   return (
     <div className="fixed inset-0 z-50" onClick={onClose} role="dialog" aria-label="Message actions">
-      {/* Dim + blur backdrop */}
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-[fadeUp_0.15s_ease-out]" />
-      {/* Highlight the pressed bubble */}
       <div className="absolute inset-x-0 bottom-0 top-0 flex items-center justify-center pointer-events-none">
         <div className="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-6 animate-pop-in opacity-0">{msg.body}</div>
       </div>
-      {/* Sheet */}
       <div className="absolute inset-x-0 bottom-0 animate-pop-in">
         <div className="mx-auto max-w-md px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <div className="overflow-hidden rounded-[24px] bg-white shadow-2xl ring-1 ring-slate-200">
-            {/* Message preview */}
             <div className="px-4 py-3 text-center">
               <p className="truncate text-xs font-semibold text-slate-400">
                 {isMine ? "Your message" : `From ${partnerName}`}
@@ -97,7 +90,6 @@ function MessageActionSheet({
               <p className="mt-0.5 line-clamp-2 text-sm text-slate-700">{msg.body}</p>
             </div>
             <div className="h-px bg-slate-100" />
-            {/* Actions */}
             <button type="button" onClick={(e) => { e.stopPropagation(); onReply(); }}
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
               <Reply className="h-5 w-5 text-violet-600" aria-hidden /> Reply
@@ -142,7 +134,6 @@ export default function DMConversationPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load partner name + message history
   useEffect(() => {
     if (authLoading || !user || !partnerId) return;
     const supabase = createSupabaseBrowserClient();
@@ -160,15 +151,11 @@ export default function DMConversationPage() {
     }).finally(() => { setLoading(false); setTimeout(() => bottomRef.current?.scrollIntoView(), 50); });
   }, [user, partnerId, authLoading]);
 
-  // Realtime subscription
   useEffect(() => {
     if (!user || !partnerId) return;
     let supabase: ReturnType<typeof createSupabaseBrowserClient>;
     try { supabase = createSupabaseBrowserClient(); } catch (_e) { return; }
 
-    // Unique suffix per mount — a fixed channel name can be returned already
-    // subscribed on StrictMode/Fast Refresh remounts, and re-adding .on()
-    // callbacks then throws (supabase-js RealtimeClient contract).
     const channel = supabase
       .channel(`dm-${[user.id, partnerId].sort().join("-")}-${Math.random().toString(36).slice(2)}`)
       .on(
@@ -231,8 +218,6 @@ export default function DMConversationPage() {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void handleSend(); }
   }
 
-  // Resolve a reply quote: realtime inserts carry no join, so fall back to
-  // looking up the referenced message among the ones already in the thread.
   function replySource(msg: DirectMessage): { body: string; senderName: string } | null {
     const target = msg.reply_to ?? messages.find((m) => m.id === msg.reply_to_id);
     if (!target) return null;
@@ -240,7 +225,6 @@ export default function DMConversationPage() {
     return { body: target.body, senderName: name };
   }
 
-  // Group messages by date
   type MsgGroup = { dateLabel: string; messages: DirectMessage[] };
   const grouped: MsgGroup[] = [];
   for (const msg of messages) {
@@ -262,12 +246,10 @@ export default function DMConversationPage() {
 
   return (
     <main className="flex h-[100dvh] flex-col overflow-hidden bg-[#eef2ff]">
-      {/* Top bar — sticky: never scrolls away (WhatsApp style) */}
       <header className="sticky top-0 z-30 flex shrink-0 items-center gap-4 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
         <Link href="/messages" className="rounded-full p-2 text-slate-600 hover:bg-slate-100">
           ←
         </Link>
-        {/* Tap avatar or name to view the partner's profile (Facebook-style) */}
         <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${partnerName}'s profile`}>
           <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} />
         </Link>
@@ -280,7 +262,6 @@ export default function DMConversationPage() {
         </Link>
       </header>
 
-      {/* Messages area — the only scrollable region */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-2xl space-y-6">
           {loading ? (
@@ -324,7 +305,6 @@ export default function DMConversationPage() {
                               ? "rounded-br-sm bg-violet-600 text-white"
                               : "rounded-bl-sm bg-white text-slate-800 ring-1 ring-slate-200"
                           }`}>
-                            {/* Reply quote */}
                             {quote && (
                               <div className={`mb-1.5 rounded-lg border-l-[3px] px-2 py-1 text-xs ${
                                 isMe ? "border-[#f6c978] bg-black/10 text-violet-100" : "border-violet-400 bg-violet-50 text-slate-500"
@@ -360,12 +340,10 @@ export default function DMConversationPage() {
         </div>
       </div>
 
-      {/* Input bar — sticky: always pinned to the bottom (WhatsApp style) */}
       <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto max-w-2xl">
           {sendError && <p className="mb-2 text-xs text-rose-600">{sendError}</p>}
 
-          {/* Reply-to preview */}
           {replyTo && (
             <div className="mb-2 flex items-center gap-2 rounded-xl border-l-4 border-violet-500 bg-violet-50 px-3 py-2">
               <div className="min-w-0 flex-1">
@@ -383,22 +361,22 @@ export default function DMConversationPage() {
 
           <div className="flex items-end gap-3">
             <Avatar user={{ full_name: myName, avatar_url: null }} size="sm" />
-          <div className="flex items-end gap-1">
-            <EmojiPicker onPick={(emoji) => setBody((b) => b + emoji)} />
-            <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 focus-within:border-violet-400 transition">
-              <textarea
-                ref={inputRef}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Message ${partnerName}…`}
-                rows={1}
-                maxLength={2000}
-                className="block w-full resize-none bg-transparent px-4 py-3 text-sm outline-none max-h-32"
-                style={{ fieldSizing: "content" } as React.CSSProperties}
-              />
+            <div className="flex flex-1 min-w-0 items-end gap-1">
+              <EmojiPicker onPick={(emoji) => setBody((b) => b + emoji)} />
+              <div className="flex-1 min-w-0 rounded-2xl border border-slate-200 bg-slate-50 focus-within:border-violet-400 transition">
+                <textarea
+                  ref={inputRef}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Message ${partnerName}…`}
+                  rows={1}
+                  maxLength={2000}
+                  className="block w-full resize-none bg-transparent px-4 py-3 text-sm outline-none max-h-32"
+                  style={{ fieldSizing: "content" } as React.CSSProperties}
+                />
+              </div>
             </div>
-          </div>
             <button
               onClick={handleSend}
               disabled={sending || body.trim().length === 0}
