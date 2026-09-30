@@ -7,6 +7,8 @@
  */
 
 const ALOC_BASE = process.env.ALOC_BASE_URL?.trim() || "https://questions.aloc.com.ng/api/v2";
+/** Where relative image paths from ALOC (e.g. "images/bio/cell.png") are served from */
+const ALOC_ASSET_BASE = (process.env.ALOC_ASSET_BASE?.trim() || "https://questions.aloc.com.ng/").replace(/\/?$/, "/");
 
 // ─── All supported ALOC subject slugs ────────────────────────────────────────
 // These are the exact lowercase slugs the ALOC API accepts.
@@ -118,7 +120,16 @@ export type NormalizedQuestion = {
   category?: string | null;
   /** The exam body this question actually came from (e.g. utme, wassce) */
   examtype?: string | null;
+  /** First question image (kept for older saved attempts) */
   image?: string | null;
+  /** Every image belonging to the question: the `image` field plus <img> tags inside the question HTML */
+  images?: string[];
+  /** Image for each option (aligned with `options`), for diagram-style answer choices */
+  optionImages?: (string | null)[];
+  /** Images that belong to the passage / instruction text */
+  sectionImages?: string[];
+  /** Images inside the explanation / solution */
+  explanationImages?: string[];
   year?: string | null;
   subject?: string | null;
 };
@@ -182,7 +193,77 @@ export function htmlToSegments(input: string): RichSegment[] {
     }
   }
   flush();
-  return parts.length > 0 ? parts : [{ text: unescapeEntities(input).replace(/\s+/g, " ").trim() }];
+  // Nothing survived (e.g. the whole string was an <img> tag): return "", never the raw markup
+  return parts.length > 0 ? parts : [{ text: unescapeEntities(input.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim() }];
+}
+
+// ─── Images ──────────────────────────────────────────────────────────────────
+const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i;
+
+/**
+ * Turn whatever ALOC stored into a URL a browser can load:
+ * absolute https, http (upgraded — the app is served over https), protocol-relative,
+ * data: URIs, or a relative path resolved against the ALOC asset host.
+ */
+export function resolveImageUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let v = unescapeEntities(String(raw)).trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
+  if (!v || v === "null" || v === "undefined" || v === "0") return null;
+  if (/^data:image\//i.test(v)) return v;
+  if (/^javascript:/i.test(v)) return null;
+  if (v.startsWith("//")) return `https:${v}`;
+  if (/^http:\/\//i.test(v)) return v.replace(/^http:\/\//i, "https://");
+  if (/^https:\/\//i.test(v)) return v;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return null; // some other scheme
+  v = v.replace(/^\.?\//, "");
+  if (!IMAGE_EXT.test(v) && !v.includes("/")) return null;
+  return `${ALOC_ASSET_BASE}${v.split("/").map((seg) => encodeURI(decodeURI(seg))).join("/")}`;
+}
+
+/** <img src=…> sources inside an HTML string (question / option / passage / solution text) */
+export function extractImgTagSources(html: string | null | undefined): string[] {
+  if (!html) return [];
+  const out: string[] = [];
+  const tagRe = /<img\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const src = m[0].match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
+    const url = resolveImageUrl(src?.[1] ?? src?.[2] ?? src?.[3]);
+    if (url) out.push(url);
+  }
+  return Array.from(new Set(out));
+}
+
+/**
+ * The dedicated `image` column is loose: a URL, a relative path, an <img> tag,
+ * several URLs separated by commas/spaces/newlines, or a JSON array.
+ */
+export function extractImageField(value: string | null | undefined): string[] {
+  if (!value || typeof value !== "string") return [];
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const found: string[] = [...extractImgTagSources(trimmed)];
+  const withoutTags = trimmed.replace(/<[^>]+>/g, " ");
+  try {
+    const parsed: unknown = JSON.parse(withoutTags.trim());
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const url = resolveImageUrl(typeof item === "string" ? item : (item as { url?: string; src?: string })?.url ?? (item as { src?: string })?.src);
+        if (url) found.push(url);
+      }
+      return Array.from(new Set(found));
+    }
+  } catch {
+    /* not JSON — fall through */
+  }
+  for (const token of withoutTags.split(/[\s,;|]+/)) {
+    if (!token) continue;
+    if (/^(?:https?:)?\/\//i.test(token) || IMAGE_EXT.test(token) || /^data:image\//i.test(token)) {
+      const url = resolveImageUrl(token);
+      if (url) found.push(url);
+    }
+  }
+  return Array.from(new Set(found));
 }
 
 /**
@@ -299,24 +380,35 @@ export function detectNovel(
   return null;
 }
 
-function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[] | null }[] {
-  const fromList = (opt: unknown): { text: string; segments: RichSegment[] | null } | null => {
+function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[] | null; image: string | null }[] {
+  const fromList = (opt: unknown): { text: string; segments: RichSegment[] | null; image: string | null } | null => {
     const raw = String(opt ?? "");
     if (raw.trim().length === 0) return null;
+    let image: string | null = extractImgTagSources(raw)[0] ?? null;
     const segments = htmlToSegments(raw);
-    const text = segments.map((s) => s.text).join("").trim();
-    const hasRich = segments.some((s) => s.italic || s.bold);
-    return text ? { text, segments: hasRich ? segments : null } : null;
+    let text = segments.map((s) => s.text).join("").trim();
+    // Option stored as a bare URL / file name → it is a picture, not text
+    if (!image && text && !/\s/.test(text) && (/^(?:https?:)?\/\/\S+$/i.test(text) || IMAGE_EXT.test(text))) {
+      const asUrl = resolveImageUrl(text);
+      if (asUrl) {
+        image = asUrl;
+        text = "";
+      }
+    }
+    const hasRich = !!text && segments.some((s) => s.italic || s.bold);
+    // An option that is only a picture (e.g. Biology "which diagram shows …") is still a real option
+    if (!text && !image) return null;
+    return { text, segments: hasRich ? segments : null, image };
   };
 
   if (Array.isArray(q.options)) {
-    return q.options.map(fromList).filter((o): o is { text: string; segments: RichSegment[] } => o !== null);
+    return q.options.map(fromList).filter((o): o is { text: string; segments: RichSegment[] | null; image: string | null } => o !== null);
   }
   const optObj = q.option ?? (typeof q.options === "object" ? q.options : null);
   if (!optObj) return [];
 
   const keys: (keyof AlocRawOption)[] = ["a", "b", "c", "d", "e"];
-  const list: { text: string; segments: RichSegment[] | null }[] = [];
+  const list: { text: string; segments: RichSegment[] | null; image: string | null }[] = [];
   for (const k of keys) {
     const val = optObj[k];
     if (typeof val === "string" && val.trim().length > 0) {
@@ -346,7 +438,11 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
         ? `Choose the option that best fills gap ${questionNub}.`
         : "Choose the best option based on the passage."
       : "";
-  const prompt = rawPrompt || passagePromptFallback || rawSection;
+  // Images: the `image` column AND any <img> tags hiding in the question / option / passage / solution HTML
+  // (the text cleaner strips tags, so without this a diagram inside the question simply vanished)
+  const questionImages = Array.from(new Set([...extractImageField(q.image), ...extractImgTagSources(q.question)]));
+  const imagePromptFallback = !rawPrompt && !passagePromptFallback && questionImages.length > 0 ? "Study the image and choose the correct answer." : "";
+  const prompt = rawPrompt || passagePromptFallback || imagePromptFallback || rawSection;
   const resolved = resolveOptions(q);
   const options = resolved.map((o) => o.text);
   if (!prompt || options.length < 2) return null;
@@ -380,7 +476,10 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const section = rawSection && rawSection !== prompt ? rawSection : null;
   const sectionKind = section ? (hasPassage ? "passage" : classifySection(section)) : null;
   const passageId = sectionKind === "passage" && section ? `p${hashText(section.toLowerCase().replace(/[^a-z0-9]/g, ""))}` : null;
-  const image = q.image && typeof q.image === "string" && q.image.trim().length > 0 ? q.image.trim() : null;
+  const image = questionImages[0] ?? null;
+  const sectionImages = extractImgTagSources(q.section);
+  const explanationImages = extractImgTagSources(q.solution ?? q.explanation);
+  const optionImages = resolved.map((o) => o.image);
   const year = q.examyear ? String(q.examyear) : null;
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
   const novel =
@@ -405,6 +504,10 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
     novel,
     examtype: typeof q.examtype === "string" ? q.examtype : null,
     image,
+    images: questionImages,
+    optionImages: optionImages.some(Boolean) ? optionImages : undefined,
+    sectionImages: sectionImages.length ? sectionImages : undefined,
+    explanationImages: explanationImages.length ? explanationImages : undefined,
     year,
     subject,
   };

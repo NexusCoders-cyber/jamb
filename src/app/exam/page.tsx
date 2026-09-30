@@ -9,10 +9,12 @@ import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/q
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
 import RichText from "@/components/RichText";
+import QuestionImage from "@/components/QuestionImage";
 import { novelMatches } from "@/lib/aloc";
 import {
   Calculator,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Flag,
@@ -46,6 +48,12 @@ type ExamQuestion = {
   answer: number;
   explanation: string | null;
   image?: string | null;
+  /** All diagrams for the question (image column + <img> tags in the question HTML) */
+  images?: string[];
+  /** Picture for each answer option (diagram-style choices), aligned with `options` */
+  optionImages?: (string | null)[];
+  sectionImages?: string[];
+  explanationImages?: string[];
   section?: string | null;
   sectionKind?: "passage" | "instruction" | null;
   /** Questions that share a comprehension/cloze passage share this id */
@@ -133,6 +141,11 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Every diagram for a question, including older saved ones that only have `image` */
+function questionImageList(q: { images?: string[]; image?: string | null }): string[] {
+  return q.images?.length ? q.images : q.image ? [q.image] : [];
+}
+
 function QuestionMedia({ question, hidePassage = false }: { question: ExamQuestion; hidePassage?: boolean }) {
   const isPassage = question.sectionKind === "passage";
   return (
@@ -151,13 +164,15 @@ function QuestionMedia({ question, hidePassage = false }: { question: ExamQuesti
           </p>
         </div>
       )}
-      {question.image && (
-        <img
-          src={question.image}
-          alt="Question illustration"
-          className="mb-4 max-h-72 w-auto max-w-full rounded-2xl ring-1 ring-slate-200"
-          loading="lazy"
-        />
+      {!(hidePassage && isPassage) && (question.sectionImages?.length ?? 0) > 0 && (
+        <div className="mb-4 grid gap-3">
+          {question.sectionImages!.map((src) => <QuestionImage key={src} src={src} />)}
+        </div>
+      )}
+      {questionImageList(question).length > 0 && (
+        <div className={`mb-4 grid gap-3 ${questionImageList(question).length > 1 ? "sm:grid-cols-2" : ""}`}>
+          {questionImageList(question).map((src) => <QuestionImage key={src} src={src} />)}
+        </div>
       )}
     </>
   );
@@ -190,11 +205,13 @@ function getPassageInfo(list: ExamQuestion[], index: number, start: number, end:
  */
 function PassagePanel({
   text,
+  images,
   info,
   hidden,
   onToggle,
 }: {
   text: string;
+  images?: string[];
   info: PassageInfo;
   hidden: boolean;
   onToggle: () => void;
@@ -218,6 +235,9 @@ function PassagePanel({
       </div>
       <div className={`${hidden ? "hidden lg:block" : ""} max-h-[38dvh] overflow-y-auto overscroll-contain px-4 pb-4 lg:max-h-[calc(100dvh-16rem)]`}>
         <p className="whitespace-pre-line text-[15px] leading-7 text-slate-800">{text}</p>
+        {(images?.length ?? 0) > 0 && (
+          <div className="mt-3 grid gap-3">{images!.map((src) => <QuestionImage key={src} src={src} />)}</div>
+        )}
       </div>
     </div>
   );
@@ -258,29 +278,68 @@ function InlineReview({
   /** Subject boundaries — lets the review number each subject 1..N like the exam did */
   tabs?: SubjectTab[];
 }) {
-  const [filter, setFilter] = useState<"all" | "wrong" | "correct">("all");
-  const [subjectFilter, setSubjectFilter] = useState<number | "all">("all");
-  const subjectSummaries = tabs.length > 1
+  const [filter, setFilter] = useState<"all" | "wrong" | "unanswered" | "correct">("all");
+  // Which subject card is open (multi-subject mock). Single-subject sessions always show their corrections.
+  const [openSubject, setOpenSubject] = useState<number | null>(null);
+  const multi = tabs.length > 1;
+  const statusOf = (e: ReviewEntry): "correct" | "wrong" | "unanswered" =>
+    e.selectedIdx === null ? "unanswered" : e.selectedIdx === e.question.answer ? "correct" : "wrong";
+  const inSubject = (e: ReviewEntry, ti: number) => locateInSubject(tabs, e.questionIdx, total).tabIdx === ti;
+  const shortName = (n: string) => n.replace(" Language", "");
+
+  const subjectSummaries = multi
     ? tabs.map((tab, ti) => {
-        const end = ti + 1 < tabs.length ? tabs[ti + 1].start : total;
-        const slice = entries.filter((e) => e.questionIdx >= tab.start && e.questionIdx < end);
+        const slice = entries.filter((e) => inSubject(e, ti));
+        const correct = slice.filter((e) => statusOf(e) === "correct").length;
+        const unanswered = slice.filter((e) => statusOf(e) === "unanswered").length;
         return {
           name: tab.name,
           tabIdx: ti,
           total: slice.length,
-          correct: slice.filter((e) => e.selectedIdx === e.question.answer).length,
+          correct,
+          unanswered,
+          wrong: slice.length - correct - unanswered,
+          pct: slice.length > 0 ? Math.round((correct / slice.length) * 100) : 0,
         };
       })
     : [];
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const practiceScore = Math.round((score / total) * 400);
 
-  const visible = entries.filter((e) => {
-    if (subjectFilter !== "all" && locateInSubject(tabs, e.questionIdx, total).tabIdx !== subjectFilter) return false;
-    if (filter === "wrong") return e.selectedIdx !== e.question.answer;
-    if (filter === "correct") return e.selectedIdx === e.question.answer;
-    return true;
-  });
+  const activeSubject = multi ? openSubject : 0;
+  const scopeEntries = activeSubject === null ? [] : multi ? entries.filter((e) => inSubject(e, activeSubject)) : entries;
+  const counts = {
+    all: scopeEntries.length,
+    wrong: scopeEntries.filter((e) => statusOf(e) === "wrong").length,
+    unanswered: scopeEntries.filter((e) => statusOf(e) === "unanswered").length,
+    correct: scopeEntries.filter((e) => statusOf(e) === "correct").length,
+  };
+  const visible = scopeEntries.filter((e) => filter === "all" || statusOf(e) === filter);
+
+  // Opening a subject card brings its corrections into view
+  useEffect(() => {
+    if (openSubject === null) return;
+    document.getElementById("corrections-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [openSubject]);
+
+  function jumpTo(questionIdx: number) {
+    setFilter("all");
+    // wait for the (possibly filtered-out) card to render, then scroll to it
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      document.getElementById(`corr-${questionIdx}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }));
+  }
+
+  // First visible question of each passage shows the passage once (not on every card)
+  const passageFirst = new Set<number>();
+  {
+    let prevPassage: string | null = null;
+    for (const e of visible) {
+      const pid = e.question.passageId ?? null;
+      if (pid && e.question.section && pid !== prevPassage) passageFirst.add(e.questionIdx);
+      prevPassage = pid;
+    }
+  }
 
   return (
     <AppShell title="Results" back="/practice">
@@ -298,7 +357,7 @@ function InlineReview({
             {[
               { label: "Correct", value: score, color: "bg-emerald-700/60" },
               { label: "Wrong", value: total - score, color: "bg-rose-500/40" },
-              { label: "Skipped", value: entries.filter((e) => e.selectedIdx === null).length, color: "bg-slate-600/40" },
+              { label: "Unanswered", value: entries.filter((e) => e.selectedIdx === null).length, color: "bg-slate-600/40" },
             ].map((s) => (
               <div key={s.label} className={`rounded-2xl ${s.color} p-3 text-center ring-1 ring-white/10`}>
                 <p className="text-2xl font-black">{s.value}</p>
@@ -320,100 +379,184 @@ function InlineReview({
           </div>
         </div>
 
-        {subjectSummaries.length > 0 && (
-          <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
-            <button type="button" onClick={() => setSubjectFilter("all")}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${subjectFilter === "all" ? "bg-violet-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-slate-300"}`}>
-              All subjects
-            </button>
-            {subjectSummaries.map((s) => (
-              <button key={s.name} type="button" onClick={() => setSubjectFilter(s.tabIdx)}
-                className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${subjectFilter === s.tabIdx ? "bg-violet-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-slate-300"}`}>
-                {s.name.replace(" Language", "")} · {s.correct}/{s.total}
-              </button>
-            ))}
-          </div>
-        )}
+        <section aria-labelledby="corrections-title">
+          <h2 id="corrections-title" className="text-lg font-black text-slate-900">Corrections</h2>
+          <p className="mb-3 mt-0.5 text-sm text-slate-500">
+            {multi
+              ? "Tap a subject to see every question with its correct answer, including the ones you left unanswered."
+              : "Every question with its correct answer, including the ones you left unanswered."}
+          </p>
 
-        <div className="mb-4 flex gap-2">
-          {(["all", "wrong", "correct"] as const).map((f) => (
-            <button key={f} type="button" onClick={() => setFilter(f)}
-              className={`rounded-full px-4 py-1.5 text-sm font-bold transition ${filter === f
-                ? f === "wrong" ? "bg-rose-600 text-white" : f === "correct" ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"
-                : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-slate-300"}`}>
-              {f === "all" ? `All (${entries.length})` : f === "wrong" ? `Wrong (${entries.filter((e) => e.selectedIdx !== e.question.answer).length})` : `Correct (${score})`}
-            </button>
-          ))}
-        </div>
+          {multi && (
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {subjectSummaries.map((sm) => {
+                const selected = openSubject === sm.tabIdx;
+                return (
+                  <button key={sm.name} type="button" aria-expanded={selected} aria-controls="corrections-panel"
+                    onClick={() => { setOpenSubject(selected ? null : sm.tabIdx); setFilter("all"); }}
+                    className={`touch-manipulation rounded-[22px] p-4 text-left ring-1 transition ${selected ? "bg-violet-600 text-white shadow-lg shadow-violet-200 ring-violet-600" : "bg-white text-slate-800 ring-slate-200 hover:ring-violet-300"}`}>
+                    <p className="truncate text-[11px] font-black uppercase tracking-[0.14em] opacity-70">{shortName(sm.name)}</p>
+                    <p className="mt-1 text-3xl font-black tabular-nums">{sm.pct}<span className="text-sm font-bold opacity-60">/100</span></p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/10">
+                      <div className={`h-full rounded-full ${selected ? "bg-white" : sm.pct >= 70 ? "bg-emerald-500" : sm.pct >= 50 ? "bg-amber-500" : "bg-rose-500"}`} style={{ width: `${sm.pct}%` }} />
+                    </div>
+                    <p className="mt-2 text-[11px] font-semibold opacity-80">{sm.correct}/{sm.total} correct</p>
+                    <p className="text-[11px] font-semibold opacity-80">{sm.wrong} wrong · {sm.unanswered} unanswered</p>
+                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold opacity-90">
+                      {selected ? "Hide corrections" : "View corrections"}
+                      <ChevronDown className={`h-3 w-3 transition ${selected ? "rotate-180" : ""}`} aria-hidden />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        <div className="space-y-4">
-          {visible.map((entry) => {
-            const { question: q, selectedIdx, questionIdx } = entry;
-            const isCorrect = selectedIdx === q.answer;
-            const isSkipped = selectedIdx === null;
+          {activeSubject !== null && (
+            <div id="corrections-panel" className="scroll-mt-20">
+              {multi && (
+                <h3 className="mb-3 text-base font-black text-slate-900">{shortName(tabs[activeSubject].name)} · corrections</h3>
+              )}
 
-            return (
-              <div key={`${q.id}-${questionIdx}`}
-                className={`rounded-[24px] border p-5 ${isCorrect ? "border-emerald-200 bg-emerald-50" : isSkipped ? "border-slate-200 bg-white" : "border-rose-200 bg-rose-50"}`}>
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
-                    Q{locateInSubject(tabs, questionIdx, total).number} · {isCorrect ? "Correct" : isSkipped ? "Skipped" : "Wrong"}
-                  </span>
-                  <div className="flex gap-1.5">
-                    {q.subject && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">{q.subject}</span>}
-                    {q.year && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
-                  </div>
-                </div>
+              <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+                {([
+                  ["all", `All (${counts.all})`],
+                  ["wrong", `Wrong (${counts.wrong})`],
+                  ["unanswered", `Unanswered (${counts.unanswered})`],
+                  ["correct", `Correct (${counts.correct})`],
+                ] as const).map(([f, label]) => (
+                  <button key={f} type="button" onClick={() => setFilter(f)}
+                    className={`shrink-0 touch-manipulation rounded-full px-4 py-1.5 text-sm font-bold transition ${filter === f
+                      ? f === "wrong" ? "bg-rose-600 text-white" : f === "correct" ? "bg-emerald-600 text-white" : f === "unanswered" ? "bg-slate-600 text-white" : "bg-slate-900 text-white"
+                      : "bg-white text-slate-600 ring-1 ring-slate-200 hover:ring-slate-300"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-                <QuestionMedia question={q} />
-                <p className="text-base font-semibold leading-7 text-slate-800">{q.prompt}</p>
+              {/* Question map, like the exam navigator: green = correct, red = wrong, grey = unanswered */}
+              <div className="mb-4 flex flex-wrap gap-1.5" aria-label="Question map">
+                {scopeEntries.map((e) => {
+                  const st = statusOf(e);
+                  return (
+                    <button key={e.questionIdx} type="button" onClick={() => jumpTo(e.questionIdx)}
+                      aria-label={`Question ${locateInSubject(tabs, e.questionIdx, total).number}, ${st}`}
+                      className={`flex h-9 w-9 touch-manipulation items-center justify-center rounded-xl text-xs font-bold ${st === "correct" ? "bg-emerald-100 text-emerald-800" : st === "wrong" ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-600"}`}>
+                      {locateInSubject(tabs, e.questionIdx, total).number}
+                    </button>
+                  );
+                })}
+              </div>
 
-                <div className="mt-4 grid gap-2">
-                  {q.options.map((opt, idx) => {
-                    const isCorrectOpt = idx === q.answer;
-                    const isYours = idx === selectedIdx;
-                    return (
-                      <div key={idx}
-                        className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium
-                          ${isCorrectOpt ? "border-emerald-400 bg-emerald-100 text-emerald-900"
-                            : isYours && !isCorrectOpt ? "border-rose-300 bg-rose-100 text-rose-800"
-                            : "border-slate-200 bg-white text-slate-600"}`}>
-                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black
-                          ${isCorrectOpt ? "bg-emerald-500 text-white"
-                            : isYours && !isCorrectOpt ? "bg-rose-400 text-white"
-                            : "bg-slate-100 text-slate-500"}`}>
-                          {String.fromCharCode(65 + idx)}
+              <div className="space-y-4">
+                {visible.map((entry) => {
+                  const { question: q, selectedIdx, questionIdx } = entry;
+                  const st = statusOf(entry);
+                  const isCorrect = st === "correct";
+                  const isSkipped = st === "unanswered";
+                  const showPassage = passageFirst.has(questionIdx);
+
+                  return (
+                    <div key={`${q.id}-${questionIdx}`} id={`corr-${questionIdx}`}
+                      className={`scroll-mt-24 rounded-[24px] border p-4 sm:p-5 ${isCorrect ? "border-emerald-200 bg-emerald-50" : isSkipped ? "border-slate-200 bg-white" : "border-rose-200 bg-rose-50"}`}>
+                      {showPassage && (
+                        <details className="mb-4 rounded-[20px] bg-amber-50 ring-1 ring-amber-100">
+                          <summary className="cursor-pointer select-none px-4 py-3 text-xs font-black uppercase tracking-[0.16em] text-amber-800">
+                            Passage · tap to read
+                          </summary>
+                          <div className="max-h-[50dvh] overflow-y-auto px-4 pb-4">
+                            <p className="whitespace-pre-line text-[15px] leading-7 text-slate-800">{q.section}</p>
+                            {(q.sectionImages?.length ?? 0) > 0 && (
+                              <div className="mt-3 grid gap-3">{q.sectionImages!.map((src) => <QuestionImage key={src} src={src} />)}</div>
+                            )}
+                          </div>
+                        </details>
+                      )}
+
+                      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
+                          Q{locateInSubject(tabs, questionIdx, total).number} · {isCorrect ? "Correct" : isSkipped ? "Unanswered" : "Wrong"}
                         </span>
-                        <RichText segments={q.optionSegments?.[idx]} fallback={opt} />
-                        {isCorrectOpt && (
-                          <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
-                            <Check className="h-3.5 w-3.5" aria-hidden /> Correct answer
-                          </span>
+                        <div className="flex gap-1.5">
+                          {q.subject && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">{q.subject}</span>}
+                          {q.year && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
+                        </div>
+                      </div>
+
+                      <QuestionMedia question={q} hidePassage={!!q.passageId} />
+                      <p className="text-base font-semibold leading-7 text-slate-800">
+                        <RichText segments={q.promptSegments} fallback={q.prompt} />
+                      </p>
+
+                      {isSkipped && (
+                        <p className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">
+                          You did not answer this question. The correct answer is {String.fromCharCode(65 + q.answer)}.
+                        </p>
+                      )}
+                      {st === "wrong" && selectedIdx !== null && (
+                        <p className="mt-3 text-sm font-semibold text-slate-600">
+                          You chose <span className="text-rose-600">{String.fromCharCode(65 + selectedIdx)}</span> · correct answer <span className="text-emerald-700">{String.fromCharCode(65 + q.answer)}</span>
+                        </p>
+                      )}
+
+                      <div className="mt-4 grid gap-2">
+                        {q.options.map((opt, idx) => {
+                          const isCorrectOpt = idx === q.answer;
+                          const isYours = idx === selectedIdx;
+                          const optImg = q.optionImages?.[idx] ?? null;
+                          return (
+                            <div key={idx}
+                              className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium
+                                ${isCorrectOpt ? "border-emerald-400 bg-emerald-100 text-emerald-900"
+                                  : isYours && !isCorrectOpt ? "border-rose-300 bg-rose-100 text-rose-800"
+                                  : "border-slate-200 bg-white text-slate-600"}`}>
+                              <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black
+                                ${isCorrectOpt ? "bg-emerald-500 text-white"
+                                  : isYours && !isCorrectOpt ? "bg-rose-400 text-white"
+                                  : "bg-slate-100 text-slate-500"}`}>
+                                {String.fromCharCode(65 + idx)}
+                              </span>
+                              <span className="min-w-0 flex-1 break-words">
+                                {optImg && <QuestionImage key={optImg} src={optImg} zoomable={false} compact className={opt ? "mb-2" : ""} />}
+                                <RichText segments={q.optionSegments?.[idx]} fallback={opt} />
+                              </span>
+                              {isCorrectOpt && (
+                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-bold text-emerald-700">
+                                  <Check className="h-3.5 w-3.5" aria-hidden /> Correct answer
+                                </span>
+                              )}
+                              {isYours && !isCorrectOpt && (
+                                <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-bold text-rose-600">
+                                  <XCircle className="h-3.5 w-3.5" aria-hidden /> Your answer
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-4 rounded-xl bg-white/80 p-4 ring-1 ring-emerald-200">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
+                        {q.explanation ? (
+                          <p className="mt-1.5 text-sm leading-6 text-slate-700">{q.explanation}</p>
+                        ) : (
+                          <p className="mt-1.5 text-sm text-slate-400">No explanation is available for this question yet.</p>
                         )}
-                        {isYours && !isCorrectOpt && (
-                          <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-rose-600">
-                            <XCircle className="h-3.5 w-3.5" aria-hidden /> Your answer
-                          </span>
+                        {(q.explanationImages?.length ?? 0) > 0 && (
+                          <div className="mt-3 grid gap-3">{q.explanationImages!.map((src) => <QuestionImage key={src} src={src} />)}</div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-
-                {q.explanation && (
-                  <div className="mt-4 rounded-xl bg-white/80 p-4 ring-1 ring-emerald-200">
-                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
-                    <p className="mt-1.5 text-sm leading-6 text-slate-700">{q.explanation}</p>
-                  </div>
-                )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
 
-        {visible.length === 0 && (
-          <p className="py-10 text-center text-sm text-slate-400">No questions in this filter.</p>
-        )}
+              {visible.length === 0 && (
+                <p className="py-10 text-center text-sm text-slate-400">No questions in this filter.</p>
+              )}
+            </div>
+          )}
+        </section>
       </div>
     </AppShell>
   );
@@ -484,8 +627,6 @@ function ExamPageContent() {
   const pos = locateInSubject(subjectTabs, currentQuestion, questionTotal);
   const multiSubject = subjectTabs.length > 1;
   const passageInfo = getPassageInfo(questions, currentQuestion, pos.start, pos.end);
-  const isLastOfSubject = currentQuestion === pos.end - 1;
-  const nextSubjectName = multiSubject && pos.tabIdx + 1 < subjectTabs.length ? subjectTabs[pos.tabIdx + 1].name : null;
   const activeSubjectName = q?.subject ?? (isExamMode ? null : studySubject);
   const answeredCount = Object.keys(answers).length;
   const unansweredTotal = Math.max(0, questionTotal - answeredCount);
@@ -507,6 +648,21 @@ function ExamPageContent() {
     setShowCalc(NEEDS_CALCULATOR.has(activeSubjectName));
   }, [activeSubjectName, started, calcManuallySet]);
   const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
+
+  // Warm the cache for the next two questions' diagrams so they appear instantly.
+  useEffect(() => {
+    if (!started || typeof window === "undefined") return;
+    for (const i of [currentQuestion + 1, currentQuestion + 2]) {
+      const nq = questions[i];
+      if (!nq) continue;
+      const urls = [...questionImageList(nq), ...(nq.optionImages ?? []).filter((u): u is string => !!u)];
+      for (const u of urls) {
+        const im = new window.Image();
+        im.referrerPolicy = "no-referrer";
+        im.src = u;
+      }
+    }
+  }, [currentQuestion, started, questions]);
 
   // Phones/tablets: whenever the question changes, bring its top into view.
   useEffect(() => {
@@ -874,6 +1030,10 @@ function ExamPageContent() {
               section: e.question.section ?? undefined,
               section_kind: e.question.sectionKind ?? undefined,
               image: e.question.image ?? undefined,
+              images: e.question.images?.length ? e.question.images : undefined,
+              option_images: e.question.optionImages ?? undefined,
+              section_images: e.question.sectionImages ?? undefined,
+              explanation_images: e.question.explanationImages ?? undefined,
               novel: e.question.novel ?? undefined,
               correct_option: e.question.answer,
               explanation: e.question.explanation,
@@ -1006,6 +1166,7 @@ function ExamPageContent() {
             {q && passageInfo && q.section && (
               <PassagePanel
                 text={q.section}
+                images={q.sectionImages}
                 info={passageInfo}
                 hidden={!!(q.passageId && passageHidden[q.passageId])}
                 onToggle={() => q.passageId && setPassageHidden((m) => ({ ...m, [q.passageId as string]: !m[q.passageId as string] }))}
@@ -1042,7 +1203,12 @@ function ExamPageContent() {
                         : "bg-slate-100 text-slate-600"}`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    {opt}
+                    <span className="min-w-0 flex-1 break-words">
+                      {q?.optionImages?.[idx] && (
+                        <QuestionImage key={q.optionImages[idx] as string} src={q.optionImages[idx] as string} zoomable={false} compact className={opt ? "mb-2" : ""} />
+                      )}
+                      {opt}
+                    </span>
                     {showResult && isCorrectOpt && (
                       <span className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
                         <Check className="h-3.5 w-3.5" aria-hidden /> Correct
@@ -1062,6 +1228,9 @@ function ExamPageContent() {
               <div className="mt-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
                 <p className="mt-2 text-sm leading-6 text-emerald-900">{q.explanation}</p>
+                {(q.explanationImages?.length ?? 0) > 0 && (
+                  <div className="mt-3 grid gap-3">{q.explanationImages!.map((src) => <QuestionImage key={src} src={src} />)}</div>
+                )}
               </div>
             )}
             {revealEnabled && isRevealed && !q?.explanation && (
@@ -1072,12 +1241,8 @@ function ExamPageContent() {
             </div>
 
             <div className="sticky bottom-0 z-30 -mx-4 -mb-4 mt-5 flex items-center justify-between gap-2 rounded-b-[28px] border-t border-slate-100 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 xl:static xl:z-auto xl:mx-0 xl:mb-0 xl:mt-6 xl:flex-wrap xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none">
+              {/* Left: tools (mark for review, jump to the question list on phones) */}
               <div className="flex shrink-0 gap-2 sm:gap-3">
-                <button type="button" disabled={currentQuestion === 0} onClick={() => setCurrentQuestion((v) => v - 1)}
-                  aria-label="Previous question"
-                  className="inline-flex touch-manipulation items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 disabled:opacity-40 sm:px-4 sm:py-2">
-                  <ChevronLeft className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Prev</span>
-                </button>
                 {!isStudyMode && (
                   <button type="button" onClick={toggleMark}
                     aria-label={marked.has(currentQuestion) ? "Unmark question" : "Mark question for review"}
@@ -1092,17 +1257,24 @@ function ExamPageContent() {
                   <LayoutGrid className="h-4 w-4" aria-hidden /> <span className="hidden sm:inline">Questions</span>
                 </button>
               </div>
-              <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
-                className={`inline-flex min-w-0 touch-manipulation items-center justify-center gap-1 rounded-2xl px-4 py-3 text-sm font-bold text-white disabled:opacity-40 sm:px-6 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
-                <span className="truncate">
-                  {revealEnabled && !isRevealed && answers[currentQuestion] !== undefined
-                    ? "Reveal answer"
-                    : isLastOfSubject && nextSubjectName
-                      ? `Next: ${nextSubjectName.replace(" Language", "")}`
-                      : "Next"}
-                </span>
-                <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
-              </button>
+
+              {/* Right: Prev and Next side by side, same size — Prev goes back to the question you just left */}
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <button type="button" disabled={currentQuestion === 0}
+                  onClick={() => setCurrentQuestion((v) => Math.max(v - 1, 0))}
+                  aria-label="Previous question"
+                  className="inline-flex touch-manipulation items-center justify-center gap-1 rounded-2xl border-2 border-slate-300 bg-white px-3 py-[10px] text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-40 sm:px-6">
+                  <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden /> Prev
+                </button>
+                <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
+                  aria-label="Next question"
+                  className={`inline-flex min-w-0 touch-manipulation items-center justify-center gap-1 rounded-2xl px-3 py-3 text-sm font-bold text-white disabled:opacity-40 sm:px-6 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
+                  <span className="truncate">
+                    {revealEnabled && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+                </button>
+              </div>
             </div>
           </section>
 
