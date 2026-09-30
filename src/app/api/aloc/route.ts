@@ -7,6 +7,7 @@ import {
   fetchAlocQuestionCount,
 } from "@/lib/aloc";
 import { getAlocApiKey } from "@/lib/env";
+import { assembleEnglishPaper } from "@/lib/englishPaper";
 
 function getApiKey(): string {
   return getAlocApiKey();
@@ -70,6 +71,23 @@ export async function GET(request: Request) {
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }
       return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: questions });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "ALOC request failed";
+      return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
+    }
+  }
+
+  // ── English paper — JAMB-style: passages + 5-9 novel questions + lexis + oral ──
+  if (endpoint === "english-paper") {
+    if (!apiKey) {
+      return NextResponse.json({ ok: false, error: "ALOC_API_KEY not configured" }, { status: 503 });
+    }
+    try {
+      const paper = await assembleEnglishPaper(apiKey, { year, type });
+      if (paper.questions.length === 0) {
+        return NextResponse.json({ ok: false, error: "No English questions returned" }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: paper.questions, meta: paper.meta });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ALOC request failed";
       return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
