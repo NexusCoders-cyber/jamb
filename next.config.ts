@@ -27,7 +27,9 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "img-src 'self' data: blob: https://*.supabase.co https://questions.aloc.com.ng https://res.cloudinary.com",
+              // https: (any host) — ALOC diagrams are not guaranteed to live on the three hosts we used to allow,
+              // and a blocked image just silently disappears. Scripts/connect stay locked down.
+              "img-src 'self' data: blob: https:",
               "connect-src 'self' https://*.supabase.co https://api.paystack.co https://questions.aloc.com.ng wss://*.supabase.co",
               "frame-ancestors 'none'",
             ].join("; "),
