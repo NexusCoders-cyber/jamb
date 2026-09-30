@@ -413,7 +413,7 @@ export type Post = {
   body: string;
   reply_count: number;
   created_at: string;
-  author?: { full_name: string };
+  author?: { full_name: string; avatar_url?: string | null };
   channel?: { name: string; slug: string };
 };
 
@@ -423,7 +423,7 @@ export type PostReply = {
   user_id: string;
   body: string;
   created_at: string;
-  author?: { full_name: string };
+  author?: { full_name: string; avatar_url?: string | null };
 };
 
 export type DirectMessage = {
@@ -433,21 +433,17 @@ export type DirectMessage = {
   body: string;
   read_at: string | null;
   created_at: string;
-<<<<<<< HEAD
   sender?: { full_name: string; avatar_url?: string | null };
   receiver?: { full_name: string; avatar_url?: string | null };
   /** Message this one replies to (WhatsApp-style quote) */
   reply_to_id?: string | null;
   reply_to?: { id: string; body: string; sender_id: string } | null;
-=======
-  sender?: { full_name: string };
-  receiver?: { full_name: string };
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418
 };
 
 export type DMThread = {
   partner_id: string;
   partner_name: string;
+  partner_avatar_url?: string | null;
   last_message: string;
   last_at: string;
   unread: number;
@@ -467,7 +463,7 @@ export async function getPosts(
 ): Promise<Post[]> {
   let q = supabase
     .from("posts")
-    .select("*, author:profiles(full_name), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (channelId) q = q.eq("channel_id", channelId);
@@ -488,7 +484,7 @@ export async function getChannelBySlug(supabase: SupabaseClient, slug: string): 
 export async function getPost(supabase: SupabaseClient, postId: string): Promise<Post | null> {
   const { data } = await supabase
     .from("posts")
-    .select("*, author:profiles(full_name), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
     .eq("id", postId)
     .single();
   return data as Post | null;
@@ -504,7 +500,7 @@ export async function createPost(
   const { data } = await supabase
     .from("posts")
     .insert({ user_id: userId, channel_id: channelId, title, body })
-    .select("*, author:profiles(full_name), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
     .single();
   return data as Post | null;
 }
@@ -513,7 +509,7 @@ export async function createPost(
 export async function getReplies(supabase: SupabaseClient, postId: string): Promise<PostReply[]> {
   const { data } = await supabase
     .from("post_replies")
-    .select("*, author:profiles(full_name)")
+    .select("*, author:profiles(full_name, avatar_url)")
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
   return (data ?? []) as PostReply[];
@@ -528,7 +524,7 @@ export async function createReply(
   const { data } = await supabase
     .from("post_replies")
     .insert({ user_id: userId, post_id: postId, body })
-    .select("*, author:profiles(full_name)")
+    .select("*, author:profiles(full_name, avatar_url)")
     .single();
   return data as PostReply | null;
 }
@@ -541,7 +537,7 @@ export async function getDMThread(
 ): Promise<DirectMessage[]> {
   const { data } = await supabase
     .from("direct_messages")
-    .select("*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)")
+    .select("*, sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
     .or(`and(sender_id.eq.${userId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${userId})`)
     .order("created_at", { ascending: true });
   return (data ?? []) as DirectMessage[];
@@ -556,13 +552,8 @@ export async function sendDM(
 ): Promise<DirectMessage | null> {
   const { data } = await supabase
     .from("direct_messages")
-<<<<<<< HEAD
     .insert({ sender_id: senderId, receiver_id: receiverId, body, reply_to_id: replyToId ?? null })
     .select("*, reply_to:direct_messages!reply_to_id(id, body, sender_id), sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
-=======
-    .insert({ sender_id: senderId, receiver_id: receiverId, body })
-    .select("*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)")
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418
     .single();
   return data as DirectMessage | null;
 }
@@ -658,7 +649,7 @@ export async function getDMInbox(
   // Get all DMs where user is sender or receiver
   const { data } = await supabase
     .from("direct_messages")
-    .select("*, sender:profiles!sender_id(id,full_name), receiver:profiles!receiver_id(id,full_name)")
+    .select("*, sender:profiles!sender_id(id,full_name,avatar_url), receiver:profiles!receiver_id(id,full_name,avatar_url)")
     .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
     .order("created_at", { ascending: false });
 
@@ -667,16 +658,17 @@ export async function getDMInbox(
   // Group by conversation partner
   const threadMap = new Map<string, DMThread>();
   for (const msg of data as (DirectMessage & {
-    sender: { id: string; full_name: string };
-    receiver: { id: string; full_name: string };
+    sender: { id: string; full_name: string; avatar_url?: string | null };
+    receiver: { id: string; full_name: string; avatar_url?: string | null };
   })[]) {
     const isMe = msg.sender_id === userId;
     const partnerId = isMe ? msg.receiver_id : msg.sender_id;
-    const partnerName = isMe ? msg.receiver?.full_name : msg.sender?.full_name;
+    const partner = isMe ? msg.receiver : msg.sender;
     if (!threadMap.has(partnerId)) {
       threadMap.set(partnerId, {
         partner_id: partnerId,
-        partner_name: partnerName ?? "User",
+        partner_name: partner?.full_name ?? "User",
+        partner_avatar_url: partner?.avatar_url ?? null,
         last_message: msg.body,
         last_at: msg.created_at,
         unread: !isMe && !msg.read_at ? 1 : 0,
@@ -761,7 +753,6 @@ export async function getUnreadDMCount(
     .is("read_at", null);
   return count ?? 0;
 }
-<<<<<<< HEAD
 
 // ─── People you may know (real chat-graph mutuals) ───────────────────────────
 
@@ -815,5 +806,3 @@ export async function sendAnnouncement(
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
-=======
->>>>>>> 8c432449b7fc70d873ba805336d88566c3c1a418
