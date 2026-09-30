@@ -48,6 +48,8 @@ type ExamQuestion = {
   image?: string | null;
   section?: string | null;
   sectionKind?: "passage" | "instruction" | null;
+  /** Questions that share a comprehension/cloze passage share this id */
+  passageId?: string | null;
   novel?: string | null;
   examtype?: string | null;
   year?: string | null;
@@ -131,11 +133,11 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
   );
 }
 
-function QuestionMedia({ question }: { question: ExamQuestion }) {
+function QuestionMedia({ question, hidePassage = false }: { question: ExamQuestion; hidePassage?: boolean }) {
   const isPassage = question.sectionKind === "passage";
   return (
     <>
-      {question.section && (
+      {question.section && !(hidePassage && isPassage) && (
         <div className={`mb-4 overflow-y-auto whitespace-pre-line rounded-[20px] p-4 ring-1 ${
           isPassage ? "max-h-[480px] bg-amber-50 ring-amber-100" : "max-h-40 bg-slate-50 ring-slate-200"
         }`}>
@@ -158,6 +160,66 @@ function QuestionMedia({ question }: { question: ExamQuestion }) {
         />
       )}
     </>
+  );
+}
+
+type PassageInfo = { number: number; total: number; firstNo: number; lastNo: number };
+
+/**
+ * Where the current question's passage sits inside its subject paper:
+ * "Passage 1 of 2 · questions 1-8", using the per-subject numbering.
+ */
+function getPassageInfo(list: ExamQuestion[], index: number, start: number, end: number): PassageInfo | null {
+  const cur = list[index];
+  if (!cur?.passageId || cur.sectionKind !== "passage") return null;
+  let s = index;
+  let e = index;
+  while (s > start && list[s - 1]?.passageId === cur.passageId) s--;
+  while (e < end - 1 && list[e + 1]?.passageId === cur.passageId) e++;
+  const ids: string[] = [];
+  for (let i = start; i < end; i++) {
+    const id = list[i]?.passageId;
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return { number: ids.indexOf(cur.passageId) + 1, total: ids.length, firstNo: s - start + 1, lastNo: e - start + 1 };
+}
+
+/**
+ * JAMB-style reading panel. Side-by-side with the question on large screens
+ * (sticky, scrolls on its own); stacked and collapsible on phones.
+ */
+function PassagePanel({
+  text,
+  info,
+  hidden,
+  onToggle,
+}: {
+  text: string;
+  info: PassageInfo;
+  hidden: boolean;
+  onToggle: () => void;
+}) {
+  const range = info.firstNo === info.lastNo ? `question ${info.firstNo}` : `questions ${info.firstNo} to ${info.lastNo}`;
+  return (
+    <div className="mb-4 overflow-hidden rounded-[20px] bg-amber-50 ring-1 ring-amber-100 lg:sticky lg:top-28 lg:mb-0">
+      <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+            Passage {info.number}{info.total > 1 ? ` of ${info.total}` : ""}
+          </p>
+          <p className="mt-0.5 text-xs font-semibold leading-5 text-amber-900">
+            Read the following passage carefully and answer {range}.
+          </p>
+        </div>
+        <button type="button" onClick={onToggle} aria-expanded={!hidden}
+          className="shrink-0 touch-manipulation rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200 lg:hidden">
+          {hidden ? "Show" : "Hide"}
+        </button>
+      </div>
+      <div className={`${hidden ? "hidden lg:block" : ""} max-h-[38dvh] overflow-y-auto overscroll-contain px-4 pb-4 lg:max-h-[calc(100dvh-16rem)]`}>
+        <p className="whitespace-pre-line text-[15px] leading-7 text-slate-800">{text}</p>
+      </div>
+    </div>
   );
 }
 
@@ -411,6 +473,7 @@ function ExamPageContent() {
   const [calcManuallySet, setCalcManuallySet] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [passageHidden, setPassageHidden] = useState<Record<string, boolean>>({});
   const attemptIdRef = useRef<string | null>(null);
 
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
@@ -420,6 +483,7 @@ function ExamPageContent() {
   // Position inside the current subject (drives the 1-60 / 1-40 numbering)
   const pos = locateInSubject(subjectTabs, currentQuestion, questionTotal);
   const multiSubject = subjectTabs.length > 1;
+  const passageInfo = getPassageInfo(questions, currentQuestion, pos.start, pos.end);
   const isLastOfSubject = currentQuestion === pos.end - 1;
   const nextSubjectName = multiSubject && pos.tabIdx + 1 < subjectTabs.length ? subjectTabs[pos.tabIdx + 1].name : null;
   const activeSubjectName = q?.subject ?? (isExamMode ? null : studySubject);
@@ -521,8 +585,29 @@ function ExamPageContent() {
         return batches.flat();
       }
 
+      // English in Mock/Exam mode: a JAMB-style paper (whole comprehension/cloze passages,
+      // 5-9 set-text questions, lexis, oral) assembled server-side. Any failure falls
+      // back to the plain random pool below, so an exam always starts.
+      async function fetchEnglishPaper(): Promise<ExamQuestion[]> {
+        const res = (await fetch(`/api/aloc?endpoint=english-paper&type=utme${yearParam}&t=${Date.now()}`).then((r) => r.json())) as {
+          ok: boolean;
+          data?: ExamQuestion[];
+          error?: string;
+        };
+        if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) throw new Error(res.error ?? "english-paper unavailable");
+        return res.data;
+      }
+
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
+          if (isExamMode && !urlNovel && name === ENGLISH) {
+            try {
+              const paper = await fetchEnglishPaper();
+              return paper.slice(0, count).map((qn) => ({ ...qn, subject: name }));
+            } catch (paperErr) {
+              console.warn("English paper assembly failed, using random pool:", paperErr);
+            }
+          }
           let pool = await fetchPool(name, count * 2);
           // Novel mode: keep only questions drawn from the selected set text
           if (urlNovel) {
@@ -917,7 +1002,17 @@ function ExamPageContent() {
               </div>
             </div>
 
-            {q && <QuestionMedia question={q} />}
+            <div className={passageInfo ? "lg:grid lg:grid-cols-2 lg:items-start lg:gap-6" : ""}>
+            {q && passageInfo && q.section && (
+              <PassagePanel
+                text={q.section}
+                info={passageInfo}
+                hidden={!!(q.passageId && passageHidden[q.passageId])}
+                onToggle={() => q.passageId && setPassageHidden((m) => ({ ...m, [q.passageId as string]: !m[q.passageId as string] }))}
+              />
+            )}
+            <div className="min-w-0">
+            {q && <QuestionMedia question={q} hidePassage={!!passageInfo} />}
 
             <div className={`rounded-[24px] p-4 ring-1 sm:p-5 ${isStudyMode ? "bg-violet-50 ring-violet-100" : "bg-slate-50 ring-slate-200"}`}>
               <p className="text-base leading-7 text-slate-800 sm:text-lg sm:leading-8">
@@ -972,6 +1067,9 @@ function ExamPageContent() {
             {revealEnabled && isRevealed && !q?.explanation && (
               <p className="mt-4 text-xs text-slate-400">No explanation available for this question.</p>
             )}
+
+            </div>
+            </div>
 
             <div className="sticky bottom-0 z-30 -mx-4 -mb-4 mt-5 flex items-center justify-between gap-2 rounded-b-[28px] border-t border-slate-100 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 xl:static xl:z-auto xl:mx-0 xl:mb-0 xl:mt-6 xl:flex-wrap xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none">
               <div className="flex shrink-0 gap-2 sm:gap-3">
