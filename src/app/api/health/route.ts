@@ -34,7 +34,7 @@ export function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    app: "Orbit Prep",
+    app: "Qubit",
     services,
     timestamp: new Date().toISOString(),
   });

@@ -207,7 +207,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
 
   async function handleSignOut() {
     if (signingOut) return;
-    if (!window.confirm("Sign out of Orbit Prep?")) return;
+    if (!window.confirm("Sign out of Qubit?")) return;
     setSigningOut(true);
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
@@ -255,7 +255,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
           ) : notFound || !profile ? (
             <div className="rounded-[24px] bg-white p-8 text-center ring-1 ring-slate-200">
               <p className="text-lg font-black text-slate-900">Profile not found</p>
-              <p className="mt-2 text-sm text-slate-500">This student may have left Orbit Prep.</p>
+              <p className="mt-2 text-sm text-slate-500">This student may have left Qubit.</p>
               <Link href="/messages" className="mt-4 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-bold text-white">Back to messages</Link>
             </div>
           ) : (

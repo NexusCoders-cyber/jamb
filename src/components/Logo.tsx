@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 /**
- * Orbit Prep brand mark — the official logo everywhere (app shells, admin
+ * Qubit brand mark — the official logo everywhere (app shells, admin
  * portal, landing/onboarding, signup, blog, favicon, PWA icon).
  * The source PNG has rounded corners + transparency baked in; pick the
  * smallest asset that covers the render size to keep payloads light.
@@ -11,7 +11,7 @@ export default function Logo({ size = 36, className = "" }: { size?: number; cla
   return (
     <Image
       src={src}
-      alt="Orbit Prep logo"
+      alt="Qubit logo"
       width={size}
       height={size}
       priority={size >= 64}

@@ -135,7 +135,7 @@ function Sidebar({ pathname }: { pathname: string }) {
       {/* Logo */}
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 px-5">
         <Logo size={36} />
-        <p className="text-base font-black leading-tight text-slate-900">Orbit Prep</p>
+        <p className="text-base font-black leading-tight text-slate-900">Qubit</p>
       </div>
 
       {/* Nav groups */}
@@ -239,7 +239,7 @@ function TopBar({ title, back, unread }: { title?: string; back?: string; unread
           <Logo size={32} />
         </div>
       )}
-      <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Orbit Prep"}</h1>
+      <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Qubit"}</h1>
       {unread > 0 && (
         <Link href="/messages" aria-label={`${unread} unread messages`}
           className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">

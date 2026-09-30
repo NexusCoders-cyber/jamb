@@ -22,21 +22,21 @@ const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Orbit Prep | Smart UTME & JAMB preparation",
-    template: "%s | Orbit Prep",
+    default: "Qubit | Quick Unified Brain Interactive Test",
+    template: "%s | Qubit",
   },
   description:
     "A focused UTME preparation platform for smarter exam preparation and better performance — past questions, mock CBT exams, study plans and analytics.",
-  applicationName: "Orbit Prep",
+  applicationName: "Qubit",
   openGraph: {
-    siteName: "Orbit Prep",
+    siteName: "Qubit",
     type: "website",
     url: siteUrl,
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Orbit Prep",
+    title: "Qubit",
   },
 };
 

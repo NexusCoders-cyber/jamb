@@ -53,10 +53,10 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const post = await getPost(slug);
-  if (!post) return { title: "Post not found | Orbit Prep" };
+  if (!post) return { title: "Post not found | Qubit" };
 
   return {
-    title: `${post.title} | Orbit Prep Blog`,
+    title: `${post.title} | Qubit Blog`,
     description: post.excerpt,
     keywords: post.tags,
     alternates: { canonical: `/blog/${post.slug}` },
@@ -92,8 +92,8 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
     description: post.excerpt,
     datePublished: post.published_at,
     dateModified: post.updated_at,
-    author: { "@type": "Organization", name: "Orbit Prep" },
-    publisher: { "@type": "Organization", name: "Orbit Prep" },
+    author: { "@type": "Organization", name: "Qubit" },
+    publisher: { "@type": "Organization", name: "Qubit" },
     mainEntityOfPage: `${siteUrl}/blog/${post.slug}`,
     keywords: post.tags.join(", "),
   };
@@ -119,7 +119,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           {post.published_at && (
             <time dateTime={post.published_at} className="mt-4 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
               <CalendarDays className="h-3.5 w-3.5" aria-hidden />
-              {new Date(post.published_at).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} · Orbit Prep Team
+              {new Date(post.published_at).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} · Qubit Team
             </time>
           )}
         </header>
@@ -133,7 +133,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <footer className="mt-12 rounded-[28px] bg-gradient-to-r from-violet-600 to-violet-500 p-6 text-white">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-violet-100">Prepare smarter</p>
           <h2 className="mt-2 text-2xl font-black">Practise with real past questions</h2>
-          <p className="mt-1 text-sm text-violet-100">Orbit Prep gives you JAMB past questions, mock CBT exams and personalised analytics — free.</p>
+          <p className="mt-1 text-sm text-violet-100">Qubit gives you JAMB past questions, mock CBT exams and personalised analytics — free.</p>
           <Link href="/dashboard" className="mt-4 inline-block rounded-xl bg-white px-5 py-2.5 text-sm font-black text-violet-700 hover:bg-violet-50">
             Start practising
           </Link>

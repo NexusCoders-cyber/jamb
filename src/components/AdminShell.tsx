@@ -89,7 +89,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-800 px-5">
           <Logo size={36} />
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-violet-400">Orbit</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-violet-400">Qubit</p>
             <p className="text-sm font-black text-white">Admin Portal</p>
           </div>
         </div>

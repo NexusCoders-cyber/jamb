@@ -98,7 +98,7 @@ export default function CommunityPage() {
       <AppShell title="Community">
         <div className="mx-auto max-w-xl px-4 py-6">
           <div className="mb-6 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
-            <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">Orbit Community</p>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">Qubit Community</p>
             <h1 className="mt-2 text-3xl font-black">Join the community</h1>
             <p className="mt-2 text-sm text-violet-100">
               Discuss tough questions, share past papers and prep tips with thousands of UTME candidates. Pick the channels that match your subjects.

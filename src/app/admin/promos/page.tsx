@@ -156,7 +156,7 @@ export default function AdminPromosPage() {
             <label className="block">
               <span className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-slate-500">Title</span>
               <input type="text" value={editing.title} onChange={(e) => setEditing((c) => ({ ...c, title: e.target.value }))}
-                placeholder="e.g. Orbit Prep Masterclass — 50% off"
+                placeholder="e.g. Qubit Masterclass — 50% off"
                 className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm font-bold text-white placeholder-slate-500 outline-none focus:border-violet-500" />
             </label>
             <label className="block">
