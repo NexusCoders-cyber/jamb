@@ -28,20 +28,34 @@ function timeLabel(iso: string) {
 // so a re-render between press and release can never orphan a timer.
 const pressTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pressFired = new Set<string>();
+const pressStart = new Map<string, { x: number; y: number }>();
+
+/** Finger drift beyond this (px) cancels the press — lets users scroll. */
+const MOVE_SLOP_PX = 10;
 
 function longPressHandlers(id: string, onLongPress: () => void, ms = 450) {
   function clear() {
     const t = pressTimers.get(id);
     if (t) { clearTimeout(t); pressTimers.delete(id); }
+    pressStart.delete(id);
   }
-  function start() {
+  function start(x: number, y: number) {
     clear();
     pressFired.delete(id);
+    pressStart.set(id, { x, y });
     pressTimers.set(id, setTimeout(() => {
       pressTimers.delete(id);
       pressFired.add(id);
       onLongPress();
     }, ms));
+  }
+  // Cancel only when the finger drifts past the slop — a still finger keeps
+  // the timer running even through small tremor, so mobile long-press works
+  // while scrolling still cancels.
+  function move(x: number, y: number) {
+    const s = pressStart.get(id);
+    if (!s) return;
+    if (Math.abs(x - s.x) > MOVE_SLOP_PX || Math.abs(y - s.y) > MOVE_SLOP_PX) clear();
   }
   // After a long-press fires, swallow the click that follows so the sheet
   // doesn't close instantly from the release tap.
@@ -53,11 +67,24 @@ function longPressHandlers(id: string, onLongPress: () => void, ms = 450) {
     }
   }
 
+  function touchStart(e: React.TouchEvent) {
+    const t = e.touches[0];
+    if (t) start(t.clientX, t.clientY);
+  }
+  function touchMove(e: React.TouchEvent) {
+    const t = e.touches[0];
+    if (t) move(t.clientX, t.clientY);
+  }
+  function mouseDown(e: React.MouseEvent) {
+    start(e.clientX, e.clientY);
+  }
+
   return {
-    onTouchStart: start,
-    onMouseDown: start,
+    onTouchStart: touchStart,
+    onTouchMove: touchMove,
     onTouchEnd: clear,
-    onTouchMove: clear, // finger scrolled away — cancel
+    onTouchCancel: clear,
+    onMouseDown: mouseDown,
     onMouseUp: clear,
     onMouseLeave: clear,
     onClickCapture,
@@ -143,6 +170,8 @@ export default function DMConversationPage() {
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
   const [sheetMsg, setSheetMsg] = useState<DirectMessage | null>(null);
   const [copied, setCopied] = useState(false);
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [expandedReply, setExpandedReply] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -243,13 +272,38 @@ export default function DMConversationPage() {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void handleSend(); }
   }
 
-  // Resolve a reply quote: realtime inserts carry no join, so fall back to
-  // looking up the referenced message among the ones already in the thread.
+  // Resolve the message a reply points at. The PostgREST self-join embed
+  // (`reply_to:direct_messages!reply_to_id(...)`) can arrive as an object OR a
+  // one-element array depending on relationship detection, so normalize it;
+  // realtime inserts carry no join at all, so also fall back to the loaded
+  // thread. Returns null when the original was deleted.
+  function replyTarget(msg: DirectMessage): { id: string; body: string; sender_id: string } | null {
+    const raw = msg.reply_to;
+    const joined = Array.isArray(raw) ? raw[0] : raw;
+    const target = joined ?? messages.find((m) => m.id === msg.reply_to_id);
+    return target && target.id ? { id: target.id, body: target.body, sender_id: target.sender_id } : null;
+  }
+
   function replySource(msg: DirectMessage): { body: string; senderName: string } | null {
-    const target = msg.reply_to ?? messages.find((m) => m.id === msg.reply_to_id);
+    const target = replyTarget(msg);
     if (!target) return null;
     const name = target.sender_id === user?.id ? myName : partnerName;
     return { body: target.body, senderName: name };
+  }
+
+  // Tap on a reply chip: scroll to the original message in the thread and
+  // flash it. If the original is gone (deleted), expand it inline instead.
+  function jumpToReply(msg: DirectMessage) {
+    const target = replyTarget(msg);
+    if (!target) return;
+    const el = document.querySelector(`[data-mid="${target.id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlashId(target.id);
+      setTimeout(() => setFlashId((f) => (f === target.id ? null : f)), 1500);
+    } else {
+      setExpandedReply((cur) => (cur === msg.id ? null : msg.id));
+    }
   }
 
   // Group messages by date
@@ -333,7 +387,8 @@ export default function DMConversationPage() {
                         )}
                         <div
                           {...longPress}
-                          className="max-w-[75%] cursor-pointer select-none no-callout active:opacity-90"
+                          data-mid={msg.id}
+                          className={`max-w-[75%] cursor-pointer select-none no-callout rounded-2xl active:opacity-90 ${flashId === msg.id ? "bubble-flash" : ""}`}
                           title="Long-press for actions"
                         >
                           <div className={`rounded-2xl px-4 py-2.5 text-sm leading-6 ${
@@ -341,13 +396,21 @@ export default function DMConversationPage() {
                               ? "rounded-br-sm bg-violet-600 text-white"
                               : "rounded-bl-sm bg-white text-slate-800 ring-1 ring-slate-200"
                           }`}>
-                            {/* Reply quote */}
+                            {/* Reply chip — collapsed; tap reveals + jumps to the original */}
                             {quote && (
-                              <div className={`mb-1.5 rounded-lg border-l-[3px] px-2 py-1 text-xs ${
-                                isMe ? "border-[#f6c978] bg-black/10 text-violet-100" : "border-violet-400 bg-violet-50 text-slate-500"
-                              }`}>
-                                <p className="font-bold">{quote.senderName}</p>
-                                <p className="line-clamp-2">{quote.body}</p>
+                              <button type="button" onClick={() => jumpToReply(msg)}
+                                className={`mb-1 flex max-w-full items-center gap-1 rounded-lg px-2 py-1 text-left text-xs font-bold ${
+                                  isMe ? "bg-black/10 text-violet-100" : "bg-violet-50 text-violet-700"
+                                }`}>
+                                <Reply className="h-3 w-3 shrink-0" aria-hidden />
+                                <span className="truncate">{quote.senderName}</span>
+                              </button>
+                            )}
+                            {/* Expanded quote — only when the original is no longer in the thread */}
+                            {quote && expandedReply === msg.id && (
+                              <div className="mb-1.5 rounded-lg border-l-[3px] border-[#f6c978] bg-black/10 px-2 py-1 text-xs">
+                                <p className={`font-bold ${isMe ? "text-violet-100" : "text-slate-500"}`}>{quote.senderName}</p>
+                                <p className={isMe ? "text-violet-100" : "text-slate-500"}>{quote.body}</p>
                               </div>
                             )}
                             {msg.body}

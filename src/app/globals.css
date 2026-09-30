@@ -129,3 +129,14 @@ button:active, a:active {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* Flash highlight when jumping to the message a reply points at */
+@keyframes bubbleFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(246, 201, 120, 0); }
+  25%  { box-shadow: 0 0 0 5px rgba(246, 201, 120, 0.95); }
+  100% { box-shadow: 0 0 0 0 rgba(246, 201, 120, 0); }
+}
+
+.bubble-flash {
+  animation: bubbleFlash 1.4s ease-out 1;
+}

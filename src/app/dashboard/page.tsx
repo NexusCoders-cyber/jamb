@@ -9,6 +9,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getProfile, getUserAttempts, getSubjectStats, getActivePromos } from "@/lib/queries";
 import type { ExamAttempt, Promo, SubjectStats } from "@/lib/queries";
+import { weightedJambEstimate, targetStatus } from "@/lib/scoring";
 import AppShell from "@/components/AppShell";
 
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
@@ -97,13 +98,15 @@ export default function DashboardPage() {
       .catch(() => undefined);
   }, []);
 
-  // Derived stats
+  // Derived stats — computed by the shared scoring engine (src/lib/scoring.ts)
+  // so dashboard, analytics, results and admin all agree.
   const totalAnswered = attempts.reduce((s, a) => s + a.question_count, 0);
   const totalCorrect = attempts.reduce((s, a) => s + a.score, 0);
   const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-  // Real JAMB scale: accuracy% × 400 = estimated score (capped at 400)
-  const practiceLevel = Math.min(400, Math.round((overallAccuracy / 100) * 400));
-  const targetProgress = targetScore > 0 ? Math.min(100, Math.round((practiceLevel / targetScore) * 100)) : 0;
+  // Question-weighted JAMB estimate: long mocks count more than short drills.
+  const practiceLevel = weightedJambEstimate(attempts);
+  const status = targetStatus(practiceLevel, targetScore);
+  const targetProgress = status.progressPct;
 
   // Daily goal — counted in Lagos time so the day flips at Nigerian midnight
   const todayStr = new Intl.DateTimeFormat("en-CA", {
@@ -193,10 +196,7 @@ export default function DashboardPage() {
                 <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full border-[20px] border-white/10 pointer-events-none" />
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">Road to {targetScore}</p>
                 <h2 className="mt-1.5 text-2xl font-black leading-snug">
-                  {dataLoading ? "Loading…"
-                    : attempts.length === 0 ? "Complete your first exam"
-                    : practiceLevel >= targetScore ? "Target reached — keep it up"
-                    : `${targetProgress}% to your target`}
+                  {dataLoading ? "Loading…" : status.headline}
                 </h2>
                 <div className="mt-4 h-2 rounded-full bg-white/15">
                   <div className="h-2 rounded-full bg-[#f6c978] transition-all" style={{ width: `${targetProgress}%` }} />

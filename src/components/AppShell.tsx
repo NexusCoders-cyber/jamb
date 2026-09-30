@@ -11,6 +11,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Logo from "@/components/Logo";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -132,12 +133,9 @@ function Sidebar({ pathname }: { pathname: string }) {
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-slate-200/80 lg:bg-white lg:shadow-[2px_0_20px_rgba(101,87,217,0.06)]">
       {/* Logo */}
-      <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-100 px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#6557d9] text-base font-black text-white shadow-md shadow-violet-400/25">O</div>
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.28em] text-[#6557d9]">ORBIT</p>
-          <p className="text-base font-black leading-tight text-slate-900">Orbit Prep</p>
-        </div>
+      <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 px-5">
+        <Logo size={36} />
+        <p className="text-base font-black leading-tight text-slate-900">Orbit Prep</p>
       </div>
 
       {/* Nav groups */}
@@ -237,7 +235,9 @@ function TopBar({ title, back, unread }: { title?: string; back?: string; unread
         </Link>
       )}
       {!back && (
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#6557d9] text-xs font-black text-white">O</div>
+        <div className="flex h-8 items-center">
+          <Logo size={32} />
+        </div>
       )}
       <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Orbit Prep"}</h1>
       {unread > 0 && (

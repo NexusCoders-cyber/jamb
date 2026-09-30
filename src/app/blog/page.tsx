@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabasePublicEnv } from "@/lib/env";
 import { CalendarDays, ArrowRight } from "lucide-react";
@@ -51,7 +52,10 @@ export default async function BlogIndexPage() {
     <main className="min-h-screen bg-[#f5f4ff]">
       <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
         <header className="mb-8">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-600">Orbit Prep</p>
+          <div className="flex items-center gap-3">
+            <Image src="/logo-192.png" alt="Orbit Prep logo" width={40} height={40} priority />
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-600">Orbit Prep</p>
+          </div>
           <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">Blog</h1>
           <p className="mt-3 text-base text-slate-600">
             Study guides, exam strategy and prep tips for JAMB/UTME candidates — written by the Orbit Prep team.

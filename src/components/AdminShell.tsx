@@ -14,6 +14,7 @@ import { usePathname } from "next/navigation";
 import { ArrowLeft, Lock } from "lucide-react";
 import { useAdminRole } from "@/lib/useAdminRole";
 import Avatar from "@/components/Avatar";
+import Logo from "@/components/Logo";
 
 const SECTIONS = [
   { label: "Dashboard",     href: "/admin",                icon: "▦" },
@@ -86,7 +87,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-800 bg-slate-900/60 backdrop-blur lg:flex">
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-800 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 text-base font-black text-white">O</div>
+          <Logo size={36} />
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.28em] text-violet-400">Orbit</p>
             <p className="text-sm font-black text-white">Admin Portal</p>
@@ -130,7 +131,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
       {/* Mobile header */}
       <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-800 bg-slate-950/90 px-4 backdrop-blur lg:hidden">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-600 text-xs font-black text-white">O</div>
+        <Logo size={32} />
         <h1 className="flex-1 text-base font-black text-white">Admin Portal</h1>
         <Link href="/dashboard" className="rounded-full bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-300">
           Exit

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Check, CheckCircle2 } from "lucide-react";
@@ -132,7 +133,7 @@ export default function SignUpPage() {
           {/* Left panel */}
           <section className="gradient-bg p-6 text-white sm:p-8 lg:p-10">
             <div className="mb-10 flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-black">O</div>
+              <Image src="/logo-192.png" alt="Orbit Prep logo" width={48} height={48} priority />
               <div>
                 <p className="text-[11px] uppercase tracking-[0.28em] text-emerald-100/80">ORBIT</p>
                 <h1 className="text-2xl font-bold tracking-tight">Orbit Prep</h1>

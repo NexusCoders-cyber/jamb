@@ -5,8 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getAttempt, getSubjectStats } from "@/lib/queries";
+import { getAttempt, getProfile, getSubjectStats } from "@/lib/queries";
 import AppShell from "@/components/AppShell";
+import { targetStatus } from "@/lib/scoring";
 import type { SubjectStats } from "@/lib/queries";
 
 function ResultsPageContent() {
@@ -27,10 +28,18 @@ function ResultsPageContent() {
   // Live subject stats from Supabase
   const [subjectBreakdown, setSubjectBreakdown] = useState<SubjectStats[]>([]);
   const [timeUsed, setTimeUsed] = useState<string | null>(null);
+  const [targetScore, setTargetScore] = useState(300);
+  // This attempt's result vs the student's target (shared scoring engine)
+  const status = targetStatus(practiceScore, targetScore);
 
   useEffect(() => {
     if (!user) return;
     const supabase = createSupabaseBrowserClient();
+
+    // Target score for the "vs target" panel
+    getProfile(supabase, user.id).then((p) => {
+      if (p?.target_score) setTargetScore(p.target_score);
+    });
 
     // Fetch per-subject accuracy for the breakdown chart
     getSubjectStats(supabase, user.id).then((stats) => {
@@ -65,6 +74,19 @@ function ResultsPageContent() {
               <span className="pb-1 text-xl font-semibold text-emerald-100">/ 400</span>
             </div>
             <p className="mt-2 text-sm text-emerald-100">Practice-performance estimate, not an official result.</p>
+
+            {/* Score vs target — connects this exam to the student's goal */}
+            <div className="mt-4 rounded-2xl bg-white/10 p-4 ring-1 ring-white/15">
+              <div className="flex items-center justify-between text-sm font-bold">
+                <span className="text-emerald-100">Your target: {targetScore}</span>
+                <span className={status.onTrack ? "text-emerald-300" : "text-[#f6c978]"}>
+                  {status.onTrack ? "Beaten it! 🏆" : `${status.marksRemaining} marks to go`}
+                </span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-white/15">
+                <div className="h-full rounded-full bg-[#f6c978] transition-all" style={{ width: `${status.progressPct}%` }} />
+              </div>
+            </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {[

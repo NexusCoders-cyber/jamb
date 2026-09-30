@@ -6,8 +6,9 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getSubjectStats, getScoreHistory, getUserAttempts } from "@/lib/queries";
+import { getProfile, getSubjectStats, getScoreHistory, getUserAttempts } from "@/lib/queries";
 import type { SubjectStats, ExamAttempt } from "@/lib/queries";
+import { weightedJambEstimate, targetStatus, attemptJambScore, bestAttempt, scoreTrend } from "@/lib/scoring";
 
 type ScorePoint = { score: number; question_count: number; submitted_at: string };
 
@@ -20,6 +21,7 @@ export default function AnalyticsPage() {
   const [totalCorrect, setTotalCorrect] = useState(0);
   const [totalExams, setTotalExams] = useState(0);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
+  const [targetScore, setTargetScore] = useState(300);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,7 +34,9 @@ export default function AnalyticsPage() {
       getSubjectStats(supabase, user.id),
       getScoreHistory(supabase, user.id, 10),
       getUserAttempts(supabase, user.id, 100),
-    ]).then(([stats, history, attempts]) => {
+      getProfile(supabase, user.id),
+    ]).then(([stats, history, attempts, profile]) => {
+      if (profile) setTargetScore(profile.target_score);
       setSubjectStats(stats);
       setScoreHistory(history as ScorePoint[]);
 
@@ -51,6 +55,13 @@ export default function AnalyticsPage() {
   const weakCount = subjectStats.filter((s) => s.accuracy < 60).length;
   const strongCount = subjectStats.filter((s) => s.accuracy >= 70).length;
 
+  // Target tracking via the shared scoring engine
+  const estimate = weightedJambEstimate(attempts);
+  const status = targetStatus(estimate, targetScore);
+  const best = bestAttempt(attempts);
+  const trend = scoreTrend(attempts, 5);
+  const trendDelta = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : 0;
+
   // Chart: normalize history scores to percentages for bar heights
   const chartBars = scoreHistory.map((p) => ({
     pct: Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100),
@@ -62,11 +73,11 @@ export default function AnalyticsPage() {
 
   const analyticsCards = [
     { label: "Accuracy", value: loading ? "…" : `${overallAccuracy}%` },
+    { label: "JAMB estimate", value: loading ? "…" : `${estimate}/400` },
+    { label: "Target", value: loading ? "…" : `${status.onTrack ? "🏆 " : ""}${targetScore}` },
     { label: "Exams taken", value: loading ? "…" : String(totalExams) },
     { label: "Questions answered", value: loading ? "…" : totalAnswered.toLocaleString() },
-    { label: "Weak subjects", value: loading ? "…" : String(weakCount) },
-    { label: "Strong subjects", value: loading ? "…" : String(strongCount) },
-    { label: "Best score", value: loading || scoreHistory.length === 0 ? "—" : `${Math.max(...scoreHistory.map((p) => Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100)))}%` },
+    { label: "Best JAMB score", value: loading ? "…" : best ? `${best.jamb}/400` : "—" },
   ];
 
   return (
@@ -83,6 +94,46 @@ export default function AnalyticsPage() {
                 </div>
               ))}
             </div>
+
+            {/* Target tracking panel */}
+            <section className="mt-6 rounded-[28px] bg-gradient-to-br from-[#41348f] to-[#6557d9] p-6 text-white shadow-lg shadow-violet-300/25">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">Target tracking</p>
+                  <h2 className="mt-1 text-2xl font-black">
+                    {loading ? "Loading…" : status.headline}
+                  </h2>
+                </div>
+                <div className="text-right">
+                  <p className="text-4xl font-black">{loading ? "—" : estimate}<span className="text-lg font-bold text-violet-200"> / {targetScore}</span></p>
+                  <p className={`text-xs font-bold ${status.onTrack ? "text-emerald-300" : "text-violet-200"}`}>
+                    {loading ? "" : status.onTrack ? "On track 🏆" : `${status.marksRemaining} marks to go`}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 h-2.5 rounded-full bg-white/15">
+                <div className="h-full rounded-full bg-[#f6c978] transition-all" style={{ width: `${status.progressPct}%` }} />
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-violet-200">Recent trend</p>
+                  <p className="mt-1 text-lg font-black">
+                    {trend.length >= 2 ? `${trendDelta >= 0 ? "▲" : "▼"} ${Math.abs(trendDelta)} marks` : "Not enough data"}
+                  </p>
+                  <p className="text-[10px] text-violet-200">last {trend.length || 0} exams</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-violet-200">Best score</p>
+                  <p className="mt-1 text-lg font-black">{best ? `${best.jamb}/400` : "—"}</p>
+                  <p className="text-[10px] text-violet-200">{best?.at ? new Date(best.at).toLocaleDateString("en-NG", { day: "numeric", month: "short" }) : "no exams yet"}</p>
+                </div>
+                <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-violet-200">Weak subjects</p>
+                  <p className="mt-1 text-lg font-black">{weakCount}</p>
+                  <p className="text-[10px] text-violet-200">below 60% accuracy</p>
+                </div>
+              </div>
+            </section>
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
               {/* Score over time */}

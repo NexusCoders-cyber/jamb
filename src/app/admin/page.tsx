@@ -20,6 +20,22 @@ type AttemptRow = {
   profiles?: { full_name: string } | null;
 };
 
+/** One row of the admin_student_progress() RPC (see supabase/admin_student_progress.sql). */
+type StudentProgress = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  course: string | null;
+  exams: number;
+  questions: number;
+  accuracy: number;
+  jamb_estimate: number;
+  target_score: number;
+  progress_pct: number;
+  on_track: boolean;
+  last_exam_at: string | null;
+};
+
 export default function AdminDashboardPage() {
   const [kpis, setKpis] = useState<KPI[]>([
     { label: "Students", value: "—" },
@@ -28,6 +44,7 @@ export default function AdminDashboardPage() {
     { label: "Average accuracy", value: "—" },
   ]);
   const [recent, setRecent] = useState<AttemptRow[]>([]);
+  const [progress, setProgress] = useState<StudentProgress[]>([]);
   const [serviceStatus, setServiceStatus] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
@@ -46,9 +63,15 @@ export default function AdminDashboardPage() {
         .select("id, score, question_count, status, started_at, profiles(full_name)")
         .order("started_at", { ascending: false })
         .limit(8),
+      // Per-student target tracking (admin RPC). Falls back to a plain
+      // join-free client-side computation when the RPC isn't applied yet.
+      supabase.rpc("admin_student_progress").then(
+        ({ data, error }: { data: StudentProgress[] | null; error: { message: string } | null }) =>
+          error ? null : (data ?? []),
+      ),
       fetch("/api/health").then((r) => r.json()).catch(() => undefined),
     ])
-      .then(([profilesRes, attemptsRes, recentRes, health]) => {
+      .then(async ([profilesRes, attemptsRes, recentRes, rpcProgress, health]) => {
         const studentCount = profilesRes.count ?? 0;
         const attempts = (attemptsRes.data ?? []) as { score: number; question_count: number }[];
         const attemptCount = attemptsRes.count ?? 0;
@@ -64,9 +87,61 @@ export default function AdminDashboardPage() {
         ]);
         setRecent(((recentRes.data ?? []) as unknown) as AttemptRow[]);
         if (health?.services) setServiceStatus(health.services);
+
+        if (rpcProgress && rpcProgress.length > 0) {
+          setProgress(rpcProgress);
+        } else {
+          // Fallback: derive per-student progress client-side (admin RLS
+          // permits reading all profiles + attempts).
+          const [{ data: profs }, { data: atts }] = await Promise.all([
+            supabase.from("profiles").select("id, full_name, email, course, target_score").limit(500),
+            supabase
+              .from("exam_attempts")
+              .select("user_id, score, question_count, submitted_at")
+              .eq("status", "submitted")
+              .limit(5000),
+          ]);
+          const byUser = new Map<string, { q: number; c: number; exams: number; last: string | null }>();
+          const attemptRows = ((atts ?? []) as { user_id: string; score: number; question_count: number; submitted_at: string | null }[]);
+          for (const a of attemptRows) {
+            const cur = byUser.get(a.user_id) ?? { q: 0, c: 0, exams: 0, last: null as string | null };
+            cur.q += a.question_count ?? 0;
+            cur.c += a.score ?? 0;
+            cur.exams += 1;
+            if (a.submitted_at && (!cur.last || a.submitted_at > cur.last)) cur.last = a.submitted_at;
+            byUser.set(a.user_id, cur);
+          }
+          const rows: StudentProgress[] = ((profs ?? []) as Array<{
+            id: string; full_name: string; email: string | null; course: string | null; target_score: number;
+          }>).map((p) => {
+            const s = byUser.get(p.id) ?? { q: 0, c: 0, exams: 0, last: null };
+            const jamb = s.q > 0 ? Math.round((s.c / s.q) * 400) : 0;
+            return {
+              id: p.id,
+              full_name: p.full_name,
+              email: p.email,
+              course: p.course,
+              exams: s.exams,
+              questions: s.q,
+              accuracy: s.q > 0 ? Math.round((s.c / s.q) * 100) : 0,
+              jamb_estimate: jamb,
+              target_score: p.target_score ?? 300,
+              progress_pct: jamb > 0 && p.target_score > 0 ? Math.min(100, Math.round((jamb / p.target_score) * 100)) : 0,
+              on_track: jamb >= (p.target_score ?? 300),
+              last_exam_at: s.last,
+            };
+          });
+          setProgress(rows);
+        }
       })
       .finally(() => setLoading(false));
   }, []);
+
+  // Target-tracking aggregates (from the student progress rows)
+  const active = progress.filter((p) => p.exams > 0);
+  const onTrackCount = active.filter((p) => p.on_track).length;
+  const closeCount = active.filter((p) => !p.on_track && p.progress_pct >= 65).length;
+  const behindCount = active.filter((p) => p.progress_pct < 65).length;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -85,6 +160,53 @@ export default function AdminDashboardPage() {
             </p>
           </div>
         ))}
+      </section>
+
+      {/* Target tracking — connected to student target scores */}
+      <section className="mb-6 rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-black text-white">Target tracking</h2>
+            <p className="text-xs text-slate-500">JAMB-scale estimate vs each student's target score</p>
+          </div>
+          <div className="flex gap-2 text-[11px] font-bold">
+            <span className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-emerald-400">🏆 On track: {onTrackCount}</span>
+            <span className="rounded-full bg-amber-500/15 px-3 py-1.5 text-amber-400">Close: {closeCount}</span>
+            <span className="rounded-full bg-rose-500/15 px-3 py-1.5 text-rose-400">Behind: {behindCount}</span>
+          </div>
+        </div>
+        {loading ? (
+          <div className="space-y-2">{[1, 2, 3].map((n) => <div key={n} className="h-12 animate-pulse rounded-2xl bg-slate-800" />)}</div>
+        ) : active.length === 0 ? (
+          <p className="text-sm text-slate-500">No submitted exams yet — tracking starts with the first attempt.</p>
+        ) : (
+          <div className="space-y-2">
+            {active.slice(0, 8).map((p) => (
+              <Link key={p.id} href={`/admin/exams?q=${encodeURIComponent(p.email ?? p.full_name)}`}
+                className="flex items-center gap-3 rounded-2xl bg-slate-800/50 p-3 transition hover:bg-slate-800">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white">{p.full_name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {p.exams} exam{p.exams === 1 ? "" : "s"} · {p.questions.toLocaleString()} questions · {p.accuracy}% accuracy
+                    {p.last_exam_at ? ` · last ${new Date(p.last_exam_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}` : ""}
+                  </p>
+                </div>
+                <div className="w-28 shrink-0 sm:w-40">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-700">
+                    <div className={`h-full rounded-full ${p.on_track ? "bg-emerald-400" : p.progress_pct >= 65 ? "bg-amber-400" : "bg-rose-400"}`}
+                      style={{ width: `${p.progress_pct}%` }} />
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className={`text-sm font-black ${p.on_track ? "text-emerald-400" : "text-slate-200"}`}>
+                    {p.jamb_estimate}<span className="text-[10px] font-bold text-slate-500">/{p.target_score}</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500">{p.progress_pct}%</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
@@ -124,6 +246,9 @@ export default function AdminDashboardPage() {
                       pct >= 50 ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"
                     }`}>
                       {a.score ?? 0}/{a.question_count}
+                      <span className="ml-1 font-bold text-slate-400">
+                        · {a.question_count > 0 ? Math.round(((a.score ?? 0) / a.question_count) * 400) : 0}/400
+                      </span>
                     </span>
                   </Link>
                 );

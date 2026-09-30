@@ -154,6 +154,11 @@ export default function AdminExamsPage() {
                     : pct >= 50 ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"
                   }`}>
                     {a.score ?? 0}/{a.question_count} ({pct}%)
+                    {a.status === "submitted" && (
+                      <span className="ml-1 font-bold text-slate-400">
+                        · {a.question_count > 0 ? Math.round(((a.score ?? 0) / a.question_count) * 400) : 0}/400
+                      </span>
+                    )}
                   </span>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <Link

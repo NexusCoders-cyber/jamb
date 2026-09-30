@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Flame, Inbox, Trophy, Target, ChartLine, Users } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGate from "@/components/AuthGate";
+import Logo from "@/components/Logo";
 
 type View = "intro" | "login" | "forgot" | "forgot-sent";
 
@@ -62,7 +64,7 @@ function IntroCarousel({ onDone }: { onDone: () => void }) {
   return (
     <div className="flex min-h-dvh flex-col bg-gradient-to-b from-[#41348f] via-[#6557d9] to-[#779fe4] px-6 py-10 text-white">
       <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-lg font-black shadow-inner shadow-white/10">O</div>
+        <Logo size={44} />
         <div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-100/80">ORBIT</p>
           <h1 className="text-xl font-bold tracking-tight">Orbit Prep</h1>
@@ -168,7 +170,7 @@ export default function Home() {
           <div className="w-full max-w-sm">
             {/* Logo header */}
             <div className="mb-8 text-center">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[22px] bg-gradient-to-br from-[#41348f] to-[#6557d9] text-2xl font-black text-white shadow-xl shadow-violet-300/40">O</div>
+              <Image src="/logo-512.png" alt="Orbit Prep logo" width={72} height={72} priority className="mx-auto drop-shadow-xl shadow-violet-300/40" />
               <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900">Orbit Prep</h1>
               <p className="mt-1 text-sm font-semibold text-slate-500">Smart preparation for UTME &amp; JAMB</p>
             </div>
