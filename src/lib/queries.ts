@@ -24,6 +24,12 @@ export type QuestionSnapshot = {
   section_kind?: "passage" | "instruction" | null;
   /** Question illustration image URL */
   image?: string | null;
+  /** All diagrams for the question */
+  images?: string[] | null;
+  /** Picture for each answer option, aligned with `options` */
+  option_images?: (string | null)[] | null;
+  section_images?: string[] | null;
+  explanation_images?: string[] | null;
   /** Set text the question is drawn from (e.g. "Sweet Sixteen") */
   novel?: string | null;
   correct_option: number;
@@ -407,7 +413,7 @@ export type Post = {
   body: string;
   reply_count: number;
   created_at: string;
-  author?: { full_name: string; avatar_url?: string | null };
+  author?: { full_name: string };
   channel?: { name: string; slug: string };
 };
 
@@ -417,7 +423,7 @@ export type PostReply = {
   user_id: string;
   body: string;
   created_at: string;
-  author?: { full_name: string; avatar_url?: string | null };
+  author?: { full_name: string };
 };
 
 export type DirectMessage = {
@@ -427,14 +433,13 @@ export type DirectMessage = {
   body: string;
   read_at: string | null;
   created_at: string;
-  sender?: { full_name: string; avatar_url?: string | null };
-  receiver?: { full_name: string; avatar_url?: string | null };
+  sender?: { full_name: string };
+  receiver?: { full_name: string };
 };
 
 export type DMThread = {
   partner_id: string;
   partner_name: string;
-  partner_avatar_url?: string | null;
   last_message: string;
   last_at: string;
   unread: number;
@@ -454,7 +459,7 @@ export async function getPosts(
 ): Promise<Post[]> {
   let q = supabase
     .from("posts")
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name), channel:channels(name,slug)")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (channelId) q = q.eq("channel_id", channelId);
@@ -475,7 +480,7 @@ export async function getChannelBySlug(supabase: SupabaseClient, slug: string): 
 export async function getPost(supabase: SupabaseClient, postId: string): Promise<Post | null> {
   const { data } = await supabase
     .from("posts")
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name), channel:channels(name,slug)")
     .eq("id", postId)
     .single();
   return data as Post | null;
@@ -491,7 +496,7 @@ export async function createPost(
   const { data } = await supabase
     .from("posts")
     .insert({ user_id: userId, channel_id: channelId, title, body })
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name), channel:channels(name,slug)")
     .single();
   return data as Post | null;
 }
@@ -500,7 +505,7 @@ export async function createPost(
 export async function getReplies(supabase: SupabaseClient, postId: string): Promise<PostReply[]> {
   const { data } = await supabase
     .from("post_replies")
-    .select("*, author:profiles(full_name, avatar_url)")
+    .select("*, author:profiles(full_name)")
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
   return (data ?? []) as PostReply[];
@@ -515,7 +520,7 @@ export async function createReply(
   const { data } = await supabase
     .from("post_replies")
     .insert({ user_id: userId, post_id: postId, body })
-    .select("*, author:profiles(full_name, avatar_url)")
+    .select("*, author:profiles(full_name)")
     .single();
   return data as PostReply | null;
 }
@@ -528,7 +533,7 @@ export async function getDMThread(
 ): Promise<DirectMessage[]> {
   const { data } = await supabase
     .from("direct_messages")
-    .select("*, sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
+    .select("*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)")
     .or(`and(sender_id.eq.${userId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${userId})`)
     .order("created_at", { ascending: true });
   return (data ?? []) as DirectMessage[];
@@ -543,7 +548,7 @@ export async function sendDM(
   const { data } = await supabase
     .from("direct_messages")
     .insert({ sender_id: senderId, receiver_id: receiverId, body })
-    .select("*, sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
+    .select("*, sender:profiles!sender_id(full_name), receiver:profiles!receiver_id(full_name)")
     .single();
   return data as DirectMessage | null;
 }
@@ -568,7 +573,7 @@ export async function getDMInbox(
   // Get all DMs where user is sender or receiver
   const { data } = await supabase
     .from("direct_messages")
-    .select("*, sender:profiles!sender_id(id,full_name,avatar_url), receiver:profiles!receiver_id(id,full_name,avatar_url)")
+    .select("*, sender:profiles!sender_id(id,full_name), receiver:profiles!receiver_id(id,full_name)")
     .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
     .order("created_at", { ascending: false });
 
@@ -577,17 +582,16 @@ export async function getDMInbox(
   // Group by conversation partner
   const threadMap = new Map<string, DMThread>();
   for (const msg of data as (DirectMessage & {
-    sender: { id: string; full_name: string; avatar_url?: string | null };
-    receiver: { id: string; full_name: string; avatar_url?: string | null };
+    sender: { id: string; full_name: string };
+    receiver: { id: string; full_name: string };
   })[]) {
     const isMe = msg.sender_id === userId;
     const partnerId = isMe ? msg.receiver_id : msg.sender_id;
-    const partner = isMe ? msg.receiver : msg.sender;
+    const partnerName = isMe ? msg.receiver?.full_name : msg.sender?.full_name;
     if (!threadMap.has(partnerId)) {
       threadMap.set(partnerId, {
         partner_id: partnerId,
-        partner_name: partner?.full_name ?? "User",
-        partner_avatar_url: partner?.avatar_url ?? null,
+        partner_name: partnerName ?? "User",
         last_message: msg.body,
         last_at: msg.created_at,
         unread: !isMe && !msg.read_at ? 1 : 0,
@@ -671,35 +675,4 @@ export async function getUnreadDMCount(
     .eq("receiver_id", userId)
     .is("read_at", null);
   return count ?? 0;
-}
-
-// ─── People you may know (real chat-graph mutuals) ───────────────────────────
-
-export type SuggestedPerson = {
-  id: string;
-  full_name: string;
-  avatar_url: string | null;
-  course: string | null;
-  interests: string[] | null;
-  streak_days: number | null;
-  /** How many of MY chat partners have also chatted with this person */
-  mutual_count: number;
-};
-
-/**
- * Suggested people ranked by real mutual-friend count, computed server-side
- * by the suggested_people() RPC (SECURITY DEFINER — the client can only ever
- * see its own DMs, so the chat-graph walk must happen in the database).
- * Excludes existing chat partners. Returns [] when the migration hasn't run.
- */
-export async function getSuggestedPeople(
-  supabase: SupabaseClient,
-): Promise<SuggestedPerson[]> {
-  const { data, error } = await supabase.rpc("suggested_people");
-  if (error) {
-    // 404/undefined function = migration not applied yet — degrade silently
-    console.warn("suggested_people unavailable:", error.message);
-    return [];
-  }
-  return (data ?? []) as SuggestedPerson[];
 }
