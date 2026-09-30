@@ -6,7 +6,7 @@
  * Auth: AccessToken header (e.g. ALOC-xxxx or QB-xxxx from .env)
  */
 
-const ALOC_BASE = "https://questions.aloc.com.ng/api/v2";
+const ALOC_BASE = process.env.ALOC_BASE_URL?.trim() || "https://questions.aloc.com.ng/api/v2";
 
 // ─── All supported ALOC subject slugs ────────────────────────────────────────
 // These are the exact lowercase slugs the ALOC API accepts.
@@ -75,6 +75,12 @@ export type AlocQuestion = {
   examtype?: string;
   examyear?: string | number;
   subject?: string;
+  /** English only: true when the question belongs to a comprehension/cloze passage held in `section` */
+  hasPassage?: boolean | number | string | null;
+  /** English only: the question's number inside its original paper (orders questions within a passage) */
+  questionNub?: string | number | null;
+  /** English only: ALOC's own category label */
+  category?: string | null;
 };
 
 export type AlocResponse = {
@@ -100,6 +106,16 @@ export type NormalizedQuestion = {
   sectionKind?: "passage" | "instruction" | null;
   /** Novel/title the question is drawn from (e.g. "Sweet Sixteen") when detectable */
   novel?: string | null;
+  /** True when ALOC flags this English question as part of a passage (comprehension / cloze) */
+  hasPassage?: boolean;
+  /** Stable id shared by every question that belongs to the same passage text */
+  passageId?: string | null;
+  /** 1-based order of the passage inside an assembled paper (set by buildEnglishPaper) */
+  passageNo?: number | null;
+  /** Question number inside its original paper (orders questions within a passage) */
+  questionNub?: number | null;
+  /** ALOC's category label for English questions */
+  category?: string | null;
   /** The exam body this question actually came from (e.g. utme, wassce) */
   examtype?: string | null;
   image?: string | null;
@@ -169,6 +185,32 @@ export function htmlToSegments(input: string): RichSegment[] {
   return parts.length > 0 ? parts : [{ text: unescapeEntities(input).replace(/\s+/g, " ").trim() }];
 }
 
+/**
+ * Like stripHtml but keeps paragraph / line breaks. Comprehension passages
+ * are long; flattening them into one block is unreadable.
+ */
+export function htmlToParagraphs(input: string): string {
+  const withBreaks = input
+    .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/(?:div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  return unescapeEntities(withBreaks)
+    .split("\n")
+    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Tiny stable hash so questions sharing one passage text share one passageId */
+function hashText(input: string): string {
+  let h = 5381;
+  for (let i = 0; i < input.length; i++) h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
 /** Plain-text version of htmlToSegments — joins rich segments back together. */
 function stripHtml(input: string): string {
   return htmlToSegments(input)
@@ -186,25 +228,7 @@ export function classifySection(sectionText: string | null | undefined): "passag
   if (!sectionText) return null;
   const text = sectionText.trim();
   if (text.length === 0) return null;
-
-  // Instruction tell-tales — ALOC prefixes like "In each of questions 68 to 84,"
-  // or "choose the option nearest in meaning" are never passages.
-  const looksLikeInstruction =
-    /^(?:in (?:each|all) of|choose |select |fill |answer |questions? \d+|section [a-d]|lexis|structure|oral forms|comprehension|from the words|from the options|the questions? below|read the following)/i.test(text) ||
-    /(?:choose|select|nearest in meaning|opposite in meaning|fill (?:each|the) gap|best completes|most appropriate|option that best)/i.test(text);
-
-  if (looksLikeInstruction) return "instruction";
-
-  // Dialogue tell-tales — a speaker label followed by a colon, possibly
-  // several times ("BEP0: ...\nSERI: ..."). These are often short, so we
-  // check before the length thresholds.
-  const speakerLines = text.match(/^[A-Z][A-Z0-9 .\u2019']{1,24}:/gm) ?? [];
-  if (speakerLines.length >= 1) return "passage";
-
-  // Screenplay/résumé tell-tales — long dashes with action cues
-  if (/\s[-\u2013\u2014]\s/.test(text) && text.length >= 200) return "passage";
-
-  // Sentence-count and length signals (previous logic, kept as fallback)
+  // Long multi-sentence text = an actual passage to read
   const sentences = (text.match(/[.!?:][\s"']/g) ?? []).length;
   if (text.length >= 140 && sentences >= 3) return "passage";
   if (text.length >= 400) return "passage";
@@ -303,18 +327,26 @@ function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[
   return list;
 }
 
-export function normalizeAlocQuestion(
-  q: AlocQuestion,
-  defaultSubject?: string,
-  /** Passage carried forward from the previous question in the same batch (see below) */
-  passage?: { text: string; kind: "passage" | "instruction" } | null,
-): NormalizedQuestion | null {
+export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string): NormalizedQuestion | null {
   if (!q) return null;
   // Some ALOC questions (e.g. stress-pattern) put the actual prompt in `section`
   // and leave `question` empty. Fall back to section when that happens.
+  const hasPassage = q.hasPassage === true || q.hasPassage === 1 || q.hasPassage === "1" || q.hasPassage === "true";
   const rawPrompt = stripHtml(q.question ?? "");
-  const rawSection = stripHtml(q.section ?? "");
-  const prompt = rawPrompt || rawSection;
+  const flatSection = stripHtml(q.section ?? "");
+  // Passages keep their paragraph breaks; short instructions stay single-line
+  const rawSection = hasPassage || flatSection.length >= 400 ? htmlToParagraphs(q.section ?? "") : flatSection;
+  const nubParsed = q.questionNub != null ? parseInt(String(q.questionNub), 10) : NaN;
+  const questionNub = Number.isNaN(nubParsed) ? null : nubParsed;
+  // Passage questions with an empty `question` (e.g. cloze gaps) must not show the
+  // whole passage as their prompt — keep the passage in `section` and ask a real prompt.
+  const passagePromptFallback =
+    hasPassage && !rawPrompt && rawSection
+      ? questionNub != null
+        ? `Choose the option that best fills gap ${questionNub}.`
+        : "Choose the best option based on the passage."
+      : "";
+  const prompt = rawPrompt || passagePromptFallback || rawSection;
   const resolved = resolveOptions(q);
   const options = resolved.map((o) => o.text);
   if (!prompt || options.length < 2) return null;
@@ -346,12 +378,8 @@ export function normalizeAlocQuestion(
   const explanation = rawSolution ? stripHtml(rawSolution) : null;
   // Only include section as a separate field if it wasn't already used as the prompt
   const section = rawSection && rawSection !== prompt ? rawSection : null;
-  const sectionKind = section ? classifySection(section) : null;
-  // Passage continuity: ALOC 2022 English leaves `section` EMPTY on the 2nd-Nth
-  // questions of a comprehension set — the passage text only ships on the first
-  // question. Carry the most recent passage forward so every question in the
-  // set renders with its passage instead of orphaned bare prompts.
-  const carrySection = !section && passage && passage.text && passage.kind === "passage" ? passage.text : null;
+  const sectionKind = section ? (hasPassage ? "passage" : classifySection(section)) : null;
+  const passageId = sectionKind === "passage" && section ? `p${hashText(section.toLowerCase().replace(/[^a-z0-9]/g, ""))}` : null;
   const image = q.image && typeof q.image === "string" && q.image.trim().length > 0 ? q.image.trim() : null;
   const year = q.examyear ? String(q.examyear) : null;
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
@@ -368,8 +396,12 @@ export function normalizeAlocQuestion(
     optionSegments,
     answer: answerIdx,
     explanation,
-    section: (section || carrySection) || null,
-    sectionKind: sectionKind ?? (carrySection ? "passage" : null),
+    section: section || null,
+    sectionKind,
+    hasPassage,
+    passageId,
+    questionNub,
+    category: typeof q.category === "string" && q.category.trim() ? q.category.trim() : null,
     novel,
     examtype: typeof q.examtype === "string" ? q.examtype : null,
     image,
@@ -425,19 +457,8 @@ export async function fetchAlocQuestionCount(
       ? [json.data]
       : [];
 
-  // Thread the last-seen passage forward: comprehension sets repeat the passage
-  // only on their first question, later ones carry an empty `section`.
-  let carry: { text: string; kind: "passage" | "instruction" } | null = null;
   const normalized = rawList
-    .map((q) => {
-      const nq = normalizeAlocQuestion(q, slugToName(slug), carry);
-      if (nq?.section && nq.sectionKind === "passage") {
-        carry = { text: nq.section, kind: "passage" };
-      } else if (nq?.section) {
-        carry = null; // a new instruction block ends the previous passage set
-      }
-      return nq;
-    })
+    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
     .filter((q): q is NormalizedQuestion => q !== null);
 
   return normalized.slice(0, count);
@@ -476,17 +497,63 @@ export async function fetchAlocQuestions(
       ? [json.data]
       : [];
 
-  // Thread the last-seen passage forward (same rule as /q/{count} above)
-  let carry: { text: string; kind: "passage" | "instruction" } | null = null;
   return rawList
-    .map((q) => {
-      const nq = normalizeAlocQuestion(q, slugToName(slug), carry);
-      if (nq?.section && nq.sectionKind === "passage") {
-        carry = { text: nq.section, kind: "passage" };
-      } else if (nq?.section) {
-        carry = null;
-      }
-      return nq;
-    })
+    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
     .filter((q): q is NormalizedQuestion => q !== null);
+}
+
+
+/**
+ * Fetch up to `limit` (max 120) random questions via /m/{limit}.
+ * `withComprehension` matters for English: ALOC silently DROPS every passage
+ * (comprehension / cloze) question unless withComprehension=true is sent, which
+ * is why passages never showed up when we only called /m or /q/{n}.
+ */
+export async function fetchAlocMany(
+  apiKey: string,
+  subject: string,
+  limit: number,
+  opts: { year?: string; type?: string; withComprehension?: boolean } = {},
+): Promise<NormalizedQuestion[]> {
+  const slug = nameToSlug(subject);
+  const params = new URLSearchParams({ subject: slug });
+  if (opts.year && opts.year !== "All years" && opts.year !== "random") params.set("year", opts.year);
+  if (opts.type) params.set("type", opts.type);
+  if (opts.withComprehension) params.set("withComprehension", "true");
+  const clamped = Math.min(Math.max(Math.floor(limit), 1), 120);
+
+  const res = await fetch(`${ALOC_BASE}/m/${clamped}?${params.toString()}`, {
+    headers: alocHeaders(apiKey),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`ALOC API returned HTTP ${res.status}`);
+
+  const json = (await res.json()) as AlocResponse;
+  const rawList = Array.isArray(json.data) ? json.data : json.data ? [json.data] : [];
+  return rawList
+    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
+    .filter((q): q is NormalizedQuestion => q !== null);
+}
+
+let comprehensionYearsCache: { at: number; years: string[] } | null = null;
+
+/** Years for which ALOC has English comprehension passages (cached for an hour). */
+export async function fetchAlocComprehensionYears(apiKey: string): Promise<string[]> {
+  if (comprehensionYearsCache && Date.now() - comprehensionYearsCache.at < 60 * 60 * 1000) {
+    return comprehensionYearsCache.years;
+  }
+  const res = await fetch(`${ALOC_BASE}/q-comprehension-years?subject=english`, {
+    headers: alocHeaders(apiKey),
+    cache: "no-store",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) throw new Error(`ALOC API returned HTTP ${res.status}`);
+  const json = (await res.json()) as { data?: { examyear?: string | number }[] };
+  const years = (Array.isArray(json.data) ? json.data : [])
+    .map((r) => (r?.examyear != null ? String(r.examyear).trim() : ""))
+    .filter((y) => /^\d{4}$/.test(y));
+  const unique = Array.from(new Set(years));
+  if (unique.length > 0) comprehensionYearsCache = { at: Date.now(), years: unique };
+  return unique;
 }
