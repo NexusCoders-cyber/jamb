@@ -7,8 +7,8 @@ import type { LucideIcon } from "lucide-react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getProfile, getUserAttempts, getSubjectStats } from "@/lib/queries";
-import type { ExamAttempt, SubjectStats } from "@/lib/queries";
+import { getProfile, getUserAttempts, getSubjectStats, getActivePromos } from "@/lib/queries";
+import type { ExamAttempt, Promo, SubjectStats } from "@/lib/queries";
 import AppShell from "@/components/AppShell";
 
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
@@ -31,6 +31,8 @@ export default function DashboardPage() {
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [promos, setPromos] = useState<Promo[]>([]);
+  const [slide, setSlide] = useState(0); // 0 = target card, 1..n = promos
 
   const [todayLabel] = useState(() =>
     new Intl.DateTimeFormat("en-NG", { weekday: "long", day: "numeric", month: "long" }).format(new Date()),
@@ -62,6 +64,24 @@ export default function DashboardPage() {
       })
       .finally(() => setDataLoading(false));
   }, [user, authLoading]);
+
+  // Load active promos for the hero carousel (target card slides into them)
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+    let alive = true;
+    getActivePromos(supabase)
+      .then((rows) => { if (alive) setPromos(rows); })
+      .catch(() => undefined); // table may not exist yet — hero still shows
+    return () => { alive = false; };
+  }, []);
+
+  // Auto-advance the hero carousel while promos exist
+  useEffect(() => {
+    const total = 1 + promos.length;
+    if (total <= 1) return;
+    const t = setInterval(() => setSlide((s) => (s + 1) % total), 6000);
+    return () => clearInterval(t);
+  }, [promos.length]);
 
   // Load products from ALOC
   useEffect(() => {
@@ -161,31 +181,92 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {/* Hero progress card */}
-        <section className="mb-5 overflow-hidden rounded-[28px] bg-[#6557d9] p-5 text-white shadow-lg shadow-violet-400/20">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full border-[20px] border-white/10 pointer-events-none" />
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">Road to {targetScore}</p>
-          <h2 className="mt-1.5 text-2xl font-black leading-snug">
-            {dataLoading ? "Loading…"
-              : attempts.length === 0 ? "Complete your first exam"
-              : practiceLevel >= targetScore ? "Target reached — keep it up"
-              : `${targetProgress}% to your target`}
-          </h2>
-          <div className="mt-4 h-2 rounded-full bg-white/15">
-            <div className="h-2 rounded-full bg-[#f6c978] transition-all" style={{ width: `${targetProgress}%` }} />
+        {/* Hero carousel: target card + promos share the same card frame */}
+        <section aria-roledescription="carousel" className="relative mb-5">
+          <div className="overflow-hidden rounded-[28px] shadow-lg shadow-violet-400/20">
+            <div
+              className="flex transition-transform duration-500 ease-out"
+              style={{ transform: `translateX(-${slide * 100}%)` }}
+            >
+              {/* Slide 0 — target score card (original style preserved) */}
+              <div className="relative w-full shrink-0 overflow-hidden bg-[#6557d9] p-5 text-white">
+                <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full border-[20px] border-white/10 pointer-events-none" />
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-violet-200">Road to {targetScore}</p>
+                <h2 className="mt-1.5 text-2xl font-black leading-snug">
+                  {dataLoading ? "Loading…"
+                    : attempts.length === 0 ? "Complete your first exam"
+                    : practiceLevel >= targetScore ? "Target reached — keep it up"
+                    : `${targetProgress}% to your target`}
+                </h2>
+                <div className="mt-4 h-2 rounded-full bg-white/15">
+                  <div className="h-2 rounded-full bg-[#f6c978] transition-all" style={{ width: `${targetProgress}%` }} />
+                </div>
+                <div className="mt-2 flex justify-between text-xs font-semibold text-violet-200">
+                  <span>{practiceLevel} current</span>
+                  <span>{targetScore} target</span>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Link href="/exam" className="inline-flex h-10 items-center rounded-xl bg-[#f6c978] px-4 text-sm font-black text-[#211b3d]">
+                    Take mock →
+                  </Link>
+                  <Link href="/analytics" className="inline-flex h-10 items-center rounded-xl bg-white/15 px-4 text-sm font-bold text-white">
+                    Analytics
+                  </Link>
+                </div>
+              </div>
+
+              {/* Slides 1..n — promo banners (same card frame) */}
+              {promos.map((promo) => (
+                <div key={promo.id} className="relative w-full shrink-0 overflow-hidden bg-[#6557d9] text-white">
+                  {promo.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={promo.image_url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#211b3d]/90 via-[#211b3d]/55 to-[#211b3d]/20" />
+                  <div className="relative p-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#f6c978]">Promotion</p>
+                    <h2 className="mt-1.5 text-2xl font-black leading-snug">{promo.title}</h2>
+                    {promo.body && <p className="mt-1 max-w-md text-sm font-semibold text-violet-100">{promo.body}</p>}
+                    {promo.cta_label && promo.cta_href && (
+                      promo.cta_href.startsWith("http") ? (
+                        <a href={promo.cta_href} target="_blank" rel="noreferrer"
+                          className="mt-4 inline-flex h-10 items-center rounded-xl bg-[#f6c978] px-4 text-sm font-black text-[#211b3d]">
+                          {promo.cta_label} →
+                        </a>
+                      ) : (
+                        <Link href={promo.cta_href}
+                          className="mt-4 inline-flex h-10 items-center rounded-xl bg-[#f6c978] px-4 text-sm font-black text-[#211b3d]">
+                          {promo.cta_label} →
+                        </Link>
+                      )
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="mt-2 flex justify-between text-xs font-semibold text-violet-200">
-            <span>{practiceLevel} current</span>
-            <span>{targetScore} target</span>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <Link href="/exam" className="inline-flex h-10 items-center rounded-xl bg-[#f6c978] px-4 text-sm font-black text-[#211b3d]">
-              Take mock →
-            </Link>
-            <Link href="/analytics" className="inline-flex h-10 items-center rounded-xl bg-white/15 px-4 text-sm font-bold text-white">
-              Analytics
-            </Link>
-          </div>
+
+          {/* Slide dots + manual controls — only when promos exist */}
+          {promos.length > 0 && (
+            <>
+              <button type="button" aria-label="Previous slide"
+                onClick={() => setSlide((s) => (s - 1 + promos.length + 1) % (promos.length + 1))}
+                className="absolute left-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur transition hover:bg-black/40 sm:flex">
+                ‹
+              </button>
+              <button type="button" aria-label="Next slide"
+                onClick={() => setSlide((s) => (s + 1) % (promos.length + 1))}
+                className="absolute right-2 top-1/2 hidden h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/25 text-white backdrop-blur transition hover:bg-black/40 sm:flex">
+                ›
+              </button>
+              <div className="mt-2.5 flex justify-center gap-1.5">
+                {[0, ...promos.map((_, i) => i + 1)].map((i) => (
+                  <button key={i} type="button" aria-label={`Go to slide ${i + 1}`} onClick={() => setSlide(i)}
+                    className={`h-1.5 rounded-full transition-all ${slide === i ? "w-5 bg-[#6557d9]" : "w-1.5 bg-slate-300 hover:bg-slate-400"}`} />
+                ))}
+              </div>
+            </>
+          )}
         </section>
 
         {/* Stats row */}

@@ -73,7 +73,7 @@ export default function SignUpPage() {
           });
           await scoped
             .from("profiles")
-            .update({ interests: subjects, course: course.trim() })
+            .update({ interests: subjects, course: course.trim(), target_score: Number(targetScore) })
             .eq("id", data.user.id);
         } catch { /* non-fatal — profile can be edited later in settings */ }
       }

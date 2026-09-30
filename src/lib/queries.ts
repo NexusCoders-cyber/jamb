@@ -429,6 +429,9 @@ export type DirectMessage = {
   created_at: string;
   sender?: { full_name: string; avatar_url?: string | null };
   receiver?: { full_name: string; avatar_url?: string | null };
+  /** Message this one replies to (WhatsApp-style quote) */
+  reply_to_id?: string | null;
+  reply_to?: { id: string; body: string; sender_id: string } | null;
 };
 
 export type DMThread = {
@@ -539,13 +542,85 @@ export async function sendDM(
   senderId: string,
   receiverId: string,
   body: string,
+  replyToId?: string | null,
 ): Promise<DirectMessage | null> {
   const { data } = await supabase
     .from("direct_messages")
-    .insert({ sender_id: senderId, receiver_id: receiverId, body })
-    .select("*, sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
+    .insert({ sender_id: senderId, receiver_id: receiverId, body, reply_to_id: replyToId ?? null })
+    .select("*, reply_to:direct_messages!reply_to_id(id, body, sender_id), sender:profiles!sender_id(full_name, avatar_url), receiver:profiles!receiver_id(full_name, avatar_url)")
     .single();
   return data as DirectMessage | null;
+}
+
+/** Delete one of MY messages (RLS: only the sender can delete). */
+export async function deleteDM(supabase: SupabaseClient, messageId: string): Promise<boolean> {
+  const { error } = await supabase.from("direct_messages").delete().eq("id", messageId);
+  return !error;
+}
+
+// ─── Syllabus (admin-managed, per subject) ────────────────────────────────────
+
+export type SyllabusItem = {
+  id: string;
+  subject: string;
+  title: string;
+  body: string;
+  file_url: string | null;
+  file_name: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** All syllabus entries for one subject, in display order. */
+export async function getSyllabusForSubject(
+  supabase: SupabaseClient,
+  subject: string,
+): Promise<SyllabusItem[]> {
+  const { data } = await supabase
+    .from("syllabus_items")
+    .select("*")
+    .eq("subject", subject)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true });
+  return (data ?? []) as SyllabusItem[];
+}
+
+/** Every syllabus entry (admin management list). */
+export async function getAllSyllabus(supabase: SupabaseClient): Promise<SyllabusItem[]> {
+  const { data } = await supabase
+    .from("syllabus_items")
+    .select("*")
+    .order("subject", { ascending: true })
+    .order("position", { ascending: true });
+  return (data ?? []) as SyllabusItem[];
+}
+
+// ─── Promos (dashboard banner carousel) ──────────────────────────────────────
+
+export type Promo = {
+  id: string;
+  title: string;
+  body: string;
+  image_url: string | null;
+  cta_label: string | null;
+  cta_href: string | null;
+  is_active: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Active promos for the dashboard banner, in display order. */
+export async function getActivePromos(supabase: SupabaseClient): Promise<Promo[]> {
+  const { data } = await supabase
+    .from("promos")
+    .select("*")
+    .eq("is_active", true)
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: false })
+    .limit(10);
+  return ((data ?? []) as unknown) as Promo[];
 }
 
 export async function markDMsRead(
@@ -702,4 +777,26 @@ export async function getSuggestedPeople(
     return [];
   }
   return (data ?? []) as SuggestedPerson[];
+}
+
+/**
+ * Broadcast an announcement: one notification row per profile.
+ * RLS allows admin inserts; non-admins get an error back.
+ */
+export async function sendAnnouncement(
+  supabase: SupabaseClient,
+  title: string,
+  body: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: profiles, error: pErr } = await supabase.from("profiles").select("id");
+  if (pErr) return { ok: false, error: pErr.message };
+  const rows = (profiles ?? []).map((p: { id: string }) => ({
+    user_id: p.id,
+    title,
+    body,
+  }));
+  if (rows.length === 0) return { ok: true };
+  const { error } = await supabase.from("notifications").insert(rows);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }

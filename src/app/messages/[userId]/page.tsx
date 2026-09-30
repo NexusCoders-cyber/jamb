@@ -7,12 +7,12 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGuard from "@/components/AuthGuard";
 import {
-  getDMThread, sendDM, markDMsRead, getProfile,
+  getDMThread, sendDM, markDMsRead, getProfile, deleteDM,
   type DirectMessage,
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
 import EmojiPicker from "@/components/EmojiPicker";
-import { Mail } from "lucide-react";
+import { Mail, Reply, Trash2, X } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -41,6 +41,7 @@ export default function DMConversationPage() {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -104,10 +105,11 @@ export default function DMConversationPage() {
     if (!user || !partnerId || body.trim().length === 0) return;
     setSending(true); setSendError("");
     const supabase = createSupabaseBrowserClient();
-    const msg = await sendDM(supabase, user.id, partnerId, body.trim());
+    const msg = await sendDM(supabase, user.id, partnerId, body.trim(), replyTo?.id ?? null);
     if (msg) {
       setMessages((prev) => (prev.find((m) => m.id === msg.id) ? prev : [...prev, msg]));
       setBody("");
+      setReplyTo(null);
       setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); inputRef.current?.focus(); }, 80);
     } else {
       setSendError("Could not send message. Try again.");
@@ -115,8 +117,30 @@ export default function DMConversationPage() {
     setSending(false);
   }
 
+  async function handleDelete(msg: DirectMessage) {
+    if (!user || !window.confirm("Delete this message?")) return;
+    setSendError("");
+    const supabase = createSupabaseBrowserClient();
+    const ok = await deleteDM(supabase, msg.id);
+    if (ok) {
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      if (replyTo?.id === msg.id) setReplyTo(null);
+    } else {
+      setSendError("Could not delete — the update may not be applied yet.");
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void handleSend(); }
+  }
+
+  // Resolve a reply quote: realtime inserts carry no join, so fall back to
+  // looking up the referenced message among the ones already in the thread.
+  function replySource(msg: DirectMessage): { body: string; senderName: string } | null {
+    const target = msg.reply_to ?? messages.find((m) => m.id === msg.reply_to_id);
+    if (!target) return null;
+    const name = target.sender_id === user?.id ? myName : partnerName;
+    return { body: target.body, senderName: name };
   }
 
   // Group messages by date
@@ -189,12 +213,12 @@ export default function DMConversationPage() {
                 <div className="space-y-2">
                   {group.messages.map((msg) => {
                     const isMe = msg.sender_id === user?.id;
-                    const senderName = isMe ? myName : partnerName;
+                    const quote = replySource(msg);
                     return (
                       <div key={msg.id} className={`flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}>
-                        {!isMe && senderName && (
-                          <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${senderName}'s profile`}>
-                            <Avatar user={{ full_name: senderName, avatar_url: isMe ? null : partnerAvatar }} size="sm" />
+                        {!isMe && partnerName && (
+                          <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${partnerName}'s profile`}>
+                            <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} size="sm" />
                           </Link>
                         )}
                         <div className={`max-w-[75%] group`}>
@@ -203,11 +227,29 @@ export default function DMConversationPage() {
                               ? "rounded-br-sm bg-violet-600 text-white"
                               : "rounded-bl-sm bg-white text-slate-800 ring-1 ring-slate-200"
                           }`}>
+                            {/* Reply quote */}
+                            {quote && (
+                              <div className={`mb-1.5 rounded-lg border-l-[3px] px-2 py-1 text-xs ${
+                                isMe ? "border-[#f6c978] bg-black/10 text-violet-100" : "border-violet-400 bg-violet-50 text-slate-500"
+                              }`}>
+                                <p className="font-bold">{quote.senderName}</p>
+                                <p className="line-clamp-2">{quote.body}</p>
+                              </div>
+                            )}
                             {msg.body}
                           </div>
-                          <p className={`mt-0.5 text-[10px] text-slate-400 ${isMe ? "text-right" : ""}`}>
-                            {timeLabel(msg.created_at)}
-                            {isMe && msg.read_at && " · Read"}
+                          <p className={`mt-0.5 flex items-center gap-2 text-[10px] text-slate-400 ${isMe ? "justify-end" : ""}`}>
+                            <span>{timeLabel(msg.created_at)}{isMe && msg.read_at ? " · Read" : ""}</span>
+                            <button type="button" onClick={() => { setReplyTo(msg); inputRef.current?.focus(); }}
+                              className="inline-flex items-center gap-0.5 font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-violet-600 focus:opacity-100">
+                              <Reply className="h-3 w-3" aria-hidden /> Reply
+                            </button>
+                            {isMe && (
+                              <button type="button" onClick={() => void handleDelete(msg)}
+                                className="inline-flex items-center gap-0.5 font-bold text-slate-400 opacity-0 transition group-hover:opacity-100 hover:text-rose-500 focus:opacity-100">
+                                <Trash2 className="h-3 w-3" aria-hidden /> Delete
+                              </button>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -225,6 +267,23 @@ export default function DMConversationPage() {
       <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto max-w-2xl">
           {sendError && <p className="mb-2 text-xs text-rose-600">{sendError}</p>}
+
+          {/* Reply-to preview */}
+          {replyTo && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border-l-4 border-violet-500 bg-violet-50 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-black text-violet-700">
+                  Replying to {replyTo.sender_id === user?.id ? "yourself" : partnerName}
+                </p>
+                <p className="truncate text-xs text-slate-500">{replyTo.body}</p>
+              </div>
+              <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply"
+                className="rounded-full p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600">
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
+
           <div className="flex items-end gap-3">
             <Avatar user={{ full_name: myName, avatar_url: null }} size="sm" />
           <div className="flex items-end gap-1">

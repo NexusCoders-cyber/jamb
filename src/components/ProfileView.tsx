@@ -13,6 +13,7 @@ import {
   Flame,
   Loader2,
   Lock,
+  LogOut,
   Mail,
   Pencil,
   Star,
@@ -128,6 +129,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
   const [editingBio, setEditingBio] = useState(false);
   const [bioDraft, setBioDraft] = useState("");
   const [savingBio, setSavingBio] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Derived stats (own profile)
@@ -201,6 +203,16 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
     } finally {
       setUploading(false);
     }
+  }
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    if (!window.confirm("Sign out of Orbit Prep?")) return;
+    setSigningOut(true);
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    try { localStorage.removeItem("jamb_user"); } catch { /* ignore */ }
+    window.location.href = "/";
   }
 
   async function saveBio() {
@@ -386,6 +398,23 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                 <Link href="/achievements" className="mt-1 inline-block text-xs font-bold text-violet-600 hover:underline">
                   See all achievements
                 </Link>
+              )}
+
+              {/* ── Sign out (own profile only) ── */}
+              {!viewingOther && (
+                <section className="mt-6 mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-slate-900">Sign out</p>
+                      <p className="mt-0.5 text-xs text-slate-400">You can sign back in anytime.</p>
+                    </div>
+                    <button type="button" onClick={() => void handleSignOut()} disabled={signingOut}
+                      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-rose-50 px-4 text-sm font-black text-rose-600 ring-1 ring-rose-100 transition hover:bg-rose-100 disabled:opacity-60">
+                      {signingOut ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <LogOut className="h-4 w-4" aria-hidden />}
+                      {signingOut ? "Signing out…" : "Sign out"}
+                    </button>
+                  </div>
+                </section>
               )}
             </>
           )}

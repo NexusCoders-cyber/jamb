@@ -16,11 +16,14 @@ import { useAdminRole } from "@/lib/useAdminRole";
 import Avatar from "@/components/Avatar";
 
 const SECTIONS = [
-  { label: "Dashboard",  href: "/admin",           icon: "▦" },
-  { label: "Users",      href: "/admin/users",     icon: "◉" },
-  { label: "Exams",      href: "/admin/exams",     icon: "▤" },
-  { label: "Community",  href: "/admin/community", icon: "◈" },
-  { label: "Blog",       href: "/admin/blog",      icon: "✎" },
+  { label: "Dashboard",     href: "/admin",                icon: "▦" },
+  { label: "Users",         href: "/admin/users",          icon: "◉" },
+  { label: "Exams",         href: "/admin/exams",          icon: "▤" },
+  { label: "Syllabus",      href: "/admin/syllabus",       icon: "✦" },
+  { label: "Announcements", href: "/admin/announcements",  icon: "❢" },
+  { label: "Promos",        href: "/admin/promos",         icon: "★" },
+  { label: "Community",     href: "/admin/community",      icon: "◈" },
+  { label: "Blog",          href: "/admin/blog",           icon: "✎" },
 ];
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {
