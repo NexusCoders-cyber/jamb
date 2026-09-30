@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getWrongAnswers } from "@/lib/queries";
 import RichText from "@/components/RichText";
+import QuestionImage from "@/components/QuestionImage";
 import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -134,10 +135,12 @@ export default function MistakesPage() {
                         <p className="text-sm leading-6 text-slate-700">{q.section}</p>
                       </div>
                     )}
-                    {q.image && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={q.image} alt="Question illustration" loading="lazy"
-                        className="mb-4 max-h-56 w-auto max-w-full rounded-2xl ring-1 ring-slate-200" />
+                    {(q.images?.length ? q.images : q.image ? [q.image] : []).length > 0 && (
+                      <div className="mb-4 grid gap-3">
+                        {(q.images?.length ? q.images : q.image ? [q.image] : []).map((src) => (
+                          <QuestionImage key={src} src={src} />
+                        ))}
+                      </div>
                     )}
                     <p className="text-lg leading-8 text-slate-800">
                       <RichText segments={q.prompt_segments} fallback={q.prompt} />
@@ -158,6 +161,9 @@ export default function MistakesPage() {
                             }`}
                           >
                             {String.fromCharCode(65 + idx)}. <RichText segments={q.option_segments?.[idx]} fallback={opt} />
+                            {q.option_images?.[idx] && (
+                              <QuestionImage key={q.option_images[idx] as string} src={q.option_images[idx] as string} zoomable={false} compact className="mt-2" />
+                            )}
                             {isCorrect && (
                               <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
                                 <Check className="h-3.5 w-3.5" aria-hidden /> Correct
