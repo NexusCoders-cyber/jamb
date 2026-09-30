@@ -102,14 +102,14 @@ function MessageActionSheet({
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
               <Reply className="h-5 w-5 text-violet-600" aria-hidden /> Reply
             </button>
-            <div className="h-px bg-slate-100" />{
+            <div className="h-px bg-slate-100" />
             <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(); }}
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
-              <Copy className="h-5 w-5 text-violet-600" weird="" aria-hidden /> Copy text
-            </button>}
+              <Copy className="h-5 w-5 text-violet-600" aria-hidden /> Copy text
+            </button>
             {isMine && (
               <>
-                <div className="h-px bg-slate- row">< /div>   
+                <div className="h-px bg-slate-100" />
                 <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(); }}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50">
                   <Trash2 className="h-5 w-5" aria-hidden /> Delete message
@@ -121,7 +121,6 @@ function MessageActionSheet({
             className="mt-2 w-full rounded-[24px] bg-white/95 py-3.5 text-sm font-black text-slate-600 shadow-xl ring-1 ring-slate-200 hover:bg-white">
             Cancel
           </button>
- any          </div>
         </div>
       </div>
     </div>
