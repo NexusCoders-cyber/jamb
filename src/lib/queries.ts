@@ -36,6 +36,13 @@ export type QuestionSnapshot = {
   explanation: string | null;
   difficulty: string;
   subject_name?: string | null;
+  /** 0-based position in the whole paper — Review sorts by this so questions come back in exam order */
+  position?: number;
+  /** 1-based number inside its own subject (English 1-60, others 1-40), exactly as the student saw it */
+  subject_number?: number;
+  /** Questions that share a comprehension/cloze passage share this id */
+  passage_id?: string | null;
+  year?: string | null;
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -225,27 +232,35 @@ export async function saveAnswers(
   attemptId: string,
   answers: Array<{
     question_id: string;
+    /** null = the student left this question unanswered (it is still saved so Review can show it) */
     selected_option: number | null;
-    is_correct: boolean;
+    /** null for unanswered questions, so the Mistakes page (which looks for `false`) is unaffected */
+    is_correct: boolean | null;
     marked_for_review: boolean;
     /** Full question snapshot so review/mistakes can render without a join */
     question?: QuestionSnapshot;
   }>,
 ): Promise<void> {
   if (answers.length === 0) return;
-  const { error } = await supabase.from("attempt_answers").upsert(
-    answers.map((a) => ({
-      question_id: a.question_id,
-      selected_option: a.selected_option,
-      is_correct: a.is_correct,
-      marked_for_review: a.marked_for_review,
-      ...(a.question ? { question_data: a.question } : {}),
-      attempt_id: attemptId,
-      answered_at: new Date().toISOString(),
-    })),
-    { onConflict: "attempt_id,question_id" },
-  );
-  if (error) throw error;
+  // one base time + index keeps the rows in paper order even for pages that sort by answered_at
+  const base = Date.now();
+  const rows = answers.map((a, i) => ({
+    question_id: a.question_id,
+    selected_option: a.selected_option,
+    is_correct: a.is_correct,
+    marked_for_review: a.marked_for_review,
+    ...(a.question ? { question_data: a.question } : {}),
+    attempt_id: attemptId,
+    answered_at: new Date(base + i).toISOString(),
+  }));
+  // Full 180-question papers carry passages + explanations: send them in batches
+  const BATCH = 40;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const { error } = await supabase
+      .from("attempt_answers")
+      .upsert(rows.slice(i, i + BATCH), { onConflict: "attempt_id,question_id" });
+    if (error) throw error;
+  }
 }
 
 export async function getAttemptAnswers(
@@ -261,72 +276,166 @@ export async function getAttemptAnswers(
     console.error("getAttemptAnswers failed:", error.message);
     return [];
   }
-  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+  const list = ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     ...(row as unknown as AttemptAnswer),
     question: (row.question_data as QuestionSnapshot | null) ?? undefined,
   }));
+  // Attempts saved after the position field existed come back in exact paper order;
+  // older ones keep the database order (answered_at).
+  const hasPosition = list.length > 0 && list.every((r) => typeof r.question?.position === "number");
+  return hasPosition ? list.sort((a, b) => (a.question!.position as number) - (b.question!.position as number)) : list;
 }
 
 // ─── Analytics helpers ───────────────────────────────────────────────────────
 
 export type SubjectStats = {
   subjectName: string;
+  /** Questions the student actually answered in this subject */
   total: number;
   correct: number;
+  /** correct ÷ answered, as a whole percentage */
   accuracy: number;
+  /** Questions left blank (only recorded for attempts saved after unanswered rows were stored) */
+  unanswered?: number;
 };
 
+/** One saved answer, reduced to what the statistics need (the full snapshot is large) */
+export type AnswerLite = {
+  attempt_id: string;
+  subject: string;
+  /** false = the student left it blank */
+  answered: boolean;
+  correct: boolean;
+};
+
+const ANSWER_PAGE = 1000;
+const ANSWER_MAX_PAGES = 40;
+
+type AnyRow = Record<string, unknown>;
+
+function toAnswerLite(row: AnyRow): AnswerLite {
+  const snapshot = row.question_data as { subject_name?: string | null } | null | undefined;
+  const subject = (row.subject_name as string | null | undefined) ?? snapshot?.subject_name ?? "Unknown";
+  return {
+    attempt_id: String(row.attempt_id),
+    subject: subject || "Unknown",
+    answered: row.selected_option !== null && row.selected_option !== undefined,
+    correct: row.is_correct === true,
+  };
+}
+
 /**
- * Returns per-subject accuracy derived from all submitted attempt_answers
- * for a user. Reads subject_name from the stored question snapshot.
+ * Page through a query. Supabase returns at most 1000 rows per request, so a student with a few
+ * full mock exams (180 answers each) used to have their statistics silently cut off.
+ * Returns null if any page fails so the caller can fall back.
+ */
+async function fetchAllPages(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>,
+  label: string,
+): Promise<AnyRow[] | null> {
+  const out: AnyRow[] = [];
+  for (let i = 0; i < ANSWER_MAX_PAGES; i++) {
+    const from = i * ANSWER_PAGE;
+    const { data, error } = await page(from, from + ANSWER_PAGE - 1);
+    if (error) {
+      console.error(`${label} failed:`, error.message);
+      return null;
+    }
+    const rows = (data ?? []) as AnyRow[];
+    out.push(...rows);
+    if (rows.length < ANSWER_PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Every answer row for the user's submitted attempts, lightweight.
+ *  1. Fast path: one joined query that returns only the columns we need.
+ *  2. Fallback (older database setups): attempt ids in chunks + the full snapshot.
+ */
+export async function getAnswerRows(supabase: SupabaseClient, userId: string): Promise<AnswerLite[]> {
+  const fast = await fetchAllPages(
+    (from, to) =>
+      supabase
+        .from("attempt_answers")
+        .select("id, attempt_id, selected_option, is_correct, subject_name:question_data->>subject_name, exam_attempts!inner(user_id, status)")
+        .eq("exam_attempts.user_id", userId)
+        .eq("exam_attempts.status", "submitted")
+        .order("id", { ascending: true })
+        .range(from, to),
+    "getAnswerRows (joined)",
+  );
+  if (fast) return fast.map(toAnswerLite);
+
+  const ids = await fetchAllPages(
+    (from, to) =>
+      supabase
+        .from("exam_attempts")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("status", "submitted")
+        .order("id", { ascending: true })
+        .range(from, to),
+    "getAnswerRows (attempt ids)",
+  );
+  if (!ids || ids.length === 0) return [];
+  const idList = ids.map((r) => String(r.id));
+  const out: AnswerLite[] = [];
+  for (let i = 0; i < idList.length; i += 40) {
+    const chunk = idList.slice(i, i + 40);
+    const rows = await fetchAllPages(
+      (from, to) =>
+        supabase
+          .from("attempt_answers")
+          .select("id, attempt_id, selected_option, is_correct, question_data")
+          .in("attempt_id", chunk)
+          .order("id", { ascending: true })
+          .range(from, to),
+      "getAnswerRows (chunk)",
+    );
+    if (rows) out.push(...rows.map(toAnswerLite));
+  }
+  return out;
+}
+
+/**
+ * Per-subject accuracy across every submitted attempt. Accuracy is correct ÷ answered (questions left
+ * blank are reported separately), the same meaning it always had because blanks used to be unsaved.
  */
 export async function getSubjectStats(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<SubjectStats[]> {
-  // Fetch all answered questions for submitted attempts
-  const { data: attemptIds, error: idsError } = await supabase
-    .from("exam_attempts")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("status", "submitted");
-
-  if (idsError) {
-    console.error("getSubjectStats (attempt ids) failed:", idsError.message);
-    return [];
+  const rows = await getAnswerRows(supabase, userId);
+  const map = new Map<string, { total: number; correct: number; unanswered: number }>();
+  for (const r of rows) {
+    const entry = map.get(r.subject) ?? { total: 0, correct: 0, unanswered: 0 };
+    if (r.answered) {
+      entry.total += 1;
+      if (r.correct) entry.correct += 1;
+    } else {
+      entry.unanswered += 1;
+    }
+    map.set(r.subject, entry);
   }
-  const idList = attemptIds?.map((a: { id: string }) => a.id) ?? [];
-  if (idList.length === 0) return [];
+  return Array.from(map.entries())
+    .filter(([, v]) => v.total > 0 || v.unanswered > 0)
+    .map(([subjectName, { total, correct, unanswered }]) => ({
+      subjectName,
+      total,
+      correct,
+      unanswered,
+      accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+    }));
+}
 
-  const { data: answers, error } = await supabase
-    .from("attempt_answers")
-    .select("is_correct, question_data")
-    .in("attempt_id", idList);
-
-  if (error) {
-    console.error("getSubjectStats failed:", error.message);
-    return [];
-  }
-
-  // Aggregate by subject (from snapshot)
-  const map = new Map<string, { total: number; correct: number }>();
-  for (const row of (answers ?? []) as Array<{
-    is_correct: boolean | null;
-    question_data: QuestionSnapshot | null;
-  }>) {
-    const name = row.question_data?.subject_name ?? "Unknown";
-    const entry = map.get(name) ?? { total: 0, correct: 0 };
-    entry.total += 1;
-    if (row.is_correct) entry.correct += 1;
-    map.set(name, entry);
-  }
-
-  return Array.from(map.entries()).map(([subjectName, { total, correct }]) => ({
-    subjectName,
-    total,
-    correct,
-    accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
-  }));
+/** Everything the Analytics page needs, fetched in one go. */
+export async function getAnalyticsData(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<{ attempts: ExamAttempt[]; answers: AnswerLite[] }> {
+  const [attempts, answers] = await Promise.all([getUserAttempts(supabase, userId, 300), getAnswerRows(supabase, userId)]);
+  return { attempts, answers };
 }
 
 /**
