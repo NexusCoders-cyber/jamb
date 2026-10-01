@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import ExplanationView from "@/components/ExplanationView";
 import { getAttemptAnswers } from "@/lib/queries";
 import { Check, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
@@ -24,13 +25,30 @@ function statusFor(a: AttemptAnswer): string {
   return a.is_correct ? "Correct" : "Wrong";
 }
 
+type Section = { subject: string; items: AttemptAnswer[] };
+
+function groupBySubject(answers: AttemptAnswer[]): Section[] {
+  const order: string[] = [];
+  const map = new Map<string, AttemptAnswer[]>();
+  for (const a of answers) {
+    const name = a.question?.subject_name ?? "General";
+    if (!map.has(name)) {
+      map.set(name, []);
+      order.push(name);
+    }
+    map.get(name)!.push(a);
+  }
+  return order.map((subject) => ({ subject, items: map.get(subject)! }));
+}
+
 function ReviewContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
   const attemptId = searchParams.get("attemptId");
 
   const [answers, setAnswers] = useState<AttemptAnswer[]>([]);
-  const [selected, setSelected] = useState<AttemptAnswer | null>(null);
+  const [activeSubject, setActiveSubject] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,12 +59,18 @@ function ReviewContent() {
     getAttemptAnswers(supabase, attemptId)
       .then((rows) => {
         setAnswers(rows);
-        setSelected(rows.find((r) => !r.is_correct) ?? rows[0] ?? null);
+        const firstWrong = rows.find((r) => !r.is_correct) ?? rows[0] ?? null;
+        setSelectedId(firstWrong?.id ?? null);
+        setActiveSubject(firstWrong?.question?.subject_name ?? rows[0]?.question?.subject_name ?? null);
       })
       .finally(() => setLoading(false));
   }, [user, authLoading, attemptId]);
 
-  // Show spinner while auth resolves
+  const sections = useMemo(() => groupBySubject(answers), [answers]);
+  const activeSection = sections.find((s) => s.subject === activeSubject) ?? sections[0] ?? null;
+  const selected = answers.find((a) => a.id === selectedId) ?? null;
+  const localIndex = activeSection && selected ? activeSection.items.findIndex((a) => a.id === selected.id) : -1;
+
   if (authLoading || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
@@ -55,7 +79,6 @@ function ReviewContent() {
     );
   }
 
-  // Auth guard — shows sign-in card if not logged in
   if (!user) {
     return (
       <AuthGuard user={null} loading={false}>
@@ -64,7 +87,6 @@ function ReviewContent() {
     );
   }
 
-  // No attempt data
   if (!attemptId || answers.length === 0) {
     return (
       <main className="min-h-screen px-4 py-6">
@@ -95,16 +117,39 @@ function ReviewContent() {
             </Link>
           )}
         </div>
+
+        {sections.length > 1 && (
+          <div className="mb-4 flex gap-2 overflow-x-auto rounded-[20px] bg-violet-50 p-2 ring-1 ring-violet-100">
+            {sections.map((s) => {
+              const sectionCorrect = s.items.filter((a) => a.is_correct).length;
+              return (
+                <button
+                  key={s.subject}
+                  type="button"
+                  onClick={() => {
+                    setActiveSubject(s.subject);
+                    setSelectedId(s.items.find((a) => !a.is_correct)?.id ?? s.items[0]?.id ?? null);
+                  }}
+                  className={`shrink-0 whitespace-nowrap rounded-xl px-4 py-2 text-xs font-bold transition ${
+                    s.subject === activeSection?.subject ? "bg-white text-violet-900 shadow-sm ring-1 ring-violet-200" : "text-violet-500 hover:bg-white/60"
+                  }`}
+                >
+                  {s.subject} <span className="ml-1 opacity-60">{sectionCorrect}/{s.items.length}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-          {/* Question list */}
           <aside className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
-            <h2 className="mb-4 text-xl font-black text-slate-900">Question summary</h2>
+            <h2 className="mb-4 text-xl font-black text-slate-900">{activeSection?.subject ?? "Question summary"}</h2>
             <div className="grid gap-2 overflow-y-auto" style={{ maxHeight: "600px" }}>
-              {answers.map((a, i) => {
+              {activeSection?.items.map((a, i) => {
                 const status = statusFor(a);
                 return (
-                  <button key={a.id} type="button" onClick={() => setSelected(a)}
-                    className={`flex items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${selected?.id === a.id ? "ring-violet-400 bg-violet-50" : "bg-white ring-slate-200"}`}>
+                  <button key={a.id} type="button" onClick={() => setSelectedId(a.id)}
+                    className={`flex items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${selectedId === a.id ? "ring-violet-400 bg-violet-50" : "bg-white ring-slate-200"}`}>
                     <div>
                       <p className="text-sm font-bold text-slate-900">Q{i + 1}</p>
                       <p className="text-xs text-slate-500 truncate max-w-[120px]">{a.question?.prompt?.slice(0, 30) ?? "—"}…</p>
@@ -118,15 +163,16 @@ function ReviewContent() {
             </div>
           </aside>
 
-          {/* Question detail */}
           <section className="rounded-[28px] bg-slate-50 p-6 ring-1 ring-slate-200">
             {selected && q ? (
               <>
                 <div className="mb-5 flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500">Question {answers.indexOf(selected) + 1}</p>
+                    <p className="text-sm text-slate-500">
+                      {activeSection?.subject ?? "Question"} · Question {localIndex >= 0 ? localIndex + 1 : "—"} of {activeSection?.items.length ?? 0}
+                    </p>
                     <h2 className="text-2xl font-black text-slate-900">
-                      {(q as unknown as { subject?: { name: string }; subject_name?: string | null }).subject_name ?? (q as unknown as { subject?: { name: string } }).subject?.name ?? "Question"}
+                      {q.subject_name ?? "Question"}
                     </h2>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${STATUS_STYLES[statusFor(selected)] ?? ""}`}>
@@ -167,7 +213,7 @@ function ReviewContent() {
                   {q.explanation && (
                     <div className="mt-5 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
                       <p className="text-sm font-bold text-emerald-800">Explanation</p>
-                      <p className="mt-2 text-sm text-emerald-900">{q.explanation}</p>
+                      <ExplanationView text={q.explanation} subject={q.subject_name} className="mt-2.5" />
                     </div>
                   )}
                 </div>
