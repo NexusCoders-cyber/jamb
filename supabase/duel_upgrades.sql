@@ -1,0 +1,17 @@
+-- ============================================================================
+-- Qubit — Duel upgrades: open duels (share link) + abandonment detection.
+-- Run ONCE in the Supabase SQL editor (idempotent).
+--
+--  • Open duels are regular quiz_matches rows with status 'waiting' and
+--    guest_id = null; anyone with the share link can claim the seat via
+--    POST /api/quiz/match/join.
+--  • host_seen_at / guest_seen_at are refreshed by the match-state GET poll
+--    (every ~3s while a player is on the match screen). If a player leaves
+--    the game screen, their timestamp goes stale and the opponent can claim
+--    the win after a 25s grace period (POST action:"claim-win").
+-- ============================================================================
+
+alter table public.quiz_matches add column if not exists host_seen_at timestamptz;
+alter table public.quiz_matches add column if not exists guest_seen_at timestamptz;
+
+create index if not exists quiz_matches_status_idx on public.quiz_matches (status);

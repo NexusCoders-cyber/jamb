@@ -3,8 +3,9 @@
 -- Run ONCE in the Supabase SQL editor (idempotent).
 --
 -- Every signed-in client heartbeats profiles.last_seen_at every 60s while
--- the app is open. "Online" = heartbeat within the last 3 minutes. The dot
--- itself is rendered client-side; no extra tables or realtime needed.
+-- the app is open. Dots are driven INSTANTLY by a Supabase Realtime presence
+-- channel ("online-users"); the heartbeat is the fallback for networks that
+-- block websockets ("online" = heartbeat within the last 3 minutes there).
 -- ============================================================================
 
 alter table public.profiles add column if not exists last_seen_at timestamptz;
