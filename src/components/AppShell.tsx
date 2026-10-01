@@ -272,13 +272,23 @@ interface AppShellProps {
    * the student can't tap away and the full screen height is usable).
    */
   hideBottomNav?: boolean;
+  /**
+   * Full focus mode: no sidebar, no top bar, no tab bar — used while a live
+   * quiz duel is running so players can concentrate on the game.
+   */
+  focus?: boolean;
 }
 
-export default function AppShell({ children, title, back, hideTopBar = false, hideBottomNav = false }: AppShellProps) {
+export default function AppShell({ children, title, back, hideTopBar = false, hideBottomNav = false, focus = false }: AppShellProps) {
   const pathname = usePathname();
   // Single subscription instance — mounting the realtime channel from more
   // than one component throws "cannot add callbacks after subscribe()".
   const unread = useUnreadDMCount();
+
+  // Focus mode: the game IS the screen — no navigation anywhere.
+  if (focus) {
+    return <div className="min-h-dvh bg-[#f5f4ff]">{children}</div>;
+  }
 
   return (
     // dvh (not vh) so the layout matches the *visible* height on iPhone Safari and

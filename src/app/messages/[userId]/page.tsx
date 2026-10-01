@@ -13,13 +13,43 @@ import {
 import Avatar from "@/components/Avatar";
 import OnlineDot, { useOnlineUsers, OnlineStatusText } from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
-import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Trash2, X } from "lucide-react";
+import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Swords, Trash2, X } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
   const today = new Date().toDateString();
   if (d.toDateString() === today) return d.toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+// ─── Message body: linkifies URLs; duel links become an "Accept duel" button ──
+
+function MessageBody({ text, isMe }: { text: string; isMe: boolean }) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (/^https?:\/\//.test(part)) {
+          if (part.includes("/arena?join=")) {
+            // Rewrite to a relative path so the link works on any host
+            const href = part.replace(/^https?:\/\/[^/]+/, "");
+            return (
+              <Link key={i} href={href}
+                className={`mt-1 flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-black ${isMe ? "bg-white text-violet-700" : "bg-violet-600 text-white"}`}>
+                <Swords className="h-4 w-4" aria-hidden /> Accept duel
+              </Link>
+            );
+          }
+          return (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all underline">
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
 }
 
 // ─── Long-press detection (touch + mouse; right-click opens it on desktop) ───
@@ -415,7 +445,7 @@ export default function DMConversationPage() {
                                 <p className={isMe ? "text-violet-100" : "text-slate-500"}>{quote.body}</p>
                               </div>
                             )}
-                            {msg.body}
+                            <MessageBody text={msg.body} isMe={isMe} />
                           </div>
                           <p className={`mt-0.5 text-[10px] text-slate-400 ${isMe ? "text-right" : ""}`}>
                             {timeLabel(msg.created_at)}

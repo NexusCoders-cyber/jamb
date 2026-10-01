@@ -155,6 +155,33 @@ export async function notify(supabase: SupabaseClient, userId: string, title: st
   await supabase.from("notifications").insert({ user_id: userId, title, body });
 }
 
+/** Base URL for share links — Vercel env var, falling back to the request origin. */
+export function appUrl(req: Request): string {
+  const env = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  if (env) return env;
+  return new URL(req.url).origin;
+}
+
+/** Shareable duel link — anyone who opens it claims the open seat. */
+export function duelJoinUrl(req: Request, matchId: string): string {
+  return `${appUrl(req)}/arena?join=${matchId}`;
+}
+
+/** Deliver a duel challenge as a DM so the invite also lands in Messages. */
+export async function sendDuelDM(
+  supabase: SupabaseClient,
+  fromId: string,
+  toId: string,
+  subject: string,
+  joinUrl: string,
+): Promise<void> {
+  await supabase.from("direct_messages").insert({
+    sender_id: fromId,
+    receiver_id: toId,
+    body: `⚔️ Duel challenge: ${subject}!\nTap to accept and play: ${joinUrl}`,
+  });
+}
+
 /**
  * Finish a duel: declare the winner by score, award QPoints once
  * (points_awarded guards double payouts), notify both players.
@@ -182,10 +209,15 @@ export async function finalizeDuel(
             ? hostId
             : guestId;
 
-  await supabase
+  // Atomic settle: only the first caller flips points_awarded, so a resign
+  // racing a claim-win can never pay out twice.
+  const { data: settled } = await supabase
     .from("quiz_matches")
     .update({ status: "completed", winner_id: winnerId, completed_at: new Date().toISOString(), points_awarded: true })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("points_awarded", false)
+    .select("id");
+  if (!settled || settled.length === 0) return;
 
   const awarded: Array<{ userId: string; total: number }> = [];
   for (const pid of [hostId, guestId]) {

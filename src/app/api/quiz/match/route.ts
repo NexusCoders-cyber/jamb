@@ -1,4 +1,4 @@
-import { errorResponse, requireUser, getAdminClient, buildQuestionSet } from "@/lib/quiz-server";
+import { errorResponse, requireUser, getAdminClient, buildQuestionSet, sendDuelDM, duelJoinUrl } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,8 @@ export async function POST(req: Request) {
       .single();
     if (error) return Response.json({ error: error.message }, { status: 400 });
 
-    // Duel: drop an invite notification to the friend
+    // Duel: invite row + notification + a DM carrying the share link, so the
+    // challenge is also actionable from Messages.
     if (guestId) {
       await supabase.from("quiz_invites").insert({ match_id: match.id, from_id: user.id, to_id: guestId, subject });
       await supabase.from("notifications").insert({
@@ -46,6 +47,7 @@ export async function POST(req: Request) {
         title: "⚔️ Duel invite",
         body: `${user.name} challenges you to a ${subject} duel!`,
       });
+      await sendDuelDM(supabase, user.id, guestId, subject, duelJoinUrl(req, match.id));
     }
 
     return Response.json({ matchId: match.id });

@@ -26,7 +26,12 @@ type MatchRow = {
   turn_ends_at: string | null;
   winner_id: string | null;
   points_awarded: boolean;
+  host_seen_at: string | null;
+  guest_seen_at: string | null;
 };
+
+/** Grace period before an absent opponent forfeits the duel. */
+const CLAIM_GRACE_MS = 25_000;
 
 const TURN_SECONDS = 45;
 
@@ -107,6 +112,23 @@ export async function GET(req: Request, ctx: Ctx) {
     const m = match as unknown as MatchRow;
     const side = sideOf(m, user.id);
 
+    // Match-screen heartbeat: the client polls this endpoint every ~3s while
+    // the game is on screen. A stale timestamp = the player left the game.
+    await supabase
+      .from("quiz_matches")
+      .update(side === "host"
+        ? { host_seen_at: new Date().toISOString() }
+        : { guest_seen_at: new Date().toISOString() })
+      .eq("id", m.id);
+
+    const oppId = side === "host" ? m.guest_id : m.host_id;
+    const oppSeenAt = side === "host" ? m.guest_seen_at : m.host_seen_at;
+    let oppName: string | null = null;
+    if (oppId) {
+      const { data: opp } = await supabase.from("profiles").select("full_name").eq("id", oppId).maybeSingle();
+      oppName = (opp?.full_name as string | undefined) ?? null;
+    }
+
     const idx = side === "host" ? m.host_index : m.guest_index;
     const finished = side === "host" ? m.host_finished : m.guest_finished;
     const revealed = m.status === "completed";
@@ -123,10 +145,14 @@ export async function GET(req: Request, ctx: Ctx) {
       oppScore: side === "host" ? m.guest_score : m.host_score,
       oppIndex: side === "host" ? m.guest_index : m.host_index,
       oppFinished: side === "host" ? m.guest_finished : m.host_finished,
-      isDuel: Boolean(m.guest_id),
+      // A waiting open duel (guest_id null) is still a duel — not a solo run.
+      isDuel: Boolean(m.guest_id) || m.status === "waiting",
       currentTurn: m.current_turn,
       turnEndsAt: m.turn_ends_at,
       winnerId: m.winner_id,
+      oppId,
+      oppName,
+      oppSeenAt,
       question: idx < questions.length ? redactQuestion(questions[idx]) : null,
       total: questions.length,
       // Correct answers + explanations are only revealed once the duel ends
@@ -144,7 +170,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const { matchId } = await ctx.params;
     const body = (await req.json().catch(() => ({}))) as {
       choice?: number;
-      action?: "skip" | "resign";
+      action?: "skip" | "resign" | "claim-win";
     };
     const supabase = getAdminClient();
 
@@ -160,6 +186,18 @@ export async function POST(req: Request, ctx: Ctx) {
     if (body.action === "resign") {
       const oppId = side === "host" ? m.guest_id : m.host_id;
       if (!m.guest_id) {
+        if (m.status === "waiting") {
+          // Host cancelled an open duel before anyone joined — just retire it
+          // and cancel any pending invites so nobody walks into a dead link.
+          await supabase.from("quiz_matches")
+            .update({ status: "expired", completed_at: new Date().toISOString() })
+            .eq("id", m.id);
+          await supabase.from("quiz_invites")
+            .update({ status: "cancelled" })
+            .eq("match_id", m.id)
+            .eq("status", "pending");
+          return Response.json({ ok: true, resigned: true });
+        }
         // Leaving a solo game just completes it (points for what you earned)
         await supabase.from("quiz_matches")
           .update({ status: "completed", completed_at: new Date().toISOString(), points_awarded: true })
@@ -170,6 +208,19 @@ export async function POST(req: Request, ctx: Ctx) {
       }
       await finalizeDuel(supabase, { ...m, status: "completed" } as unknown as Record<string, unknown>, oppId);
       return Response.json({ ok: true, resigned: true });
+    }
+
+    // Opponent left the game screen — after the grace period the win is ours.
+    // Server-side proof: their match heartbeat (host/guest_seen_at) is stale.
+    if (body.action === "claim-win") {
+      if (!m.guest_id) throw new HttpError(400, "Solo games have no opponent");
+      if (m.status === "completed") return Response.json({ ok: true, already: true });
+      if (m.status !== "active") throw new HttpError(400, "Match is not active");
+      const oppSeen = side === "host" ? m.guest_seen_at : m.host_seen_at;
+      const ageMs = oppSeen ? Date.now() - new Date(oppSeen).getTime() : Number.POSITIVE_INFINITY;
+      if (ageMs < CLAIM_GRACE_MS) throw new HttpError(409, "Opponent is still connected");
+      await finalizeDuel(supabase, { ...m, status: "completed" } as unknown as Record<string, unknown>, user.id);
+      return Response.json({ ok: true, claimed: true });
     }
 
     if (m.status !== "active") throw new HttpError(400, "Match is not active");
