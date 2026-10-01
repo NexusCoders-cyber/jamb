@@ -10,6 +10,7 @@ import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
+import ExplanationView from "@/components/ExplanationView";
 import { novelMatches } from "@/lib/aloc";
 import {
   Calculator,
@@ -538,7 +539,7 @@ function InlineReview({
                       <div className="mt-4 rounded-xl bg-white/80 p-4 ring-1 ring-emerald-200">
                         <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
                         {q.explanation ? (
-                          <p className="mt-1.5 text-sm leading-6 text-slate-700">{q.explanation}</p>
+                          <ExplanationView text={q.explanation} subject={q.subject} className="mt-2" />
                         ) : (
                           <p className="mt-1.5 text-sm text-slate-400">No explanation is available for this question yet.</p>
                         )}
@@ -1239,7 +1240,7 @@ function ExamPageContent() {
             {revealEnabled && isRevealed && q?.explanation && (
               <div className="mt-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
-                <p className="mt-2 text-sm leading-6 text-emerald-900">{q.explanation}</p>
+                <ExplanationView text={q.explanation} subject={q.subject ?? activeSubjectName} className="mt-2.5" />
                 {(q.explanationImages?.length ?? 0) > 0 && (
                   <div className="mt-3 grid gap-3">{q.explanationImages!.map((src) => <QuestionImage key={src} src={src} />)}</div>
                 )}
