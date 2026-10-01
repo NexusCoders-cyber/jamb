@@ -9,6 +9,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { getWrongAnswers } from "@/lib/queries";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
+import ExplanationView from "@/components/ExplanationView";
 import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -181,7 +182,7 @@ export default function MistakesPage() {
                     {q.explanation && (
                       <div className="mt-5 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
                         <p className="text-sm font-bold text-emerald-800">Explanation</p>
-                        <p className="mt-2 text-sm text-emerald-900">{q.explanation}</p>
+                        <ExplanationView text={q.explanation} subject={q.subject_name} className="mt-2.5" />
                       </div>
                     )}
                   </div>
