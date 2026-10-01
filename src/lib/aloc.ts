@@ -6,6 +6,8 @@
  * Auth: AccessToken header (e.g. ALOC-xxxx or QB-xxxx from .env)
  */
 
+import { convertSupSub, decodeEntities, formatExplanationText, htmlToExplanationText } from "./explanation";
+
 const ALOC_BASE = process.env.ALOC_BASE_URL?.trim() || "https://questions.aloc.com.ng/api/v2";
 /** Where relative image paths from ALOC (e.g. "images/bio/cell.png") are served from */
 const ALOC_ASSET_BASE = (process.env.ALOC_ASSET_BASE?.trim() || "https://questions.aloc.com.ng/").replace(/\/?$/, "/");
@@ -137,15 +139,9 @@ export type NormalizedQuestion = {
 export type RichSegment = { text: string; italic?: boolean; bold?: boolean };
 
 function unescapeEntities(input: string): string {
-  return input
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0*39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&[a-z]+;/gi, "");
+  // Full entity table (&times; &divide; &sup2; &deg; &pi; … plus numeric ones): the old version threw
+  // every unknown entity away, so "2 &times; 3" became "2  3" in Maths/Physics questions.
+  return decodeEntities(input);
 }
 
 /**
@@ -168,7 +164,8 @@ export function htmlToSegments(input: string): RichSegment[] {
     buffer = "";
   };
 
-  const tags = input.split(/(<[^>]+>)/);
+  // <sup>2</sup> / <sub>2</sub> → ² / ₂ so "x<sup>2</sup>" stays x², not "x2"
+  const tags = convertSupSub(input).split(/(<[^>]+>)/);
   for (const part of tags) {
     if (/^<[^>]+>$/.test(part)) {
       const tag = part.toLowerCase();
@@ -271,7 +268,7 @@ export function extractImageField(value: string | null | undefined): string[] {
  * are long; flattening them into one block is unreadable.
  */
 export function htmlToParagraphs(input: string): string {
-  const withBreaks = input
+  const withBreaks = convertSupSub(input)
     .replace(/<\/p>\s*<p[^>]*>/gi, "\n\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n\n")
@@ -471,7 +468,10 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   }
 
   const rawSolution = q.solution ?? q.explanation;
-  const explanation = rawSolution ? stripHtml(rawSolution) : null;
+  // Keep the working readable: line breaks kept, ² ₂ × ÷ ° decoded, steps split onto their own lines
+  const explanationSubject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
+  const explanationText = rawSolution ? formatExplanationText(htmlToExplanationText(String(rawSolution)), explanationSubject) : "";
+  const explanation = explanationText || null;
   // Only include section as a separate field if it wasn't already used as the prompt
   const section = rawSection && rawSection !== prompt ? rawSection : null;
   const sectionKind = section ? (hasPassage ? "passage" : classifySection(section)) : null;
