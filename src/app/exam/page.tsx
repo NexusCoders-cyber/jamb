@@ -270,6 +270,7 @@ function InlineReview({
   subject,
   onRetry,
   tabs = [],
+  saveFailed = false,
 }: {
   entries: ReviewEntry[];
   score: number;
@@ -278,6 +279,8 @@ function InlineReview({
   onRetry: () => void;
   /** Subject boundaries — lets the review number each subject 1..N like the exam did */
   tabs?: SubjectTab[];
+  /** The attempt could not be stored — warn the student that it will not appear in history/analytics */
+  saveFailed?: boolean;
 }) {
   const [filter, setFilter] = useState<"all" | "wrong" | "unanswered" | "correct">("all");
   // Which subject card is open (multi-subject mock). Single-subject sessions always show their corrections.
@@ -379,6 +382,12 @@ function InlineReview({
             </Link>
           </div>
         </div>
+
+        {saveFailed && (
+          <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
+            We could not save this attempt to your history, so it will not appear in Analytics. Check your connection and try again. Your answers and corrections are still shown below.
+          </div>
+        )}
 
         <section aria-labelledby="corrections-title">
           <h2 id="corrections-title" className="text-lg font-black text-slate-900">Corrections</h2>
@@ -625,6 +634,7 @@ function ExamPageContent() {
 
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
   const [reviewScore, setReviewScore] = useState(0);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const q = questions[currentQuestion];
   // Position inside the current subject (drives the 1-60 / 1-40 numbering)
@@ -1018,12 +1028,14 @@ function ExamPageContent() {
     try {
       if (user && attemptIdRef.current) {
         const supabase = createSupabaseBrowserClient();
-        const rows = entries
-          .filter((e) => e.selectedIdx !== null)
-          .map((e) => ({
+        // Every question is saved — including the ones left blank — so Review shows the full paper in
+        // order and Analytics can count unanswered questions. Blank rows keep is_correct = null.
+        const rows = entries.map((e) => {
+          const place = locateInSubject(subjectTabs, e.questionIdx, questionTotal);
+          return {
             question_id: e.question.id,
-            selected_option: e.selectedIdx as number,
-            is_correct: e.question.answer === e.selectedIdx,
+            selected_option: e.selectedIdx,
+            is_correct: e.selectedIdx === null ? null : e.question.answer === e.selectedIdx,
             marked_for_review: marked.has(e.questionIdx),
             question: {
               id: e.question.id,
@@ -1043,8 +1055,13 @@ function ExamPageContent() {
               explanation: e.question.explanation,
               difficulty: "medium",
               subject_name: e.question.subject ?? sessionLabel,
+              position: e.questionIdx,
+              subject_number: place.number,
+              passage_id: e.question.passageId ?? undefined,
+              year: e.question.year ?? undefined,
             },
-          }));
+          };
+        });
         await saveAnswers(supabase, attemptIdRef.current, rows);
         await submitAttempt(supabase, attemptIdRef.current, correct);
         await updateStreak(supabase, user.id);
@@ -1058,7 +1075,11 @@ function ExamPageContent() {
           });
         } catch { /* achievements are optional — never block submission */ }
       }
-    } catch (_e) {  }
+    } catch (saveErr) {
+      // The student still sees their result, but tell them it was not stored (history/analytics would be empty otherwise)
+      console.error("Saving attempt failed:", saveErr);
+      setSaveFailed(true);
+    }
 
     setReviewScore(correct);
     setReviewEntries(entries);
@@ -1075,6 +1096,7 @@ function ExamPageContent() {
 
   function handleRetry() {
     setReviewEntries(null);
+    setSaveFailed(false);
     setAnswers({});
     setMarked(new Set());
     setSkipped(new Set());
@@ -1113,6 +1135,7 @@ function ExamPageContent() {
         subject={sessionLabel}
         onRetry={handleRetry}
         tabs={subjectTabs}
+        saveFailed={saveFailed}
       />
     );
   }
