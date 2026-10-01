@@ -208,6 +208,11 @@ export async function getUserAttempts(
   return data ?? [];
 }
 
+export async function deleteAttempt(supabase: SupabaseClient, attemptId: string): Promise<boolean> {
+  const { error } = await supabase.from("exam_attempts").delete().eq("id", attemptId);
+  return !error;
+}
+
 // ─── Attempt Answers ─────────────────────────────────────────────────────────
 
 export async function saveAnswers(
