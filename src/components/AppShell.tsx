@@ -79,7 +79,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
 const TABS: { label: string; href: string; icon: LucideIcon; match: string }[] = [
   { label: "Home",  href: "/dashboard", icon: Home,           match: "/dashboard" },
   { label: "Learn", href: "/practice",  icon: PenLine,        match: "/practice" },
-  { label: "Exam",  href: "/exam",      icon: FileText,       match: "/exam" },
+  { label: "Arena", href: "/arena",     icon: Swords,         match: "/arena" },
   { label: "Chat",  href: "/messages",  icon: Mail,           match: "/messages" },
   { label: "Me",    href: "/profile",   icon: Settings,       match: "/profile" },
 ];

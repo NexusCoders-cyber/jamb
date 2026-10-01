@@ -23,6 +23,7 @@ import {
   Upload,
   UserMinus,
   UserPlus,
+  Zap,
 } from "lucide-react";
 
 // ─── Badge rules (shared definition) ─────────────────────────────────────────
@@ -130,6 +131,8 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
   const [social, setSocial] = useState<SocialStats>({ followers: 0, following: 0, friends: 0 });
   const [following, setFollowing] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
+  // QPoints (Arena) — shown for every profile
+  const [qpoints, setQpoints] = useState<number | null>(null);
 
   // Own-profile editing state
   const [uploading, setUploading] = useState(false);
@@ -163,6 +166,9 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
 
       // Social counters (empty before the social_features migration runs)
       getSocialStats(supabase, targetUserId).then(setSocial);
+      // Arena QPoints — SECURITY DEFINER RPC, works for any profile
+      supabase.rpc("my_total_points", { p_user: targetUserId })
+        .then(({ data }) => { if (typeof data === "number") setQpoints(data); });
       if (viewingOther && user) {
         const { data: fRow } = await supabase
           .from("follows")
@@ -336,10 +342,15 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                 {uploadError && <p className="mt-3 text-xs font-semibold text-rose-200">{uploadError}</p>}
 
                 {/* Social counters + follow state (Phase 2) */}
-                <div className="mt-4 flex items-center gap-4 text-sm">
+                <div className="mt-4 flex flex-wrap items-center gap-4 text-sm">
                   <span><strong className="text-lg font-black">{social.friends}</strong> <span className="text-violet-200">friends</span></span>
                   <span><strong className="text-lg font-black">{social.followers}</strong> <span className="text-violet-200">followers</span></span>
                   <span><strong className="text-lg font-black">{social.following}</strong> <span className="text-violet-200">following</span></span>
+                  {qpoints !== null && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1 font-bold">
+                      <Zap className="h-4 w-4 text-amber-300" aria-hidden /> {qpoints} QPoints
+                    </span>
+                  )}
                 </div>
 
                 {/* Bio — editable only on your own profile */}
