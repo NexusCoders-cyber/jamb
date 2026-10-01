@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getAttempt, getProfile, getSubjectStats } from "@/lib/queries";
+import { getAttempt, getAttemptAnswers, getProfile, getSubjectStats } from "@/lib/queries";
 import AppShell from "@/components/AppShell";
 import { targetStatus } from "@/lib/scoring";
 import type { SubjectStats } from "@/lib/queries";
@@ -27,6 +27,7 @@ function ResultsPageContent() {
 
   // Live subject stats from Supabase
   const [subjectBreakdown, setSubjectBreakdown] = useState<SubjectStats[]>([]);
+  const [breakdownTitle, setBreakdownTitle] = useState("Subject performance");
   const [timeUsed, setTimeUsed] = useState<string | null>(null);
   const [targetScore, setTargetScore] = useState(300);
   // This attempt's result vs the student's target (shared scoring engine)
@@ -41,10 +42,38 @@ function ResultsPageContent() {
       if (p?.target_score) setTargetScore(p.target_score);
     });
 
-    // Fetch per-subject accuracy for the breakdown chart
-    getSubjectStats(supabase, user.id).then((stats) => {
-      if (stats.length > 0) setSubjectBreakdown(stats);
-    });
+    // Per-subject breakdown. For a just-finished exam show THAT exam (English 45/60, Biology 30/40 …),
+    // not lifetime totals; fall back to lifetime accuracy when the attempt has no saved answers.
+    const lifetime = () =>
+      getSubjectStats(supabase, user.id).then((stats) => {
+        if (stats.length > 0) setSubjectBreakdown(stats);
+      });
+    if (attemptId) {
+      getAttemptAnswers(supabase, attemptId)
+        .then((rows) => {
+          const bySubject = new Map<string, { total: number; correct: number }>();
+          for (const r of rows) {
+            const name = r.question?.subject_name || "Questions";
+            const entry = bySubject.get(name) ?? { total: 0, correct: 0 };
+            entry.total += 1; // blank questions count against the subject, like the exam score does
+            if (r.is_correct) entry.correct += 1;
+            bySubject.set(name, entry);
+          }
+          if (bySubject.size === 0) return lifetime();
+          setBreakdownTitle("This exam by subject");
+          setSubjectBreakdown(
+            Array.from(bySubject.entries()).map(([subjectName, v]) => ({
+              subjectName,
+              total: v.total,
+              correct: v.correct,
+              accuracy: Math.round((v.correct / v.total) * 100),
+            })),
+          );
+        })
+        .catch(() => lifetime());
+    } else {
+      lifetime();
+    }
 
     // Fetch the attempt to show time used
     if (attemptId) {
@@ -138,7 +167,7 @@ function ResultsPageContent() {
         {/* Subject breakdown */}
         <section className="mt-8 rounded-[28px] bg-slate-50 p-6 ring-1 ring-slate-200">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-2xl font-black text-slate-900">Subject performance</h3>
+            <h3 className="text-2xl font-black text-slate-900">{breakdownTitle}</h3>
             {attemptId && (
               <Link href={`/review?attemptId=${attemptId}`} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">
                 Open correction room
@@ -156,7 +185,10 @@ function ResultsPageContent() {
                 <div key={item.subjectName}>
                   <div className="mb-2 flex items-center justify-between text-sm font-semibold text-slate-700">
                     <span>{item.subjectName}</span>
-                    <span>{item.accuracy}%</span>
+                    <span className="tabular-nums">
+                      {breakdownTitle !== "Subject performance" ? `${item.correct}/${item.total} · ` : ""}
+                      {item.accuracy}%
+                    </span>
                   </div>
                   <div className="h-3 overflow-hidden rounded-full bg-slate-200">
                     <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400" style={{ width: `${item.accuracy}%` }} />
