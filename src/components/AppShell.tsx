@@ -12,7 +12,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Logo from "@/components/Logo";
-import { OnlineProvider } from "@/components/OnlineDot";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -285,22 +284,21 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
     // dvh (not vh) so the layout matches the *visible* height on iPhone Safari and
     // Android Chrome, where the browser bars make 100vh taller than the screen.
     // pt-safe keeps content clear of the notch / status bar when installed as a PWA.
-    <OnlineProvider>
-      <div className={`bg-[#f5f4ff] lg:pl-64 ${hideBottomNav ? "min-h-dvh pt-safe" : "min-h-screen"}`}>
-        {/* Desktop sidebar */}
-        <Sidebar pathname={pathname} />
+    // (OnlineProvider lives in the root layout — survives client navigations.)
+    <div className={`bg-[#f5f4ff] lg:pl-64 ${hideBottomNav ? "min-h-dvh pt-safe" : "min-h-screen"}`}>
+      {/* Desktop sidebar */}
+      <Sidebar pathname={pathname} />
 
-        {/* Mobile top bar */}
-        {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
+      {/* Mobile top bar */}
+      {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
 
-        {/* Page content — add bottom padding on mobile so content clears the tab bar */}
-        <main className={`${hideBottomNav ? "pb-0" : "min-h-screen pb-20"} lg:pb-0`}>
-          {children}
-        </main>
+      {/* Page content — add bottom padding on mobile so content clears the tab bar */}
+      <main className={`${hideBottomNav ? "pb-0" : "min-h-screen pb-20"} lg:pb-0`}>
+        {children}
+      </main>
 
-        {/* Mobile bottom tabs */}
-        {!hideBottomNav && <BottomNav pathname={pathname} unread={unread} />}
-      </div>
-    </OnlineProvider>
+      {/* Mobile bottom tabs */}
+      {!hideBottomNav && <BottomNav pathname={pathname} unread={unread} />}
+    </div>
   );
 }

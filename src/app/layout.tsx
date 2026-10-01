@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
+import { OnlineProvider } from "@/components/OnlineDot";
 import "./globals.css";
 
 const inter = Inter({
@@ -44,7 +45,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`h-full antialiased ${inter.variable}`}>
       <body className="h-full font-[family-name:var(--font-inter)] text-slate-900">
-        {children}
+        {/* Page-lifetime presence channel (instant online dots) lives here so
+            client-side navigations never tear it down. */}
+        <OnlineProvider>{children}</OnlineProvider>
       </body>
     </html>
   );
