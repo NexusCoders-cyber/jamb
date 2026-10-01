@@ -8,6 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
+import ExplanationView from "@/components/ExplanationView";
 import { getMyFriendships, type Friendship } from "@/lib/queries";
 import { Swords, Users, Timer, Trophy, Play, Crown, Zap } from "lucide-react";
 
@@ -275,7 +276,7 @@ export default function ArenaPage() {
                   {match.answerKey && match.answerKey.find((a) => a.id === match.question?.id)?.explanation && (
                     <div className="mt-4 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
                       <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
-                      <p className="mt-1 text-sm text-emerald-900">{match.answerKey.find((a) => a.id === match.question?.id)?.explanation}</p>
+                      <ExplanationView text={match.answerKey.find((a) => a.id === match.question?.id)?.explanation ?? ""} subject={match.subject} className="mt-2" />
                     </div>
                   )}
 
