@@ -19,6 +19,7 @@ import Logo from "@/components/Logo";
 const SECTIONS = [
   { label: "Dashboard",     href: "/admin",                icon: "▦" },
   { label: "Users",         href: "/admin/users",          icon: "◉" },
+  { label: "Messages",      href: "/admin/messages",       icon: "✉" },
   { label: "Exams",         href: "/admin/exams",          icon: "▤" },
   { label: "Syllabus",      href: "/admin/syllabus",       icon: "✦" },
   { label: "Announcements", href: "/admin/announcements",  icon: "❢" },
@@ -26,6 +27,7 @@ const SECTIONS = [
   { label: "Community",     href: "/admin/community",      icon: "◈" },
   { label: "Arena & QPoints", href: "/admin/quiz",        icon: "⚔" },
   { label: "Achievements",  href: "/admin/achievements",   icon: "🏆" },
+  { label: "Payments",      href: "/admin/payments",       icon: "₦" },
   { label: "Blog",          href: "/admin/blog",           icon: "✎" },
 ];
 

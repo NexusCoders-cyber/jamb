@@ -11,6 +11,7 @@ import FriendButton from "@/components/FriendButton";
 import {
   BadgeCheck,
   CalendarDays,
+  Crown,
   Flame,
   Loader2,
   Lock,
@@ -265,6 +266,10 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
 
   const name = profile?.full_name || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
   const initials = name.slice(0, 1).toUpperCase();
+  const isPremium = Boolean(
+    profile?.premium_lifetime ||
+    (profile?.premium_until && new Date(profile.premium_until) > new Date()),
+  );
   const today = new Date().toISOString().slice(0, 10);
   const challengeDoneToday = !viewingOther && recentDates.some((d) => d.slice(0, 10) === today);
 
@@ -313,9 +318,16 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-2xl font-black">{name}</h2>
                     {/* Public user ID — searchable + shown on the leaderboard */}
-                    {profile.user_code && (
-                      <p className="mt-0.5 inline-block rounded-full bg-white/15 px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider">{profile.user_code}</p>
-                    )}
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {profile.user_code && (
+                        <span className="rounded-full bg-white/15 px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider">{profile.user_code}</span>
+                      )}
+                      {isPremium && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 px-2.5 py-0.5 text-[10px] font-black text-amber-950">
+                          <Crown className="h-3 w-3" aria-hidden /> PREMIUM
+                        </span>
+                      )}
+                    </div>
                     {!viewingOther && <p className="truncate text-sm text-violet-100">{user?.email}</p>}
                     {profile.course && (
                       <span className="mt-1 inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold">{profile.course}</span>

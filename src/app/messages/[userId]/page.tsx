@@ -11,6 +11,7 @@ import {
   type DirectMessage,
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
+import OnlineDot, { useOnlineUsers } from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
 import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Trash2, X } from "lucide-react";
 
@@ -328,12 +329,13 @@ export default function DMConversationPage() {
         <Link href="/messages" className="rounded-full p-2 text-slate-600 hover:bg-slate-100">
           ←
         </Link>
-        <Link href={`/profile/${partnerId}`} className="shrink-0" aria-label={`View ${partnerName}'s profile`}>
+        <Link href={`/profile/${partnerId}`} className="relative shrink-0" aria-label={`View ${partnerName}'s profile`}>
           <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} />
+          <OnlineDot userId={partnerId} size={40} />
         </Link>
         <Link href={`/profile/${partnerId}`} className="flex-1 min-w-0">
           <p className="font-black text-slate-900 truncate">{partnerName}</p>
-          <p className="text-xs text-slate-400">View profile</p>
+          <OnlineStatusText userId={partnerId} />
         </Link>
         <Link href="/community" className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">
           Community

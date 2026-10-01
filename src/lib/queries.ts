@@ -57,6 +57,11 @@ export type Profile = {
   bio?: string | null;
   /** Short public ID (e.g. QB-7K3X9) used for search + leaderboard display */
   user_code?: string | null;
+  /** Premium status (Paystack): lifetime flag + monthly expiry */
+  premium_lifetime?: boolean | null;
+  premium_until?: string | null;
+  /** Heartbeat for Facebook-style online dots (updated by AppShell) */
+  last_seen_at?: string | null;
   created_at: string;
   updated_at: string;
 };

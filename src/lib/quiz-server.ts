@@ -37,10 +37,10 @@ export function getAdminClient(): SupabaseClient {
 }
 
 /**
- * Validate the request's bearer token and return the caller's user id
- * (plus their name for notifications). Throws on any failure.
+ * Validate the request's bearer token and return the caller's id, name
+ * and email (for Paystack + notifications). Throws on any failure.
  */
-export async function requireUser(req: Request): Promise<{ id: string; name: string }> {
+export async function requireUser(req: Request): Promise<{ id: string; name: string; email: string | null }> {
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) throw new HttpError(401, "Missing auth token");
@@ -52,7 +52,11 @@ export async function requireUser(req: Request): Promise<{ id: string; name: str
     .select("full_name")
     .eq("id", data.user.id)
     .single();
-  return { id: data.user.id, name: (profile?.full_name as string | undefined) ?? data.user.email ?? "A student" };
+  return {
+    id: data.user.id,
+    name: (profile?.full_name as string | undefined) ?? data.user.email ?? "A student",
+    email: data.user.email ?? null,
+  };
 }
 
 export class HttpError extends Error {

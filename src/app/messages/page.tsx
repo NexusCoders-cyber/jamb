@@ -16,6 +16,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
+import OnlineDot from "@/components/OnlineDot";
 import { getDMInbox, getSuggestedPeople, type DMThread, type SuggestedPerson } from "@/lib/queries";
 import { Search, Users, MessageSquare, Sparkles, GraduationCap } from "lucide-react";
 
@@ -257,6 +258,7 @@ export default function MessagesPage() {
                         <Link href={`/messages/${thread.partner_id}`} className="flex min-w-0 flex-1 items-center gap-4" aria-label={`Open chat with ${thread.partner_name}`}>
                           <div className="relative">
                             <Avatar user={{ full_name: thread.partner_name, avatar_url: thread.partner_avatar_url }} size="lg" />
+                            <OnlineDot userId={thread.partner_id} size={48} />
                             {thread.unread > 0 && (
                               <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white">
                                 {thread.unread}
@@ -295,7 +297,7 @@ export default function MessagesPage() {
                       {recommendations.map((s) => (
                         <div key={s.id} className="w-36 shrink-0 rounded-[20px] bg-white p-3 text-center ring-1 ring-slate-200">
                           <Link href={`/profile/${s.id}`} className="block">
-                            <span className="mx-auto block w-fit"><Avatar user={s} size="lg" /></span>
+                            <span className="relative mx-auto block w-fit"><Avatar user={s} size="lg" /><OnlineDot userId={s.id} size={48} /></span>
                             <p className="mt-2 truncate text-xs font-black text-slate-900">{s.full_name}</p>
                             {s.course && <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">{s.course}</p>}
                             {s.mutual_count > 0 && (

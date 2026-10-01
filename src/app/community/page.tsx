@@ -11,6 +11,7 @@ import {
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
 import FriendButton from "@/components/FriendButton";
+import OnlineDot from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
 import { Flag, Heart, Link2, MessageCircle, Pin, Send, ThumbsUp, Users, X } from "lucide-react";
 
@@ -101,8 +102,9 @@ function PostCard({
       <div className="p-4 sm:p-5">
         {/* Header: avatar, name + user code, time, channel, menu */}
         <div className="flex items-start gap-3">
-          <Link href={`/profile/${post.user_id}`} aria-label="View profile">
+          <Link href={`/profile/${post.user_id}`} aria-label="View profile" className="relative shrink-0">
             <Avatar user={{ full_name: post.author?.full_name ?? "Student", avatar_url: post.author?.avatar_url ?? null }} />
+            <OnlineDot userId={post.user_id} size={40} />
           </Link>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2">
@@ -489,7 +491,10 @@ export default function CommunityPage() {
                 <div className="space-y-1">
                   {people.map((p) => (
                     <div key={p.id} className="flex items-center gap-2 rounded-xl px-2 py-1.5 hover:bg-violet-50">
-                      <Avatar user={p} size="sm" />
+                      <span className="relative shrink-0">
+                        <Avatar user={p} size="sm" />
+                        <OnlineDot userId={p.id} size={32} />
+                      </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-bold text-slate-900">{p.full_name}</p>
                         {p.user_code && <p className="text-[11px] text-slate-400">{p.user_code}</p>}
