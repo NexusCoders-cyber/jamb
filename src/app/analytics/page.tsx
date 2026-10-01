@@ -6,9 +6,10 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getProfile, getSubjectStats, getScoreHistory, getUserAttempts } from "@/lib/queries";
+import { getProfile, getSubjectStats, getScoreHistory, getUserAttempts, deleteAttempt } from "@/lib/queries";
 import type { SubjectStats, ExamAttempt } from "@/lib/queries";
 import { weightedJambEstimate, targetStatus, attemptJambScore, bestAttempt, scoreTrend } from "@/lib/scoring";
+import { Trash2 } from "lucide-react";
 
 type ScorePoint = { score: number; question_count: number; submitted_at: string };
 
@@ -23,6 +24,8 @@ export default function AnalyticsPage() {
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [targetScore, setTargetScore] = useState(300);
   const [loading, setLoading] = useState(true);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,8 +43,6 @@ export default function AnalyticsPage() {
       setSubjectStats(stats);
       setScoreHistory(history as ScorePoint[]);
 
-      // Null-guards: an attempt saved without a score/question_count must not
-      // poison the totals with NaN
       const answered = attempts.reduce((s, a) => s + (a.question_count ?? 0), 0);
       const correct = attempts.reduce((s, a) => s + (a.score ?? 0), 0);
       setTotalAnswered(answered);
@@ -51,27 +52,34 @@ export default function AnalyticsPage() {
     }).finally(() => setLoading(false));
   }, [user, authLoading]);
 
+  async function handleDeleteAttempt(id: string) {
+    setDeletingId(id);
+    const supabase = createSupabaseBrowserClient();
+    const ok = await deleteAttempt(supabase, id);
+    if (ok) {
+      setAttempts((prev) => prev.filter((a) => a.id !== id));
+      setTotalExams((prev) => Math.max(prev - 1, 0));
+    }
+    setConfirmDeleteId(null);
+    setDeletingId(null);
+  }
+
   const overallAccuracy = totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
   const weakCount = subjectStats.filter((s) => s.accuracy < 60).length;
   const strongCount = subjectStats.filter((s) => s.accuracy >= 70).length;
 
-  // Target tracking via the shared scoring engine
   const estimate = weightedJambEstimate(attempts);
   const status = targetStatus(estimate, targetScore);
   const best = bestAttempt(attempts);
   const trend = scoreTrend(attempts, 5);
   const trendDelta = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : 0;
 
-  // Chart: normalize history scores to percentages for bar heights.
-  // Null-guards: attempts saved without a score/date must not render NaN bars.
   const chartBars = scoreHistory.map((p) => ({
     pct: p.question_count > 0 ? Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100) : 0,
     label: p.submitted_at
       ? new Date(p.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })
       : "—",
   }));
-  // Pad to at least 7 bars for visual consistency (empties on the left,
-  // since history is ordered oldest → newest)
   while (chartBars.length < 7) chartBars.unshift({ pct: 0, label: "—" });
 
   const analyticsCards = [
@@ -98,7 +106,6 @@ export default function AnalyticsPage() {
               ))}
             </div>
 
-            {/* Target tracking panel */}
             <section className="mt-6 rounded-[28px] bg-gradient-to-br from-[#41348f] to-[#6557d9] p-6 text-white shadow-lg shadow-violet-300/25">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -139,9 +146,6 @@ export default function AnalyticsPage() {
             </section>
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
-              {/* Score over time — value labels always visible (hover-only labels
-                  were invisible on phones), one label cell per bar so dates stay
-                  aligned even when the chart wraps on small screens */}
               <div className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
                 <h2 className="mb-1 text-xl font-black text-slate-900">Score over time</h2>
                 <p className="mb-3 text-xs text-slate-400">Last {chartBars.length} exams — percentage correct</p>
@@ -184,7 +188,6 @@ export default function AnalyticsPage() {
                 )}
               </div>
 
-              {/* Subject trends */}
               <div className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
                 <h2 className="mb-4 text-xl font-black text-slate-900">Subject trends</h2>
                 {loading ? (
@@ -217,7 +220,6 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            {/* Exam history — every submitted attempt */}
             <div className="mt-8 rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-black text-slate-900">Exam history</h2>
@@ -238,23 +240,56 @@ export default function AnalyticsPage() {
                     const q = a.question_count ?? 0;
                     const s = a.score ?? 0;
                     const pct = q > 0 ? Math.round((s / q) * 100) : 0;
+                    const confirming = confirmDeleteId === a.id;
                     return (
-                      <div key={a.id} className="flex items-center gap-4 py-3">
-                        <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${
-                          pct >= 70 ? "bg-emerald-100 text-emerald-700" : pct >= 50 ? "bg-violet-100 text-violet-700" : "bg-rose-100 text-rose-700"
-                        }`}>
-                          {pct}%
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold text-slate-900">{s}/{q} correct</p>
-                          <p className="text-xs text-slate-400">
-                            {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
-                          </p>
+                      <div key={a.id} className="py-3">
+                        <div className="flex items-center gap-4">
+                          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${
+                            pct >= 70 ? "bg-emerald-100 text-emerald-700" : pct >= 50 ? "bg-violet-100 text-violet-700" : "bg-rose-100 text-rose-700"
+                          }`}>
+                            {pct}%
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold text-slate-900">{s}/{q} correct</p>
+                            <p className="text-xs text-slate-400">
+                              {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </p>
+                          </div>
+                          <Link href={`/review?attemptId=${a.id}`}
+                            className="shrink-0 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700">
+                            Review
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(confirming ? null : a.id)}
+                            aria-label="Delete this result"
+                            className="shrink-0 rounded-full border border-slate-200 bg-white p-2 text-slate-400 hover:border-rose-200 hover:text-rose-600"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                          </button>
                         </div>
-                        <Link href={`/review?attemptId=${a.id}`}
-                          className="shrink-0 rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700">
-                          Review
-                        </Link>
+                        {confirming && (
+                          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl bg-rose-50 px-4 py-3 ring-1 ring-rose-200">
+                            <p className="text-xs font-semibold text-rose-700">Delete this result? This can&apos;t be undone.</p>
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="rounded-full bg-white px-3 py-1.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={deletingId === a.id}
+                                onClick={() => handleDeleteAttempt(a.id)}
+                                className="rounded-full bg-rose-600 px-3 py-1.5 text-[10px] font-bold text-white disabled:opacity-60"
+                              >
+                                {deletingId === a.id ? "Deleting…" : "Delete"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
