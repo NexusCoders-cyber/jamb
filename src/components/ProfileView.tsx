@@ -6,7 +6,8 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getProfile, getUserAttempts, type Profile } from "@/lib/queries";
+import { getProfile, getUserAttempts, getSocialStats, followUser, unfollowUser, type Profile, type SocialStats } from "@/lib/queries";
+import FriendButton from "@/components/FriendButton";
 import {
   BadgeCheck,
   CalendarDays,
@@ -20,6 +21,8 @@ import {
   Target,
   Trophy,
   Upload,
+  UserMinus,
+  UserPlus,
 } from "lucide-react";
 
 // ─── Badge rules (shared definition) ─────────────────────────────────────────
@@ -123,6 +126,11 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
   const [notFound, setNotFound] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Social graph (Phase 2): follower/following/friend counters + follow state
+  const [social, setSocial] = useState<SocialStats>({ followers: 0, following: 0, friends: 0 });
+  const [following, setFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+
   // Own-profile editing state
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -152,6 +160,18 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
       if (!p) { setNotFound(true); setLoading(false); return; }
       setProfile(p);
       setBioDraft(p.bio ?? "");
+
+      // Social counters (empty before the social_features migration runs)
+      getSocialStats(supabase, targetUserId).then(setSocial);
+      if (viewingOther && user) {
+        const { data: fRow } = await supabase
+          .from("follows")
+          .select("id")
+          .eq("follower_id", user.id)
+          .eq("following_id", targetUserId)
+          .maybeSingle();
+        setFollowing(Boolean(fRow));
+      }
 
       if (!viewingOther) {
         const attempts = await getUserAttempts(supabase, user!.id, 200);
@@ -286,6 +306,10 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
 
                   <div className="min-w-0 flex-1">
                     <h2 className="truncate text-2xl font-black">{name}</h2>
+                    {/* Public user ID — searchable + shown on the leaderboard */}
+                    {profile.user_code && (
+                      <p className="mt-0.5 inline-block rounded-full bg-white/15 px-2.5 py-0.5 font-mono text-xs font-bold tracking-wider">{profile.user_code}</p>
+                    )}
                     {!viewingOther && <p className="truncate text-sm text-violet-100">{user?.email}</p>}
                     {profile.course && (
                       <span className="mt-1 inline-block rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold">{profile.course}</span>
@@ -310,6 +334,13 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                 </div>
 
                 {uploadError && <p className="mt-3 text-xs font-semibold text-rose-200">{uploadError}</p>}
+
+                {/* Social counters + follow state (Phase 2) */}
+                <div className="mt-4 flex items-center gap-4 text-sm">
+                  <span><strong className="text-lg font-black">{social.friends}</strong> <span className="text-violet-200">friends</span></span>
+                  <span><strong className="text-lg font-black">{social.followers}</strong> <span className="text-violet-200">followers</span></span>
+                  <span><strong className="text-lg font-black">{social.following}</strong> <span className="text-violet-200">following</span></span>
+                </div>
 
                 {/* Bio — editable only on your own profile */}
                 <div className="mt-4">
@@ -354,6 +385,30 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                   className="mb-5 flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 py-3.5 text-sm font-black text-white shadow-lg shadow-violet-300/25 hover:bg-violet-700">
                   <Mail className="h-4 w-4" aria-hidden /> Message {name.split(" ")[0]}
                 </Link>
+              )}
+
+              {/* ── Add friend + follow when viewing someone else ── */}
+              {viewingOther && user && (
+                <div className="mb-5 flex items-center gap-3">
+                  <FriendButton targetUserId={profile.id} />
+                  <button type="button"
+                    disabled={followBusy}
+                    onClick={async () => {
+                      if (!user || followBusy) return;
+                      setFollowBusy(true);
+                      const supabase = createSupabaseBrowserClient();
+                      const ok = following ? await unfollowUser(supabase, user.id, profile.id) : await followUser(supabase, user.id, profile.id);
+                      if (ok) {
+                        setFollowing(!following);
+                        setSocial((s) => ({ ...s, followers: s.followers + (following ? -1 : 1) }));
+                      }
+                      setFollowBusy(false);
+                    }}
+                    className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-bold transition ${following ? "bg-slate-100 text-slate-600 hover:bg-slate-200" : "bg-violet-100 text-violet-700 hover:bg-violet-200"}`}>
+                    {following ? <UserMinus className="h-4 w-4" aria-hidden /> : <UserPlus className="h-4 w-4" aria-hidden />}
+                    {following ? "Following" : "Follow"}
+                  </button>
+                </div>
               )}
 
               {/* ── Stats ── */}

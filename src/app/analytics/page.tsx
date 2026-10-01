@@ -62,10 +62,13 @@ export default function AnalyticsPage() {
   const trend = scoreTrend(attempts, 5);
   const trendDelta = trend.length >= 2 ? trend[trend.length - 1] - trend[0] : 0;
 
-  // Chart: normalize history scores to percentages for bar heights
+  // Chart: normalize history scores to percentages for bar heights.
+  // Null-guards: attempts saved without a score/date must not render NaN bars.
   const chartBars = scoreHistory.map((p) => ({
-    pct: Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100),
-    label: new Date(p.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" }),
+    pct: p.question_count > 0 ? Math.round(((p.score ?? 0) / Math.max(p.question_count ?? 1, 1)) * 100) : 0,
+    label: p.submitted_at
+      ? new Date(p.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })
+      : "—",
   }));
   // Pad to at least 7 bars for visual consistency (empties on the left,
   // since history is ordered oldest → newest)
@@ -136,33 +139,48 @@ export default function AnalyticsPage() {
             </section>
 
             <div className="mt-8 grid gap-6 lg:grid-cols-2">
-              {/* Score over time */}
+              {/* Score over time — value labels always visible (hover-only labels
+                  were invisible on phones), one label cell per bar so dates stay
+                  aligned even when the chart wraps on small screens */}
               <div className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
                 <h2 className="mb-1 text-xl font-black text-slate-900">Score over time</h2>
-                <p className="mb-4 text-xs text-slate-400">Last {chartBars.length} exams — percentage correct</p>
+                <p className="mb-3 text-xs text-slate-400">Last {chartBars.length} exams — percentage correct</p>
                 {loading ? (
-                  <div className="flex h-40 items-center justify-center text-sm text-slate-400">Loading…</div>
+                  <div className="flex h-48 items-center justify-center text-sm text-slate-400">Loading…</div>
                 ) : scoreHistory.length === 0 ? (
-                  <div className="flex h-40 items-center justify-center text-sm text-slate-400">No exams yet</div>
+                  <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
+                    <p className="text-sm text-slate-400">No exams yet — take a mock exam to start your trend line.</p>
+                    <Link href="/exam" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-700">
+                      Take a mock exam
+                    </Link>
+                  </div>
                 ) : (
-                  <div className="flex h-40 items-end gap-2">
-                    {chartBars.map((bar, i) => (
-                      <div key={i} className="relative flex-1 group">
-                        <div
-                          className="w-full rounded-t-2xl bg-gradient-to-t from-violet-500 to-violet-300 transition-all"
-                          style={{ height: `${Math.max(bar.pct, 4)}%` }}
-                        />
-                        <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold text-violet-700 opacity-0 group-hover:opacity-100 transition">
-                          {bar.pct}%
+                  <>
+                    <div className="flex gap-2">
+                      {chartBars.map((b, i) => (
+                        <span key={`v${i}`} className="min-w-0 flex-1 text-center text-[10px] font-black text-slate-500">
+                          {b.pct > 0 ? `${b.pct}%` : ""}
                         </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {scoreHistory.length > 0 && (
-                  <div className="mt-2 flex justify-between text-[10px] text-slate-400">
-                    {chartBars.map((b, i) => <span key={i}>{b.label}</span>)}
-                  </div>
+                      ))}
+                    </div>
+                    <div className="mt-1 flex h-36 items-end gap-2">
+                      {chartBars.map((bar, i) => (
+                        <div key={i} className="flex h-full flex-1 items-end">
+                          <div
+                            className={`w-full rounded-t-xl transition-all ${
+                              bar.pct >= 70 ? "bg-emerald-500" : bar.pct >= 50 ? "bg-violet-500" : bar.pct > 0 ? "bg-rose-400" : "bg-slate-200"
+                            }`}
+                            style={{ height: `${bar.pct > 0 ? Math.max(bar.pct, 5) : 4}%` }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      {chartBars.map((b, i) => (
+                        <span key={`l${i}`} className="min-w-0 flex-1 truncate text-center text-[10px] text-slate-400">{b.label}</span>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -172,7 +190,12 @@ export default function AnalyticsPage() {
                 {loading ? (
                   <p className="text-sm text-slate-400">Loading…</p>
                 ) : subjectStats.length === 0 ? (
-                  <p className="text-sm text-slate-400">Complete exams to see subject trends.</p>
+                  <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
+                    <p className="text-sm text-slate-400">Complete exams to see subject trends.</p>
+                    <Link href="/practice" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-700">
+                      Start practicing
+                    </Link>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     {subjectStats.map((item) => (
@@ -203,7 +226,12 @@ export default function AnalyticsPage() {
               {loading ? (
                 <p className="text-sm text-slate-400">Loading…</p>
               ) : attempts.length === 0 ? (
-                <p className="text-sm text-slate-400">No exams yet — your submitted attempts will appear here.</p>
+                <div className="flex flex-col items-center gap-3 py-6 text-center">
+                  <p className="text-sm text-slate-400">No exams yet — your submitted attempts will appear here.</p>
+                  <Link href="/exam" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-700">
+                    Take your first exam
+                  </Link>
+                </div>
               ) : (
                 <div className="divide-y divide-slate-100">
                   {attempts.map((a) => {

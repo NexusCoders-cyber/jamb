@@ -117,7 +117,7 @@ export default function PostThreadPage() {
   }
 
   return (
-    <AppShell title={post.title.slice(0, 40)} back="/community">
+    <AppShell title={(post.title ?? post.body).slice(0, 40)} back="/community">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
         {/* Back nav */}
         <div className="mb-4 flex items-center justify-between">
@@ -139,7 +139,7 @@ export default function PostThreadPage() {
                 <span className="text-xs text-slate-400">{timeAgo(post.created_at)}</span>
                 <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">#{channelSlug}</span>
               </div>
-              <h1 className="text-2xl font-black text-slate-900">{post.title}</h1>
+              {post.title && <h1 className="text-2xl font-black text-slate-900">{post.title}</h1>}
               <p className="mt-3 text-base leading-7 text-slate-700 whitespace-pre-wrap">{post.body}</p>
               <p className="mt-4 text-xs text-slate-400">{post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}</p>
             </div>

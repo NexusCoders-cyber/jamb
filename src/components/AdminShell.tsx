@@ -24,6 +24,8 @@ const SECTIONS = [
   { label: "Announcements", href: "/admin/announcements",  icon: "❢" },
   { label: "Promos",        href: "/admin/promos",         icon: "★" },
   { label: "Community",     href: "/admin/community",      icon: "◈" },
+  { label: "Arena & QPoints", href: "/admin/quiz",        icon: "⚔" },
+  { label: "Achievements",  href: "/admin/achievements",   icon: "🏆" },
   { label: "Blog",          href: "/admin/blog",           icon: "✎" },
 ];
 

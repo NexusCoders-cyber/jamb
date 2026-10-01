@@ -55,6 +55,8 @@ export type Profile = {
   avatar_url?: string | null;
   /** Short bio shown on the profile page */
   bio?: string | null;
+  /** Short public ID (e.g. QB-7K3X9) used for search + leaderboard display */
+  user_code?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -409,12 +411,14 @@ export type Post = {
   id: string;
   user_id: string;
   channel_id: string;
-  title: string;
+  title: string | null;
   body: string;
   reply_count: number;
+  is_pinned?: boolean;
   created_at: string;
-  author?: { full_name: string; avatar_url?: string | null };
+  author?: { full_name: string; avatar_url?: string | null; user_code?: string | null };
   channel?: { name: string; slug: string };
+  post_likes?: Array<{ user_id: string }> | number;
 };
 
 export type PostReply = {
@@ -423,7 +427,7 @@ export type PostReply = {
   user_id: string;
   body: string;
   created_at: string;
-  author?: { full_name: string; avatar_url?: string | null };
+  author?: { full_name: string; avatar_url?: string | null; user_code?: string | null };
 };
 
 export type DirectMessage = {
@@ -461,14 +465,18 @@ export async function getPosts(
   channelId?: string,
   limit = 30,
 ): Promise<Post[]> {
+  // post_likes embed gives both a count and the user_ids so the client can
+  // highlight posts I liked. Soft-deleted posts are filtered out.
   let q = supabase
     .from("posts")
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name, avatar_url, user_code), channel:channels(name,slug), post_likes(user_id)")
+    .is("deleted_at", null)
+    .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   if (channelId) q = q.eq("channel_id", channelId);
   const { data } = await q;
-  return (data ?? []) as Post[];
+  return ((data ?? []) as unknown) as Post[];
 }
 
 /** Look up a community channel by its slug (used by /community/[slug]). */
@@ -484,7 +492,7 @@ export async function getChannelBySlug(supabase: SupabaseClient, slug: string): 
 export async function getPost(supabase: SupabaseClient, postId: string): Promise<Post | null> {
   const { data } = await supabase
     .from("posts")
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .select("*, author:profiles(full_name, avatar_url, user_code), channel:channels(name,slug), post_likes(user_id)")
     .eq("id", postId)
     .single();
   return data as Post | null;
@@ -494,13 +502,13 @@ export async function createPost(
   supabase: SupabaseClient,
   userId: string,
   channelId: string,
-  title: string,
+  title: string | null,
   body: string,
 ): Promise<Post | null> {
   const { data } = await supabase
     .from("posts")
-    .insert({ user_id: userId, channel_id: channelId, title, body })
-    .select("*, author:profiles(full_name, avatar_url), channel:channels(name,slug)")
+    .insert({ user_id: userId, channel_id: channelId, title: title && title.trim() ? title.trim() : null, body })
+    .select("*, author:profiles(full_name, avatar_url, user_code), channel:channels(name,slug), post_likes(user_id)")
     .single();
   return data as Post | null;
 }
@@ -509,7 +517,7 @@ export async function createPost(
 export async function getReplies(supabase: SupabaseClient, postId: string): Promise<PostReply[]> {
   const { data } = await supabase
     .from("post_replies")
-    .select("*, author:profiles(full_name, avatar_url)")
+    .select("*, author:profiles(full_name, avatar_url, user_code)")
     .eq("post_id", postId)
     .order("created_at", { ascending: true });
   return (data ?? []) as PostReply[];
@@ -826,4 +834,191 @@ export async function sendAnnouncement(
   const { error } = await supabase.from("notifications").insert(rows);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+// ─── Social: user codes, friends, follows, likes ───────────────────────────
+
+export type SocialStats = { followers: number; following: number; friends: number };
+
+export type Friendship = {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: "pending" | "accepted";
+  created_at: string;
+  requester?: { id: string; full_name: string; avatar_url?: string | null; user_code?: string | null };
+  addressee?: { id: string; full_name: string; avatar_url?: string | null; user_code?: string | null };
+};
+
+/** Insert a notification row (RLS: authenticated users may notify others). */
+export async function pushNotification(
+  supabase: SupabaseClient,
+  userId: string,
+  title: string,
+  body: string,
+): Promise<boolean> {
+  const { error } = await supabase.from("notifications").insert({ user_id: userId, title, body });
+  return !error;
+}
+
+/** Send (or re-send) a friend request. */
+export async function sendFriendRequest(
+  supabase: SupabaseClient,
+  myId: string,
+  targetId: string,
+  myName: string,
+): Promise<boolean> {
+  if (myId === targetId) return false;
+  const { error } = await supabase.from("friendships").insert({
+    requester_id: myId,
+    addressee_id: targetId,
+    status: "pending",
+  });
+  if (error) return false; // duplicate request → unique constraint
+  await pushNotification(supabase, targetId, "New friend request", `${myName} sent you a friend request.`);
+  return true;
+}
+
+/** Accept a pending friend request addressed to me. */
+export async function acceptFriendRequest(
+  supabase: SupabaseClient,
+  requestId: string,
+  requesterId: string,
+  myName: string,
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("friendships")
+    .update({ status: "accepted", updated_at: new Date().toISOString() })
+    .eq("id", requestId)
+    .eq("addressee_id", (await supabase.auth.getUser()).data.user?.id ?? "");
+  if (error) return false;
+  await pushNotification(supabase, requesterId, "Friend request accepted", `${myName} accepted your friend request. You are now friends!`);
+  return true;
+}
+
+/** Remove a friendship row (either side, or reject a request). */
+export async function removeFriendship(supabase: SupabaseClient, requestId: string): Promise<boolean> {
+  const { error } = await supabase.from("friendships").delete().eq("id", requestId);
+  return !error;
+}
+
+/**
+ * All friendships involving me, joined with the OTHER person's profile.
+ * Two embeds (requester/addressee) + client-side pick of the counterparty.
+ */
+export async function getMyFriendships(supabase: SupabaseClient, myId: string): Promise<Friendship[]> {
+  const { data, error } = await supabase
+    .from("friendships")
+    .select("*, requester:profiles!friendships_requester_id_fkey(id, full_name, avatar_url, user_code), addressee:profiles!friendships_addressee_id_fkey(id, full_name, avatar_url, user_code)")
+    .or(`requester_id.eq.${myId},addressee_id.eq.${myId}`)
+    .order("created_at", { ascending: false });
+  if (error) return []; // migration not applied yet
+  return (data ?? []) as Friendship[];
+}
+
+/** Follow (one-way). */
+export async function followUser(supabase: SupabaseClient, myId: string, targetId: string): Promise<boolean> {
+  if (myId === targetId) return false;
+  const { error } = await supabase.from("follows").insert({ follower_id: myId, following_id: targetId });
+  return !error;
+}
+
+export async function unfollowUser(supabase: SupabaseClient, myId: string, targetId: string): Promise<boolean> {
+  const { error } = await supabase.from("follows").delete().eq("follower_id", myId).eq("following_id", targetId);
+  return !error;
+}
+
+/** Toggle a post like; returns true when the post is NOW liked. */
+export async function togglePostLike(supabase: SupabaseClient, postId: string, myId: string): Promise<boolean> {
+  const { data: existing } = await supabase
+    .from("post_likes")
+    .select("id")
+    .eq("post_id", postId)
+    .eq("user_id", myId)
+    .maybeSingle();
+  if (existing) {
+    await supabase.from("post_likes").delete().eq("id", (existing as { id: string }).id);
+    return false;
+  }
+  const { error } = await supabase.from("post_likes").insert({ post_id: postId, user_id: myId });
+  return !error;
+}
+
+/** Social counters for a profile page (gracefully empty before migration). */
+export async function getSocialStats(supabase: SupabaseClient, userId: string): Promise<SocialStats> {
+  const { data, error } = await supabase.rpc("public_social_stats", { p_user: userId });
+  if (error || !data || !(data as SocialStats[])[0]) return { followers: 0, following: 0, friends: 0 };
+  const row = (data as SocialStats[])[0];
+  return { followers: Number(row.followers), following: Number(row.following), friends: Number(row.friends) };
+}
+
+/** Find people by name OR user code (community search). */
+export async function searchPeople(
+  supabase: SupabaseClient,
+  query: string,
+  myId: string,
+  limit = 12,
+): Promise<Array<{ id: string; full_name: string; avatar_url: string | null; user_code: string | null; streak_days: number | null }>> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, avatar_url, user_code, streak_days")
+    .or(`full_name.ilike.%${q}%,user_code.ilike.%${q}%`)
+    .neq("id", myId)
+    .limit(limit);
+  if (error) return [];
+  return (data ?? []) as Array<{ id: string; full_name: string; avatar_url: string | null; user_code: string | null; streak_days: number | null }>;
+}
+
+// ─── Admin: content moderation ──────────────────────────────────────────────
+
+export async function adminDeletePost(supabase: SupabaseClient, postId: string): Promise<boolean> {
+  const { error } = await supabase.from("posts").delete().eq("id", postId);
+  return !error;
+}
+
+export async function adminSetPostPinned(supabase: SupabaseClient, postId: string, pinned: boolean): Promise<boolean> {
+  const { error } = await supabase.from("posts").update({ is_pinned: pinned }).eq("id", postId);
+  return !error;
+}
+
+export type ContentReport = {
+  id: string;
+  reporter_id: string;
+  post_id: string | null;
+  reply_id: string | null;
+  reason: string;
+  status: "open" | "resolved";
+  created_at: string;
+};
+
+export async function getOpenReports(supabase: SupabaseClient): Promise<ContentReport[]> {
+  const { data, error } = await supabase
+    .from("content_reports")
+    .select("*")
+    .eq("status", "open")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) return [];
+  return (data ?? []) as ContentReport[];
+}
+
+export async function resolveReport(supabase: SupabaseClient, reportId: string): Promise<boolean> {
+  const { error } = await supabase.from("content_reports").update({ status: "resolved" }).eq("id", reportId);
+  return !error;
+}
+
+export async function createContentReport(
+  supabase: SupabaseClient,
+  reporterId: string,
+  opts: { postId?: string | null; replyId?: string | null; reason: string },
+): Promise<boolean> {
+  const { error } = await supabase.from("content_reports").insert({
+    reporter_id: reporterId,
+    post_id: opts.postId ?? null,
+    reply_id: opts.replyId ?? null,
+    reason: opts.reason,
+  });
+  return !error;
 }

@@ -12,7 +12,7 @@ import {
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
 import EmojiPicker from "@/components/EmojiPicker";
-import { Mail, Reply, Copy, Trash2, X } from "lucide-react";
+import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Trash2, X } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -135,10 +135,12 @@ function MessageActionSheet({
             {isMine && (
               <>
                 <div className="h-px bg-slate-100" />
-                <button type="button" onClick={onDelete}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-rose-600 hover:bg-rose-50">
-                  <Trash2 className="h-5 w-5" aria-hidden /> Delete message
-                </button>
+                <div className="p-3">
+                  <button type="button" onClick={onDelete}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-rose-600 px-4 py-3 text-left text-sm font-black text-white shadow-sm transition hover:bg-rose-700">
+                    <Trash2 className="h-5 w-5" aria-hidden /> Delete message
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -376,6 +378,12 @@ export default function DMConversationPage() {
                             <Avatar user={{ full_name: partnerName, avatar_url: partnerAvatar }} size="sm" />
                           </Link>
                         )}
+                        {/* Always-visible actions button — no need to remember the long-press gesture */}
+                        <button type="button" onClick={() => setSheetMsg(msg)}
+                          aria-label="Message actions"
+                          className="mb-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-slate-400 opacity-60 transition hover:bg-slate-100 hover:text-slate-600 hover:opacity-100">
+                          <MoreHorizontal className="h-4 w-4" aria-hidden />
+                        </button>
                         <div
                           {...longPress}
                           data-mid={msg.id}
@@ -387,14 +395,15 @@ export default function DMConversationPage() {
                               ? "rounded-br-sm bg-violet-600 text-white"
                               : "rounded-bl-sm bg-white text-slate-800 ring-1 ring-slate-200"
                           }`}>
-                            {/* Reply chip — collapsed; tap reveals + jumps to the original */}
+                            {/* Reply chip — high-contrast so it never disappears against the bubble; tap jumps to the original */}
                             {quote && (
                               <button type="button" onClick={() => jumpToReply(msg)}
                                 className={`mb-1 flex max-w-full items-center gap-1 rounded-lg px-2 py-1 text-left text-xs font-bold ${
-                                  isMe ? "bg-black/10 text-violet-100" : "bg-violet-50 text-violet-700"
+                                  isMe ? "bg-white/30 text-white" : "bg-violet-100 text-violet-800 ring-1 ring-violet-300"
                                 }`}>
                                 <Reply className="h-3 w-3 shrink-0" aria-hidden />
-                                <span className="truncate">{quote.senderName}</span>
+                                <span className="truncate">{quote.senderName}: <span className="font-medium opacity-90">{quote.body}</span></span>
+                                <ChevronDown className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
                               </button>
                             )}
                             {/* Expanded quote — only when the original is no longer in the thread */}

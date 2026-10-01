@@ -33,6 +33,8 @@ import {
   Trophy,
   Settings,
   UserRound,
+  Swords,
+  Zap,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -52,11 +54,13 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Mistakes",        href: "/mistakes",            icon: Target },
     ],
   },
-  {
-    label: "Social",
+  {    label: "Social",
+
     items: [
-      { label: "Community", href: "/community", icon: MessagesSquare },
-      { label: "Messages",  href: "/messages",  icon: Mail },
+      { label: "Arena",       href: "/arena",       icon: Swords },
+      { label: "Leaderboard", href: "/leaderboard", icon: Zap },
+      { label: "Community",   href: "/community",   icon: MessagesSquare },
+      { label: "Messages",    href: "/messages",    icon: Mail },
     ],
   },
   {

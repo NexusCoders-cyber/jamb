@@ -178,7 +178,7 @@ export default function ChannelPage() {
                       </span>
                     </div>
                     <Link href={`/community/p/${post.id}`}>
-                      <h3 className="text-lg font-black text-slate-900 hover:text-violet-700 transition">{post.title}</h3>
+                      <h3 className="text-lg font-black text-slate-900 hover:text-violet-700 transition">{post.title ?? post.body.slice(0, 80) + (post.body.length > 80 ? "…" : "")}</h3>
                     </Link>
                     <p className="mt-1 text-sm text-slate-600 line-clamp-2">{post.body}</p>
                     <div className="mt-3 flex items-center gap-4">

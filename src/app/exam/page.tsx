@@ -573,7 +573,10 @@ function ExamPageContent() {
   const isStudyMode = mode === "study";
   const isPracticeMode = mode === "practice";
   const isExamMode = mode === "exam";
-  const revealEnabled = isStudyMode || isPracticeMode;
+  // Only study mode reveals answers as you go. Practice mode now behaves like
+  // the exam: answers + corrections are shown in the post-test review, so the
+  // session score isn't spoiled while answering.
+  const revealEnabled = isStudyMode;
 
   const urlSubject = searchParams.get("subject") ?? ENGLISH;
   const urlCount = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 60));
@@ -1044,6 +1047,15 @@ function ExamPageContent() {
         await saveAnswers(supabase, attemptIdRef.current, rows);
         await submitAttempt(supabase, attemptIdRef.current, correct);
         await updateStreak(supabase, user.id);
+
+        // Achievements: evaluate unlocks after every submitted attempt
+        try {
+          const { data: session } = await supabase.auth.getSession();
+          await fetch("/api/achievements/evaluate", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${session.session?.access_token ?? ""}` },
+          });
+        } catch { /* achievements are optional — never block submission */ }
       }
     } catch (_e) {  }
 
@@ -1088,7 +1100,7 @@ function ExamPageContent() {
     setMarked((p) => { const n = new Set(p); if (n.has(currentQuestion)) { n.delete(currentQuestion); } else { n.add(currentQuestion); } return n; });
   }
 
-  const fmt = timeLeft === null ? (isStudyMode ? "Study mode" : "No timer")
+  const fmt = timeLeft === null ? (isStudyMode ? "Study mode" : isPracticeMode ? "Practice" : "No timer")
     : `${String(Math.floor(timeLeft / 3600)).padStart(2, "0")}:${String(Math.floor((timeLeft % 3600) / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
 
   if (reviewEntries) {
@@ -1113,7 +1125,7 @@ function ExamPageContent() {
           <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
             <div className="min-w-0">
             <p className="hidden text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 sm:block">
-              {isStudyMode ? "Study mode — answers shown immediately" : isPracticeMode ? "Practice — answers shown as you go" : "JAMB standard simulation"}
+              {isStudyMode ? "Study mode — answers shown immediately" : isPracticeMode ? "Practice — answers & corrections after the test" : "JAMB standard simulation"}
             </p>
               <h1 className="truncate text-base font-black tracking-tight text-slate-900 sm:mt-1 sm:text-xl">{sessionLabel}</h1>
             </div>
