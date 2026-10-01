@@ -31,14 +31,15 @@ export function OnlineProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     const supabase = createSupabaseBrowserClient();
-    const beat = () => {
-      void supabase
+    const beat = async () => {
+      // supabase-js builders are lazy — they only execute when awaited.
+      await supabase
         .from("profiles")
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", user.id);
     };
-    beat();
-    const t = setInterval(beat, BEAT_INTERVAL_MS);
+    void beat();
+    const t = setInterval(() => void beat(), BEAT_INTERVAL_MS);
     return () => clearInterval(t);
   }, [user]);
 

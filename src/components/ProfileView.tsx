@@ -8,6 +8,7 @@ import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getProfile, getUserAttempts, getSocialStats, followUser, unfollowUser, type Profile, type SocialStats } from "@/lib/queries";
 import FriendButton from "@/components/FriendButton";
+import OnlineDot from "@/components/OnlineDot";
 import {
   BadgeCheck,
   CalendarDays,
@@ -312,6 +313,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
                         {uploading ? <Loader2 className="h-6 w-6 animate-spin" aria-hidden /> : <Upload className="h-6 w-6" aria-hidden />}
                       </button>
                     )}
+                    <OnlineDot userId={profile.id} size={80} />
                   </div>
                   <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => void handleAvatarChange(e.target.files?.[0])} />
 

@@ -7,6 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
+import OnlineDot from "@/components/OnlineDot";
 import { Crown, Medal, Zap, Swords } from "lucide-react";
 
 type Row = {
@@ -86,7 +87,7 @@ export default function LeaderboardPage() {
                     <Link key={row.user_id} href={`/profile/${row.user_id}`}
                       className={`flex flex-col items-center justify-end rounded-[24px] p-3 text-center ring-1 transition hover:ring-violet-300 ${pos === 0 ? "bg-gradient-to-b from-amber-100 to-white ring-amber-300" : "bg-white ring-slate-200"} ${heights[pos]}`}>
                       <span className="text-xl">{pos === 0 ? "🥇" : pos === 1 ? "🥈" : "🥉"}</span>
-                      <Avatar user={{ full_name: row.full_name, avatar_url: row.avatar_url }} size="sm" />
+                      <span className="relative block"><Avatar user={{ full_name: row.full_name, avatar_url: row.avatar_url }} size="sm" /><OnlineDot userId={row.user_id} size={28} /></span>
                       <p className="mt-1 w-full truncate text-xs font-black text-slate-900">{row.full_name.split(" ")[0]}</p>
                       {row.user_code && <p className="w-full truncate font-mono text-[10px] text-slate-400">{row.user_code}</p>}
                       <p className="text-xs font-black text-violet-700">{row.points} pts</p>
@@ -103,7 +104,7 @@ export default function LeaderboardPage() {
                     <Link key={row.user_id} href={`/profile/${row.user_id}`}
                       className={`flex items-center gap-3 rounded-[24px] p-3.5 ring-1 transition ${isMe ? "bg-violet-50 ring-violet-300" : "bg-white ring-slate-200 hover:ring-violet-200"}`}>
                       <span className={`w-8 text-center text-sm font-black ${row.rank <= 3 ? "text-amber-600" : "text-slate-400"}`}>#{row.rank}</span>
-                      <Avatar user={{ full_name: row.full_name, avatar_url: row.avatar_url }} size="sm" />
+                      <span className="relative block"><Avatar user={{ full_name: row.full_name, avatar_url: row.avatar_url }} size="sm" /><OnlineDot userId={row.user_id} size={28} /></span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center gap-2">
                           <span className="truncate text-sm font-bold text-slate-900">{row.full_name}{isMe ? " (you)" : ""}</span>

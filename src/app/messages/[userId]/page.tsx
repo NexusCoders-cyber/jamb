@@ -11,7 +11,7 @@ import {
   type DirectMessage,
 } from "@/lib/queries";
 import Avatar from "@/components/Avatar";
-import OnlineDot, { useOnlineUsers } from "@/components/OnlineDot";
+import OnlineDot, { useOnlineUsers, OnlineStatusText } from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
 import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Trash2, X } from "lucide-react";
 
