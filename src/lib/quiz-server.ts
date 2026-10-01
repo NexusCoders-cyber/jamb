@@ -250,6 +250,45 @@ function isWinnerId(winnerId: string | null, userId: string): boolean {
   return winnerId !== null && winnerId === userId;
 }
 
+/**
+ * Update a match row, tolerating databases where supabase/duel_upgrades.sql
+ * hasn't run yet: if the *_seen_at columns are missing the update retries
+ * without them (duels keep working; presence-based win claims just stay off).
+ */
+let seenColumnsState: "unknown" | "yes" | "no" = "unknown";
+
+export async function updateMatch(
+  supabase: SupabaseClient,
+  matchId: string,
+  updates: Record<string, unknown>,
+  extraGuards: Record<string, string | null> = {},
+): Promise<{ ok: boolean; error: string | null; updated: number }> {
+  const build = (u: Record<string, unknown>) => {
+    let q = supabase.from("quiz_matches").update(u).eq("id", matchId);
+    for (const [k, v] of Object.entries(extraGuards)) {
+      q = v === null ? q.is(k, null) : q.eq(k, v);
+    }
+    return q.select();
+  };
+  if (seenColumnsState !== "no") {
+    const { data, error } = await build(updates);
+    if (!error) {
+      seenColumnsState = "yes";
+      return { ok: true, error: null, updated: data?.length ?? 0 };
+    }
+    if (/host_seen_at|guest_seen_at/i.test(error.message)) {
+      seenColumnsState = "no"; // migration not applied yet — fall back
+    } else {
+      return { ok: false, error: error.message, updated: 0 };
+    }
+  }
+  const fallback = { ...updates };
+  delete fallback.host_seen_at;
+  delete fallback.guest_seen_at;
+  const { data, error } = await build(fallback);
+  return error ? { ok: false, error: error.message, updated: 0 } : { ok: true, error: null, updated: data?.length ?? 0 };
+}
+
 /** Current weekly period start from admin_settings (defaults to last Sunday UTC). */
 export async function getPeriodStart(supabase: SupabaseClient): Promise<string> {
   const { data } = await supabase.from("admin_settings").select("value").eq("key", "leaderboard_period_start").maybeSingle();

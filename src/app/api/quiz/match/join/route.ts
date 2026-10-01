@@ -1,4 +1,4 @@
-import { errorResponse, requireUser, getAdminClient, HttpError, notify } from "@/lib/quiz-server";
+import { errorResponse, requireUser, getAdminClient, HttpError, notify, updateMatch } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -30,20 +30,20 @@ export async function POST(req: Request) {
     }
 
     if (m.status === "waiting" && !m.guest_id) {
-      const { data: claimed } = await supabase
-        .from("quiz_matches")
-        .update({
+      // Guarded update — only one caller can flip a waiting seat to taken.
+      const claim = await updateMatch(
+        supabase,
+        m.id,
+        {
           guest_id: user.id,
           status: "active",
           current_turn: "host",
           turn_ends_at: new Date(Date.now() + 45_000).toISOString(),
           guest_seen_at: new Date().toISOString(),
-        })
-        .eq("id", m.id)
-        .eq("status", "waiting")
-        .is("guest_id", null)
-        .select("id");
-      if (!claimed || claimed.length === 0) throw new HttpError(409, "Someone just joined this duel — start a new one");
+        },
+        { status: "waiting", guest_id: null },
+      );
+      if (!claim.ok || claim.updated === 0) throw new HttpError(409, "Someone just joined this duel — start a new one");
 
       // Whoever joined first wins; the other pending invites are dead links now.
       await supabase

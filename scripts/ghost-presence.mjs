@@ -4,7 +4,9 @@
  *
  * Usage:
  *   GHOST_ID=<user-uuid> node scripts/ghost-presence.mjs
- * Tracks for 20s, then untracks for 10s, then exits.
+ * Tracks the global channel for 20s, then untracks for 10s, then exits.
+ * Optional: DUEL_ID=<matchId> CHAT_TEXT="..." also joins the duel channel
+ * and broadcasts one chat message (for testing in-game chat).
  * (Anon key only — presence channels need no auth; nothing touches the DB.)
  */
 import { createClient } from "@supabase/supabase-js";
@@ -22,6 +24,10 @@ const supabase = createClient(
 
 const channel = supabase.channel("online-users");
 
+const duelId = process.env.DUEL_ID;
+const chatText = process.env.CHAT_TEXT;
+let duelChannel = null;
+
 let tracked = false;
 channel
   .on("presence", { event: "sync" }, () => {
@@ -33,6 +39,20 @@ channel
       tracked = true;
       await channel.track({ user_id: ghostId });
       console.log("[ghost] tracked as", ghostId);
+      if (duelId && chatText) {
+        duelChannel = supabase.channel(`duel-${duelId}`, { config: { presence: { key: `${ghostId}:ghost` } } });
+        duelChannel.subscribe(async (s) => {
+          if (s === "SUBSCRIBED") {
+            await duelChannel.track({ user_id: ghostId });
+            await duelChannel.send({
+              type: "broadcast",
+              event: "chat",
+              payload: { id: crypto.randomUUID(), user_id: ghostId, name: "Isaiah", text: chatText, at: new Date().toISOString() },
+            });
+            console.log("[ghost] chat sent to duel channel");
+          }
+        });
+      }
       setTimeout(async () => {
         await channel.untrack();
         console.log("[ghost] untracked — should vanish from dots");

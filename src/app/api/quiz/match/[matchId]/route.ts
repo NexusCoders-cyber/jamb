@@ -216,6 +216,11 @@ export async function POST(req: Request, ctx: Ctx) {
       if (!m.guest_id) throw new HttpError(400, "Solo games have no opponent");
       if (m.status === "completed") return Response.json({ ok: true, already: true });
       if (m.status !== "active") throw new HttpError(400, "Match is not active");
+      // Fail closed when the presence columns don't exist yet — no instant-win
+      // farming before supabase/duel_upgrades.sql has been run.
+      if (m.host_seen_at === undefined || m.guest_seen_at === undefined) {
+        throw new HttpError(400, "Duel presence isn't configured yet — run supabase/duel_upgrades.sql in Supabase");
+      }
       const oppSeen = side === "host" ? m.guest_seen_at : m.host_seen_at;
       const ageMs = oppSeen ? Date.now() - new Date(oppSeen).getTime() : Number.POSITIVE_INFINITY;
       if (ageMs < CLAIM_GRACE_MS) throw new HttpError(409, "Opponent is still connected");

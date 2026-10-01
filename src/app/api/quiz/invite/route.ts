@@ -1,4 +1,4 @@
-import { errorResponse, requireUser, getAdminClient, HttpError, notify, sendDuelDM, duelJoinUrl } from "@/lib/quiz-server";
+import { errorResponse, requireUser, getAdminClient, HttpError, notify, sendDuelDM, duelJoinUrl, updateMatch } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -68,18 +68,20 @@ export async function POST(req: Request) {
     await supabase.from("quiz_invites").update({ status: body.accept ? "accepted" : "declined" }).eq("id", inv.id);
 
     if (body.accept) {
-      const { error } = await supabase
-        .from("quiz_matches")
-        .update({
+      const accept = await updateMatch(
+        supabase,
+        inv.match_id,
+        {
           guest_id: user.id,
           status: "active",
           current_turn: "host",
           turn_ends_at: new Date(Date.now() + 45_000).toISOString(),
           guest_seen_at: new Date().toISOString(),
-        })
-        .eq("id", inv.match_id)
-        .eq("status", "waiting");
-      if (error) throw new HttpError(400, error.message);
+        },
+        { status: "waiting" },
+      );
+      if (!accept.ok) throw new HttpError(400, accept.error ?? "Could not join the duel");
+      if (accept.updated === 0) throw new HttpError(400, "This duel is no longer available");
 
       // Other pending invites for this match are dead now.
       await supabase
