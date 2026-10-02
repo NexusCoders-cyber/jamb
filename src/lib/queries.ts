@@ -174,11 +174,12 @@ export async function createAttempt(
   subjectId: string | null,
   questionCount: number,
 ): Promise<ExamAttempt | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("exam_attempts")
     .insert({ user_id: userId, subject_id: subjectId, question_count: questionCount })
     .select()
     .single();
+  if (error) console.error("createAttempt failed:", describeSaveError(error));
   return data ?? null;
 }
 
@@ -199,10 +200,12 @@ export async function submitAttempt(
   attemptId: string,
   score: number,
 ): Promise<void> {
-  await supabase
+  const { error } = await supabase
     .from("exam_attempts")
     .update({ status: "submitted", score, submitted_at: new Date().toISOString() })
     .eq("id", attemptId);
+  // A failed update used to vanish silently, leaving the attempt "in progress" and out of History/Analytics
+  if (error) throw new Error(describeSaveError(error));
 }
 
 export async function getUserAttempts(
@@ -227,40 +230,139 @@ export async function deleteAttempt(supabase: SupabaseClient, attemptId: string)
 
 // ─── Attempt Answers ─────────────────────────────────────────────────────────
 
+/** A readable reason from a Supabase/Postgres error (they are plain objects, not Error instances). */
+export function describeSaveError(e: unknown): string {
+  if (!e) return "Unknown error";
+  if (typeof e === "string") return e;
+  const o = e as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+  const message = typeof o.message === "string" && o.message ? o.message : "Unknown error";
+  const code = typeof o.code === "string" && o.code ? ` [${o.code}]` : "";
+  return `${message}${code}`;
+}
+
+/** What had to be left out so the answers could be stored on an older database. */
+export type SaveReport = {
+  /** false: the saved copy of each question (question_data) could not be stored, so Review will be limited */
+  snapshots: boolean;
+  /** false: blank (unanswered) questions could not be stored */
+  blanks: boolean;
+};
+
+type SaveAnswerInput = {
+  question_id: string;
+  /** null = the student left this question unanswered (it is still saved so Review can show it) */
+  selected_option: number | null;
+  /** null for unanswered questions, so the Mistakes page (which looks for `false`) is unaffected */
+  is_correct: boolean | null;
+  marked_for_review: boolean;
+  /** Full question snapshot so review/mistakes can render without a join */
+  question?: QuestionSnapshot;
+};
+
 export async function saveAnswers(
   supabase: SupabaseClient,
   attemptId: string,
-  answers: Array<{
-    question_id: string;
-    /** null = the student left this question unanswered (it is still saved so Review can show it) */
-    selected_option: number | null;
-    /** null for unanswered questions, so the Mistakes page (which looks for `false`) is unaffected */
-    is_correct: boolean | null;
-    marked_for_review: boolean;
-    /** Full question snapshot so review/mistakes can render without a join */
-    question?: QuestionSnapshot;
-  }>,
-): Promise<void> {
-  if (answers.length === 0) return;
-  // one base time + index keeps the rows in paper order even for pages that sort by answered_at
-  const base = Date.now();
-  const rows = answers.map((a, i) => ({
-    question_id: a.question_id,
-    selected_option: a.selected_option,
-    is_correct: a.is_correct,
-    marked_for_review: a.marked_for_review,
-    ...(a.question ? { question_data: a.question } : {}),
-    attempt_id: attemptId,
-    answered_at: new Date(base + i).toISOString(),
-  }));
-  // Full 180-question papers carry passages + explanations: send them in batches
-  const BATCH = 40;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const { error } = await supabase
-      .from("attempt_answers")
-      .upsert(rows.slice(i, i + BATCH), { onConflict: "attempt_id,question_id" });
-    if (error) throw error;
+  answers: SaveAnswerInput[],
+): Promise<SaveReport> {
+  const report: SaveReport = { snapshots: true, blanks: true };
+  if (answers.length === 0) return report;
+
+  // The table keeps one row per (attempt, question). A question id that appears twice in one paper
+  // would make Postgres reject the whole batch, so repeats get a suffix.
+  const seen = new Map<string, number>();
+  const unique = answers.map((a) => {
+    const n = (seen.get(a.question_id) ?? 0) + 1;
+    seen.set(a.question_id, n);
+    return n === 1 ? a : { ...a, question_id: `${a.question_id}~${n}` };
+  });
+
+  const build = () => {
+    // one base time + index keeps rows in paper order even for pages that sort by answered_at
+    const base = Date.now();
+    return unique
+      .filter((a) => report.blanks || a.selected_option !== null)
+      .map((a, i) => ({
+        question_id: a.question_id,
+        selected_option: a.selected_option,
+        is_correct: a.is_correct,
+        marked_for_review: a.marked_for_review,
+        ...(a.question && report.snapshots ? { question_data: a.question } : {}),
+        attempt_id: attemptId,
+        answered_at: new Date(base + i).toISOString(),
+      }));
+  };
+
+  const BATCH = 40; // full 180-question papers carry passages + explanations
+  // Up to two fallbacks for databases that were not migrated: first without the question copy, then without blanks.
+  for (let round = 0; round < 3; round++) {
+    const rows = build();
+    let failure: { message?: string; code?: string; details?: string } | null = null;
+    for (let i = 0; i < rows.length && !failure; i += BATCH) {
+      const { error } = await supabase
+        .from("attempt_answers")
+        .upsert(rows.slice(i, i + BATCH), { onConflict: "attempt_id,question_id" });
+      if (error) failure = error;
+    }
+    if (!failure) return report;
+
+    const text = `${failure.message ?? ""} ${failure.details ?? ""}`;
+    if (report.snapshots && /question_data/i.test(text)) {
+      report.snapshots = false;
+      continue;
+    }
+    if (report.blanks && (failure.code === "23502" || /null value|not-null|not null/i.test(text))) {
+      report.blanks = false;
+      continue;
+    }
+    throw new Error(describeSaveError(failure));
   }
+  throw new Error("Could not save the answers.");
+}
+
+/**
+ * Store a finished attempt: the attempt record (created now if starting the exam failed to create it),
+ * every question, then the score. The score is recorded even when the answers could not be stored, so the
+ * attempt still counts in History and the JAMB estimate. Safe to call again (it re-sends the same rows).
+ */
+export async function storeAttempt(
+  supabase: SupabaseClient,
+  opts: { userId: string; attemptId: string | null; questionCount: number; rows: SaveAnswerInput[]; score: number },
+): Promise<{ attemptId: string | null; submitted: boolean; problem: string | null; note: string | null }> {
+  let attemptId = opts.attemptId;
+  let problem: string | null = null;
+  let note: string | null = null;
+  let submitted = false;
+
+  try {
+    if (!attemptId) {
+      const created = await createAttempt(supabase, opts.userId, null, opts.questionCount);
+      attemptId = created?.id ?? null;
+    }
+    if (!attemptId) return { attemptId: null, submitted: false, problem: "The attempt record could not be created.", note: null };
+
+    try {
+      const report = await saveAnswers(supabase, attemptId, opts.rows);
+      if (!report.snapshots || !report.blanks) {
+        console.warn("Attempt saved with reduced detail (database not fully migrated):", report);
+        note = "This attempt was saved, but some details could not be stored, so Review may show less than usual.";
+      }
+    } catch (answersErr) {
+      console.error("Saving answers failed:", answersErr);
+      problem = describeSaveError(answersErr);
+    }
+
+    try {
+      await submitAttempt(supabase, attemptId, opts.score);
+      submitted = true;
+    } catch (scoreErr) {
+      console.error("Saving the score failed:", scoreErr);
+      problem = problem ?? describeSaveError(scoreErr);
+    }
+  } catch (err) {
+    console.error("Saving attempt failed:", err);
+    problem = describeSaveError(err);
+  }
+  return { attemptId, submitted, problem, note };
 }
 
 export async function getAttemptAnswers(
