@@ -16,7 +16,7 @@ import {
   Award, Check, Copy, Crown, Link2, MessageCircle, Play, Send, Swords, Timer, Trophy, Users, X, Zap,
 } from "lucide-react";
 
-const TURN_SECONDS = 45;
+const TURN_SECONDS = 10;
 /** Must stay ≥ the server's CLAIM_GRACE_MS (25s) + a small clock-skew buffer. */
 const CLAIM_GRACE_SECONDS = 27;
 
@@ -800,7 +800,7 @@ export default function ArenaPage() {
               className={`rounded-[24px] p-4 text-left ring-2 transition ${mode === "duel" ? "bg-violet-50 ring-violet-500" : "bg-white ring-slate-200"}`}>
               <Users className="h-5 w-5 text-violet-600" aria-hidden />
               <p className="mt-2 text-base font-black text-slate-900">Duel someone</p>
-              <p className="text-xs text-slate-500">Turn-based, 45s per turn · win bonus 25</p>
+              <p className="text-xs text-slate-500">Turn-based, 10s per turn · win bonus 25</p>
             </button>
           </div>
 

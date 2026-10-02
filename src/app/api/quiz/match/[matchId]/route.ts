@@ -33,7 +33,7 @@ type MatchRow = {
 /** Grace period before an absent opponent forfeits the duel. */
 const CLAIM_GRACE_MS = 25_000;
 
-const TURN_SECONDS = 45;
+const TURN_SECONDS = 10;
 
 function sideOf(match: MatchRow, userId: string): "host" | "guest" {
   if (match.host_id === userId) return "host";
@@ -127,7 +127,7 @@ export async function GET(req: Request, ctx: Ctx) {
     // The guarded update makes exactly one poller win the race when both
     // clients poll at the same instant.
     if (m.status === "active" && m.guest_id && m.current_turn && m.turn_ends_at
-        && Date.now() - new Date(m.turn_ends_at).getTime() > 3000) {
+        && Date.now() - new Date(m.turn_ends_at).getTime() > 1000) {
       const flip = await supabase
         .from("quiz_matches")
         .update({ turn_ends_at: new Date().toISOString() })

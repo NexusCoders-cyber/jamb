@@ -9,10 +9,17 @@
 --    (every ~3s while a player is on the match screen). If a player leaves
 --    the game screen, their timestamp goes stale and the opponent can claim
 --    the win after a 25s grace period (POST action:"claim-win").
+--  • question_count is locked to 10 per match — each player answers all 10
+--    questions on alternating turns (turn_ends_at resets per turn).
 -- ============================================================================
 
 alter table public.quiz_matches add column if not exists host_seen_at timestamptz;
 alter table public.quiz_matches add column if not exists guest_seen_at timestamptz;
+
+-- Lock question count to exactly 10 (applies to new rows; existing rows unchanged).
+-- Drop any old lax constraint first, then add the strict one.
+alter table public.quiz_matches drop constraint if exists quiz_matches_question_count_check;
+alter table public.quiz_matches add constraint quiz_matches_question_count_check check (question_count = 10);
 
 create index if not exists quiz_matches_status_idx on public.quiz_matches (status);
 

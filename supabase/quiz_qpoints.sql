@@ -31,7 +31,7 @@ create table if not exists public.quiz_matches (
   host_id uuid not null references public.profiles(id) on delete cascade,
   guest_id uuid references public.profiles(id) on delete cascade, -- null = solo
   subject text not null,
-  question_count integer not null default 10,
+  question_count integer not null default 10 check (question_count = 10),
   status text not null default 'waiting'
     check (status in ('waiting','active','completed','declined','expired')),
   -- Server-side question set (with answers) + per-player progress

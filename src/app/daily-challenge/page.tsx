@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
+import { PaywallGate } from "@/components/Paywall";
 import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import { Check, XCircle } from "lucide-react";
@@ -99,6 +100,7 @@ export default function DailyChallengePage() {
   function next() { setShowExpl(false); if (current < questions.length - 1) setCurrent((c) => c + 1); else void finish(); }
 
   return (
+    <PaywallGate feature="Practice">
     <AppShell title="Daily Challenge">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
         <div className="mb-4 flex items-center justify-between">
@@ -226,5 +228,6 @@ export default function DailyChallengePage() {
         )}
       </div>
     </AppShell>
+    </PaywallGate>
   );
 }

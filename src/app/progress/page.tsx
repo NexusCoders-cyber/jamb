@@ -6,6 +6,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import { PaywallGate } from "@/components/Paywall";
 import { getUserAttempts, getProfile } from "@/lib/queries";
 
 export default function ProgressPage() {
@@ -52,6 +53,7 @@ export default function ProgressPage() {
   ];
 
   return (
+    <PaywallGate feature="Progress">
     <AppShell title="Progress">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
         <h1 className="mb-4 text-2xl font-black text-slate-900">Learning Journey</h1>
@@ -91,5 +93,6 @@ export default function ProgressPage() {
         </AuthGuard>
       </div>
     </AppShell>
+    </PaywallGate>
   );
 }

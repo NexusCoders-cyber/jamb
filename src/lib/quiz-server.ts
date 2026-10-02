@@ -77,12 +77,13 @@ export function errorResponse(e: unknown): Response {
 export const ARENA_SUBJECTS = ALOC_SUBJECTS.map((s) => s.name);
 export const DEFAULT_QUESTION_COUNT = 10;
 
-/** Pull a fresh set of ALOC questions for a match. */
+/** Pull a fresh set of ALOC questions for a match. Count is capped at 10. */
 export async function buildQuestionSet(subject: string, count = DEFAULT_QUESTION_COUNT): Promise<StoredQuestion[]> {
+  const clamped = Math.min(count, DEFAULT_QUESTION_COUNT); // never exceed 10
   const apiKey = getAlocApiKey();
   let raw: Awaited<ReturnType<typeof fetchAlocMany>>;
   try {
-    raw = await fetchAlocMany(apiKey, subject, count, { withComprehension: false });
+    raw = await fetchAlocMany(apiKey, subject, clamped, { withComprehension: false });
   } catch (e) {
     if (e instanceof HttpError) throw e;
     // Network/HTTP failures from the question bank surface as a clear 502
@@ -93,7 +94,7 @@ export async function buildQuestionSet(subject: string, count = DEFAULT_QUESTION
   const questions = raw
     // Skip passage-based questions — a duel needs self-contained prompts
     .filter((q) => !q.hasPassage)
-    .slice(0, count)
+    .slice(0, clamped)
     .map((q) => ({
       id: q.id,
       prompt: q.prompt,

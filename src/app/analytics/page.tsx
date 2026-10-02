@@ -6,6 +6,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import { PaywallGate } from "@/components/Paywall";
 import { getAnalyticsData, getProfile } from "@/lib/queries";
 import type { AnswerLite, ExamAttempt } from "@/lib/queries";
 import { weightedJambEstimate, targetStatus, bestAttempt, scoreTrend, attemptJambScore, JAMB_TOTAL } from "@/lib/scoring";
@@ -108,6 +109,7 @@ export default function AnalyticsPage() {
   ];
 
   return (
+    <PaywallGate feature="Analytics">
     <AppShell title="Analytics">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -456,5 +458,6 @@ export default function AnalyticsPage() {
         </AuthGuard>
       </div>
     </AppShell>
+    </PaywallGate>
   );
 }

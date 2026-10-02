@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { startTransition, Suspense, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AppShell from "@/components/AppShell";
+import { PaywallGate } from "@/components/Paywall";
 import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";

@@ -6,6 +6,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import { PaywallGate } from "@/components/Paywall";
 import { getWrongAnswers } from "@/lib/queries";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
@@ -66,6 +67,7 @@ export default function MistakesPage() {
   const q = selected?.question;
 
   return (
+    <PaywallGate feature="Mistakes">
     <AppShell title="Mistakes">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
         <div className="mb-4 flex items-center justify-between">
@@ -196,5 +198,6 @@ export default function MistakesPage() {
         </AuthGuard>
       </div>
     </AppShell>
+    </PaywallGate>
   );
 }

@@ -10,14 +10,14 @@ export async function POST(req: Request) {
       subject?: string;
       mode?: "solo" | "duel";
       guestId?: string | null;
-      count?: number;
     };
 
     const subject = body.subject?.trim();
     if (!subject) return Response.json({ error: "subject is required" }, { status: 400 });
 
     const supabase = getAdminClient();
-    const questions = await buildQuestionSet(subject, Math.min(Math.max(body.count ?? 10, 5), 15));
+    // Question count is fixed at 10 — clients cannot override this.
+    const questions = await buildQuestionSet(subject, 10);
 
     const mode = body.mode === "solo" ? "solo" : "duel";
     const guestId = mode === "solo" ? null : (body.guestId ?? null);
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
         status: mode === "solo" ? "active" : "waiting",
         questions,
         current_turn: mode === "solo" ? "host" : null,
-        turn_ends_at: mode === "solo" ? new Date(Date.now() + 45_000).toISOString() : null,
+        turn_ends_at: mode === "solo" ? new Date(Date.now() + 10_000).toISOString() : null,
       })
       .select()
       .single();
