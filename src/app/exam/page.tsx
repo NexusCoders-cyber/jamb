@@ -912,6 +912,7 @@ function ExamPageContent() {
       );
     }
     return (
+      <PaywallGate feature="Exam">
       <AppShell title={urlNovel ? "Novel Study" : isStudyMode ? "Study Mode" : "Mock Exam"} back={setupHref}>
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
           <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
