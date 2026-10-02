@@ -9,7 +9,6 @@ import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
 import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
-import AppShell from "@/components/AppShell";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
