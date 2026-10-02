@@ -1047,10 +1047,9 @@ function ExamPageContent() {
           </Link>
         </div>
       </AppShell>
+      </PaywallGate>
     );
   }
-
-  /**
    * Store the attempt: every question (blank ones too, in paper order), then the score.
    * The score is recorded even if the answers could not be stored, so the attempt still counts in
    * History and the JAMB estimate. Safe to call again: it only re-sends the same rows.
