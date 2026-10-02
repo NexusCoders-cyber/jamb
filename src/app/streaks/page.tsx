@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
+import { PaywallGate } from "@/components/Paywall";
 import AuthGuard from "@/components/AuthGuard";
 import { Check, Lock, Trophy } from "lucide-react";
 import { getProfile, getUserAttempts } from "@/lib/queries";

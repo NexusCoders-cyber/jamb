@@ -6,6 +6,7 @@ import { Lock, Share2, Trophy, Users, Zap } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
+import { PaywallGate } from "@/components/Paywall";
 import AuthGuard from "@/components/AuthGuard";
 import { getChannels, getProfile, getUserAttempts } from "@/lib/queries";
 
