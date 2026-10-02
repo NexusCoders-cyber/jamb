@@ -141,6 +141,7 @@ export default function AchievementsPage() {
   }
 
   return (
+    <PaywallGate feature="Progress">
     <AppShell title="Achievements">
       <AuthGuard user={user} loading={authLoading}>
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">

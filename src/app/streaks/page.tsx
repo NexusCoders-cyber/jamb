@@ -84,6 +84,7 @@ export default function StreaksPage() {
   ];
 
   return (
+    <PaywallGate feature="Progress">
     <AppShell title="Streaks">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
         <h1 className="mb-4 text-2xl font-black text-slate-900">Streaks &amp; Milestones</h1>
