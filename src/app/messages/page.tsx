@@ -3,8 +3,7 @@
 /**
  * Messages — two separate navigation spaces (Facebook/WhatsApp style):
  *
- *   Chats     — your conversations + "People you may know" recommendations
- *               (mutual-style: shared subjects/course, most compatible first).
+ *   Chats     — your conversations + a link to People you may know (/people).
  *   Students  — directory with search by name, course or institution interests,
  *               so you can find friends aspiring to the same course.
  */
@@ -17,7 +16,7 @@ import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
 import OnlineDot from "@/components/OnlineDot";
-import { getDMInbox, getSuggestedPeople, type DMThread, type SuggestedPerson } from "@/lib/queries";
+import { getDMInbox, type DMThread } from "@/lib/queries";
 import { Search, Users, MessageSquare, Sparkles, GraduationCap } from "lucide-react";
 
 type Student = {
@@ -54,10 +53,9 @@ export default function MessagesPage() {
   const [threads, setThreads] = useState<DMThread[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // My profile (course + interests power recommendations)
+  // My profile (course + interests power the Students tab)
   const [me, setMe] = useState<Student | null>(null);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
-  const [suggestions, setSuggestions] = useState<SuggestedPerson[]>([]);
 
   // Chats search
   const [chatQuery, setChatQuery] = useState("");
@@ -75,7 +73,6 @@ export default function MessagesPage() {
     const supabase = createSupabaseBrowserClient();
     Promise.all([
       getDMInbox(supabase, user.id),
-      getSuggestedPeople(supabase),
       supabase
         .from("profiles")
         .select("id, full_name, avatar_url, course, interests, streak_days")
@@ -88,9 +85,8 @@ export default function MessagesPage() {
         .order("full_name")
         .limit(200),
     ])
-      .then(([inbox, suggested, profileRes, studentsRes]) => {
+      .then(([inbox, profileRes, studentsRes]) => {
         setThreads(inbox);
-        setSuggestions(suggested);
         setMe((profileRes.data ?? null) as Student | null);
         setAllStudents((studentsRes.data ?? []) as Student[]);
       })
@@ -121,27 +117,6 @@ export default function MessagesPage() {
     }, 300);
     return () => { mounted = false; clearTimeout(t); };
   }, [studentQuery, courseFilter, user]);
-
-  // ── Recommendations: real mutuals from the chat graph (RPC), with a
-  // course/subject-affinity fallback for when the migration hasn't run yet ──
-  const recommendations = useMemo(() => {
-    if (!user) return [];
-    const chatted = new Set(threads.map((t) => t.partner_id));
-
-    if (suggestions.length > 0) {
-      // RPC excludes existing partners already; keep that guard anyway
-      return suggestions.filter((s) => !chatted.has(s.id)).slice(0, 8);
-    }
-
-    // Fallback: heuristic affinity (pre-migration)
-    return allStudents
-      .filter((s) => !chatted.has(s.id))
-      .map((s) => ({ s, score: affinity(me, s) }))
-      .filter(({ score }) => score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8)
-      .map(({ s }) => ({ ...s, mutual_count: 0 }));
-  }, [allStudents, threads, me, user, suggestions]);
 
   // ── Chats tab filtering ────────────────────────────────────────────────────
   const visibleThreads = threads.filter((t) => {
@@ -287,36 +262,19 @@ export default function MessagesPage() {
                   </div>
                 )}
 
-                {/* Recommended — mutual subjects / same course */}
-                {!loading && recommendations.length > 0 && (
-                  <section className="mt-6">
-                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                      <Sparkles className="h-4 w-4 text-amber-500" aria-hidden /> People you may know
-                    </p>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
-                      {recommendations.map((s) => (
-                        <div key={s.id} className="w-36 shrink-0 rounded-[20px] bg-white p-3 text-center ring-1 ring-slate-200">
-                          <Link href={`/profile/${s.id}`} className="block">
-                            <span className="relative mx-auto block w-fit"><Avatar user={s} size="lg" /><OnlineDot userId={s.id} size={48} /></span>
-                            <p className="mt-2 truncate text-xs font-black text-slate-900">{s.full_name}</p>
-                            {s.course && <p className="mt-0.5 truncate text-[10px] font-semibold text-slate-400">{s.course}</p>}
-                            {s.mutual_count > 0 && (
-                              <p className="mt-0.5 text-[10px] font-bold text-violet-600">
-                                {s.mutual_count} mutual {s.mutual_count === 1 ? "friend" : "friends"}
-                              </p>
-                            )}
-                          </Link>
-                          <Link href={`/messages/${s.id}`}
-                            className="mt-2 block rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white hover:bg-violet-700">
-                            Message
-                          </Link>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      Ranked by mutual friends{me?.course ? ` and your course (${me.course})` : ""}.
-                    </p>
-                  </section>
+                {/* People you may know — moved to its own Facebook-style page */}
+                {!loading && (
+                  <Link href="/people"
+                    className="mt-6 flex items-center gap-3 rounded-[24px] bg-white p-4 ring-1 ring-slate-200 transition hover:ring-violet-300">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-violet-100">
+                      <Sparkles className="h-5 w-5 text-violet-600" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-black text-slate-900">People you may know</span>
+                      <span className="block text-xs text-slate-500">Suggestions from your classmates — add friends &amp; start chatting</span>
+                    </span>
+                    <span className="shrink-0 text-lg text-violet-600" aria-hidden>→</span>
+                  </Link>
                 )}
               </>
             )}

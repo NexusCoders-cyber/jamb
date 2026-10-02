@@ -109,7 +109,7 @@ export async function GET(req: Request, ctx: Ctx) {
       .eq("id", matchId)
       .maybeSingle();
     if (!match) throw new HttpError(404, "Match not found");
-    const m = match as unknown as MatchRow;
+    let m = match as unknown as MatchRow;
     const side = sideOf(m, user.id);
 
     // Match-screen heartbeat: the client polls this endpoint every ~3s while
@@ -120,6 +120,32 @@ export async function GET(req: Request, ctx: Ctx) {
         ? { host_seen_at: new Date().toISOString() }
         : { guest_seen_at: new Date().toISOString() })
       .eq("id", m.id);
+
+    // A stalled turn must never freeze the duel. If the turn clock ran out
+    // (with a small skew buffer) while the clock-owner went quiet, the server
+    // passes the turn on for them — both boards keep moving and stay in sync.
+    // The guarded update makes exactly one poller win the race when both
+    // clients poll at the same instant.
+    if (m.status === "active" && m.guest_id && m.current_turn && m.turn_ends_at
+        && Date.now() - new Date(m.turn_ends_at).getTime() > 3000) {
+      const flip = await supabase
+        .from("quiz_matches")
+        .update({ turn_ends_at: new Date().toISOString() })
+        .eq("id", m.id)
+        .eq("current_turn", m.current_turn)
+        .eq("turn_ends_at", m.turn_ends_at)
+        .select("id");
+      if (flip.data && flip.data.length > 0) {
+        await advance(supabase, m, m.current_turn, false);
+      }
+      // Re-read the row so the response reflects the skipped turn either way.
+      const { data: fresh } = await supabase
+        .from("quiz_matches")
+        .select("*")
+        .eq("id", matchId)
+        .maybeSingle();
+      if (fresh) m = fresh as unknown as MatchRow;
+    }
 
     const oppId = side === "host" ? m.guest_id : m.host_id;
     const oppSeenAt = side === "host" ? m.guest_seen_at : m.host_seen_at;

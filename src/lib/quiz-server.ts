@@ -80,7 +80,16 @@ export const DEFAULT_QUESTION_COUNT = 10;
 /** Pull a fresh set of ALOC questions for a match. */
 export async function buildQuestionSet(subject: string, count = DEFAULT_QUESTION_COUNT): Promise<StoredQuestion[]> {
   const apiKey = getAlocApiKey();
-  const raw = await fetchAlocMany(apiKey, subject, count, { withComprehension: false });
+  let raw: Awaited<ReturnType<typeof fetchAlocMany>>;
+  try {
+    raw = await fetchAlocMany(apiKey, subject, count, { withComprehension: false });
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    // Network/HTTP failures from the question bank surface as a clear 502
+    // instead of an opaque "Server error".
+    console.error("[buildQuestionSet] ALOC fetch failed:", e instanceof Error ? e.message : e);
+    throw new HttpError(502, "Could not load questions right now — the question bank didn't respond. Try again in a moment.");
+  }
   const questions = raw
     // Skip passage-based questions — a duel needs self-contained prompts
     .filter((q) => !q.hasPassage)
@@ -219,11 +228,25 @@ export async function finalizeDuel(
     .select("id");
   if (!settled || settled.length === 0) return;
 
+  // ── Scoring: a duel only pays when it truly ends ─────────────────────────
+  // • Forfeit (resign / claim-win): only the player who stayed earns points;
+  //   whoever walked away earns 0.
+  // • Decisive finish: winner earns participation + win bonus + correct-answer
+  //   points; the loser keeps participation + correct-answer points.
+  // • Draw: both keep participation + correct-answer points, no win bonus.
+  // Abandoned / expired / declined duels never reach this function — they pay
+  // nothing at all.
+  const isForfeit = forcedWinner !== undefined;
   const awarded: Array<{ userId: string; total: number }> = [];
   for (const pid of [hostId, guestId]) {
     if (!pid) continue;
-    let total = POINTS.participation;
     const isWinner = winnerId === pid;
+    // The player who forfeited (or lost by forfeit) gets nothing.
+    if (!isWinner && isForfeit) {
+      awarded.push({ userId: pid, total: 0 });
+      continue;
+    }
+    let total = POINTS.participation;
     if (isWinner) total += POINTS.winBonus;
     total += POINTS.correct * (pid === hostId ? hostScore : guestScore);
     const applied = await awardPoints(supabase, pid, total, isWinner ? "duel_win" : "duel_participation", id,
@@ -236,7 +259,9 @@ export async function finalizeDuel(
       supabase,
       userId,
       isWinnerId(winnerId, userId) ? "🏆 Duel won!" : "Duel finished",
-      `Your ${subject} duel is over — you earned ${total} QPoints.`,
+      total > 0
+        ? `Your ${subject} duel is over — you earned ${total} QPoints.`
+        : `Your ${subject} duel ended by forfeit — leaving a live duel earns no QPoints.`,
     );
   }
 

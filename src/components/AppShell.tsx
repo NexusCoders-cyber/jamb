@@ -36,6 +36,7 @@ import {
   Swords,
   Zap,
   Crown,
+  Users,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
     items: [
       { label: "Arena",       href: "/arena",       icon: Swords },
       { label: "Leaderboard", href: "/leaderboard", icon: Zap },
+      { label: "People",      href: "/people",      icon: Users },
       { label: "Community",   href: "/community",   icon: MessagesSquare },
       { label: "Messages",    href: "/messages",    icon: Mail },
     ],
@@ -134,9 +136,53 @@ function useUnreadDMCount(): number {
   return unread;
 }
 
+/** Live count of pending duel invites — powers the red Arena badge. */
+function usePendingInviteCount(): number {
+  const { user } = useUser();
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) { setCount(0); return; }
+    let mounted = true;
+    const supabase = createSupabaseBrowserClient();
+
+    const load = async () => {
+      try {
+        const { count: n } = await supabase
+          .from("quiz_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("to_id", user.id)
+          .eq("status", "pending");
+        if (mounted) setCount(n ?? 0);
+      } catch { /* offline — badge updates on the next tick */ }
+    };
+    load();
+
+    // Realtime insert fires once quiz_invites joins the supabase_realtime
+    // publication (see supabase/duel_upgrades.sql); until then a 20s poll
+    // keeps the badge fresh.
+    const channel = supabase
+      .channel(`arena-invite-badge-${Math.random().toString(36).slice(2)}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "quiz_invites" }, () => load())
+      .subscribe();
+    const t = setInterval(load, 20_000);
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      mounted = false;
+      clearInterval(t);
+      window.removeEventListener("focus", onFocus);
+      void supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  return count;
+}
+
 // ─── Sidebar (desktop) ────────────────────────────────────────────────────────
 
-function Sidebar({ pathname }: { pathname: string }) {
+function Sidebar({ pathname, inviteCount }: { pathname: string; inviteCount: number }) {
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-slate-200/80 lg:bg-white lg:shadow-[2px_0_20px_rgba(101,87,217,0.06)]">
       {/* Logo */}
@@ -165,7 +211,13 @@ function Sidebar({ pathname }: { pathname: string }) {
                     }`}>
                     <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2.25} aria-hidden />
                     {item.label}
-                    {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-500" />}
+                    {item.href === "/arena" && inviteCount > 0 ? (
+                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">
+                        {inviteCount > 9 ? "9+" : inviteCount}
+                      </span>
+                    ) : (
+                      active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-500" />
+                    )}
                   </Link>
                 );
               })}
@@ -191,7 +243,7 @@ function Sidebar({ pathname }: { pathname: string }) {
 
 // ─── Bottom tab bar (mobile) ──────────────────────────────────────────────────
 
-function BottomNav({ pathname, unread }: { pathname: string; unread: number }) {
+function BottomNav({ pathname, unread, inviteCount }: { pathname: string; unread: number; inviteCount: number }) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200/80 bg-white/95 backdrop-blur-md lg:hidden"
@@ -216,6 +268,11 @@ function BottomNav({ pathname, unread }: { pathname: string; unread: number }) {
               {tab.href === "/messages" && unread > 0 && (
                 <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
                   {unread > 9 ? "9+" : unread}
+                </span>
+              )}
+              {tab.href === "/arena" && inviteCount > 0 && (
+                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white">
+                  {inviteCount > 9 ? "9+" : inviteCount}
                 </span>
               )}
             </span>
@@ -284,6 +341,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
   // Single subscription instance — mounting the realtime channel from more
   // than one component throws "cannot add callbacks after subscribe()".
   const unread = useUnreadDMCount();
+  const inviteCount = usePendingInviteCount();
 
   // Focus mode: the game IS the screen — no navigation anywhere.
   if (focus) {
@@ -297,7 +355,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
     // (OnlineProvider lives in the root layout — survives client navigations.)
     <div className={`bg-[#f5f4ff] lg:pl-64 ${hideBottomNav ? "min-h-dvh pt-safe" : "min-h-screen"}`}>
       {/* Desktop sidebar */}
-      <Sidebar pathname={pathname} />
+      <Sidebar pathname={pathname} inviteCount={inviteCount} />
 
       {/* Mobile top bar */}
       {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
@@ -308,7 +366,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
       </main>
 
       {/* Mobile bottom tabs */}
-      {!hideBottomNav && <BottomNav pathname={pathname} unread={unread} />}
+      {!hideBottomNav && <BottomNav pathname={pathname} unread={unread} inviteCount={inviteCount} />}
     </div>
   );
 }

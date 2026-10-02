@@ -57,10 +57,15 @@ export async function POST(req: Request) {
     if (!inv || inv.to_id !== user.id) throw new HttpError(404, "Invite not found");
     if (inv.status !== "pending") throw new HttpError(400, `Invite already ${inv.status}`);
 
-    // The duel must still be open — someone may have joined via the link.
+    // The duel must still be open — with two valid shapes:
+    //  • open duel (guest_id null): first accepter claims the seat.
+    //  • direct invite: the host already reserved the seat for THIS player
+    //    (guest_id === user.id) while the duel waits for them to accept.
     const { data: match } = await supabase.from("quiz_matches").select("*").eq("id", inv.match_id).maybeSingle();
     const m = match as MatchRow | null;
-    if (!m || m.status !== "waiting" || m.guest_id) {
+    const reservedForMe = Boolean(m && m.guest_id === user.id);
+    const seatOpen = Boolean(m && !m.guest_id);
+    if (!m || m.status !== "waiting" || (!reservedForMe && !seatOpen)) {
       await supabase.from("quiz_invites").update({ status: "cancelled" }).eq("id", inv.id);
       throw new HttpError(400, "This duel is no longer available");
     }
@@ -93,7 +98,7 @@ export async function POST(req: Request) {
 
       await notify(supabase, inv.from_id, "⚔️ Duel accepted!", `${user.name} accepted your ${m.subject} duel — good luck!`);
     } else {
-      await supabase.from("quiz_matches").update({ status: "declined" }).eq("id", inv.match_id);
+      await supabase.from("quiz_matches").update({ status: "declined" }).eq("id", inv.match_id).eq("status", "waiting");
       await notify(supabase, inv.from_id, "Duel declined", `${user.name} declined your duel invite.`);
     }
 

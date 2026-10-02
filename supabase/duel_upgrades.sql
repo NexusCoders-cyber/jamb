@@ -15,3 +15,18 @@ alter table public.quiz_matches add column if not exists host_seen_at timestampt
 alter table public.quiz_matches add column if not exists guest_seen_at timestamptz;
 
 create index if not exists quiz_matches_status_idx on public.quiz_matches (status);
+
+-- ----------------------------------------------------------------------------
+-- Live duel invites: put quiz_invites on the realtime publication so invite
+-- arrivals and badges update instantly. Without this, clients fall back to
+-- polling. (Idempotent — safe to run on databases where it's already added.)
+-- ----------------------------------------------------------------------------
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'quiz_invites'
+  ) then
+    alter publication supabase_realtime add table public.quiz_invites;
+  end if;
+end $$;

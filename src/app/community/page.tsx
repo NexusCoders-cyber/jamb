@@ -506,6 +506,18 @@ export default function CommunityPage() {
               </div>
             )}
 
+            {/* People you may know — dedicated Facebook-style page */}
+            {user && (
+              <Link href="/people"
+                className="block rounded-[24px] bg-gradient-to-br from-violet-600 to-violet-500 p-4 text-white shadow-sm transition hover:brightness-105">
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-violet-100">
+                  <Users className="h-4 w-4" aria-hidden /> People you may know
+                </p>
+                <p className="mt-2 text-sm font-black">Find classmates &amp; add friends</p>
+                <p className="mt-0.5 text-xs text-violet-100">Ranked by mutual friends — add and message in one tap →</p>
+              </Link>
+            )}
+
             {/* Channels directory */}
             <div className="rounded-[24px] bg-white p-4 shadow-sm ring-1 ring-slate-200">
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Channels</p>

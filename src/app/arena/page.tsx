@@ -13,7 +13,7 @@ import FriendButton from "@/components/FriendButton";
 import { getMyFriendships, getProfile, type Friendship } from "@/lib/queries";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
-  Check, Copy, Crown, Link2, MessageCircle, Play, Send, Swords, Timer, Trophy, Users, X, Zap,
+  Award, Check, Copy, Crown, Link2, MessageCircle, Play, Send, Swords, Timer, Trophy, Users, X, Zap,
 } from "lucide-react";
 
 const TURN_SECONDS = 45;
@@ -94,6 +94,7 @@ export default function ArenaPage() {
   const [oppOnline, setOppOnline] = useState<boolean | null>(null);
   const [claimIn, setClaimIn] = useState<number | null>(null);
   const claimFiredRef = useRef(false);
+  const claimCooldownUntilRef = useRef(0);
   const oppSeenRef = useRef<string | null>(null);
   const chatChannelRef = useRef<RealtimeChannel | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
@@ -132,6 +133,30 @@ export default function ArenaPage() {
     void loadInvites();
     supabase.rpc("my_total_points", { p_user: user.id }).then(({ data }) => setMyPoints(Number(data ?? 0)));
   }, [user, loadInvites]);
+
+  // ── Rejoin an unfinished duel/solo after a reload or navigation ──────────
+  // Without this, a mid-game refresh strands the player in the lobby while the
+  // duel carries on without them — the "we're not seeing the same game" bug.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const supabase = createSupabaseBrowserClient();
+      const { data } = await supabase
+        .from("quiz_matches")
+        .select("id")
+        .or(`host_id.eq.${user.id},guest_id.eq.${user.id}`)
+        .in("status", ["waiting", "active"])
+        .gte("created_at", new Date(Date.now() - 2 * 3600 * 1000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const id = (data?.[0] as { id: string } | undefined)?.id;
+      if (!id || cancelled) return;
+      const res = await fetch(`/api/quiz/match/${id}`, { headers: await authHeaders(), cache: "no-store" });
+      if (!cancelled && res.ok) setMatch((await res.json()) as MatchState);
+    })();
+    return () => { cancelled = true; };
+  }, [user, authHeaders]);
 
   // Live invite arrivals (needs quiz_invites in the realtime publication —
   // see supabase/duel_upgrades.sql). A slow interval covers older databases.
@@ -186,15 +211,27 @@ export default function ArenaPage() {
     return () => clearInterval(t);
   }, []);
 
+  const matchIdRef = useRef<string | null>(null);
+  useEffect(() => { matchIdRef.current = match?.matchId ?? null; }, [match?.matchId]);
+
+  // True when a match-state poll fails — show a reconnecting strip instead of
+  // silently freezing the board (a common cause of "we're not seeing the
+  // same game").
+  const [connLost, setConnLost] = useState(false);
   const refresh = useCallback(async () => {
-    if (!match) return;
-    const res = await fetch(`/api/quiz/match/${match.matchId}`, { headers: await authHeaders(), cache: "no-store" });
-    if (res.ok) {
+    const id = matchIdRef.current;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/quiz/match/${id}`, { headers: await authHeaders(), cache: "no-store" });
+      if (!res.ok) { setConnLost(true); return; }
       const next = (await res.json()) as MatchState;
+      setConnLost(false);
       setMatch(next);
       if (next.status === "completed") stopPolling();
+    } catch {
+      setConnLost(true);
     }
-  }, [match, authHeaders]);
+  }, [authHeaders]);
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -229,6 +266,7 @@ export default function ArenaPage() {
       window.history.replaceState({}, "", "/arena");
       const stateRes = await fetch(`/api/quiz/match/${json.matchId}`, { headers: await authHeaders(), cache: "no-store" });
       if (stateRes.ok) setMatch((await stateRes.json()) as MatchState);
+      else setJoinError("You joined, but the game could not be opened — refresh Arena to continue.");
     })();
   }, [user, authHeaders]);
 
@@ -285,7 +323,7 @@ export default function ArenaPage() {
       const age = seen ? (Date.now() - new Date(seen).getTime()) / 1000 : 9999;
       const remaining = Math.max(0, Math.ceil(CLAIM_GRACE_SECONDS - age));
       setClaimIn(remaining);
-      if (remaining <= 0 && !claimFiredRef.current) {
+      if (remaining <= 0 && !claimFiredRef.current && Date.now() >= claimCooldownUntilRef.current) {
         claimFiredRef.current = true;
         void claimWin();
       }
@@ -304,8 +342,11 @@ export default function ArenaPage() {
       body: JSON.stringify({ action: "claim-win" }),
     });
     if (res.ok) { await refresh(); return; }
-    // Server says the opponent is still around — presence will re-trigger.
+    // Server says the opponent is still around (or duel presence isn't
+    // configured yet) — back off so we don't hammer the endpoint every second;
+    // presence re-triggers the claim when it flips again.
     claimFiredRef.current = false;
+    claimCooldownUntilRef.current = Date.now() + 10_000;
     setClaimIn(null);
   }
 
@@ -347,6 +388,7 @@ export default function ArenaPage() {
     // Jump straight into the match screen
     const stateRes = await fetch(`/api/quiz/match/${json.matchId}`, { headers: await authHeaders(), cache: "no-store" });
     if (stateRes.ok) setMatch((await stateRes.json()) as MatchState);
+    else setError("The game was created but could not be opened — try again.");
   }
 
   async function answer(choice: number) {
@@ -395,17 +437,24 @@ export default function ArenaPage() {
   }
 
   async function respondInvite(inv: InviteRow, accept: boolean) {
+    setError("");
     const res = await fetch("/api/quiz/invite", {
       method: "POST",
       headers: await authHeaders(),
       body: JSON.stringify({ inviteId: inv.id, accept }),
     });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      setError(json.error ?? "Could not respond to this invite");
+      void loadInvites(); // re-sync — the invite may have been cancelled server-side
+      return;
+    }
     setInvites((prev) => prev.filter((i) => i.id !== inv.id));
     if (!accept) return;
-    const json = (await res.json().catch(() => ({}))) as { error?: string };
-    if (!res.ok) { setError(json.error ?? "Could not accept this invite"); return; }
+    // Accepting jumps straight into the game — fetch the match and open the board.
     const stateRes = await fetch(`/api/quiz/match/${inv.match_id}`, { headers: await authHeaders(), cache: "no-store" });
     if (stateRes.ok) setMatch((await stateRes.json()) as MatchState);
+    else setError("You accepted, but the game could not be opened — open Arena again to continue.");
   }
 
   async function invitePlayer(toId: string) {
@@ -466,6 +515,13 @@ export default function ArenaPage() {
               </button>
             </div>
           </div>
+
+          {/* Connection lost — the board would otherwise silently freeze */}
+          {connLost && (
+            <div className="mb-3 rounded-2xl bg-rose-50 p-3 text-center text-xs font-black text-rose-700 ring-1 ring-rose-200">
+              Connection lost — reconnecting to the duel…
+            </div>
+          )}
 
           {/* Scoreboard */}
           <div className="mb-4 grid grid-cols-2 gap-3">
@@ -698,7 +754,10 @@ export default function ArenaPage() {
           {/* Pending duel invites */}
           {invites.length > 0 && (
             <div className="mb-5 rounded-[24px] bg-amber-50 p-4 ring-1 ring-amber-200">
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-amber-700">Duel invites</p>
+              <p className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-amber-700">
+                Duel invites
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{invites.length}</span>
+              </p>
               {invites.map((inv) => (
                 <div key={inv.id} className="mb-2 flex items-center gap-3 last:mb-0">
                   <span className="min-w-0 flex-1 truncate text-sm font-bold text-slate-800">
@@ -716,6 +775,18 @@ export default function ArenaPage() {
               ))}
             </div>
           )}
+
+          {/* Leaderboard + Achievements — big, impossible to miss */}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Link href="/leaderboard"
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 text-sm font-black text-amber-950 shadow-lg shadow-amber-200/70 transition hover:brightness-105">
+              <Trophy className="h-5 w-5" aria-hidden /> Leaderboard
+            </Link>
+            <Link href="/achievements"
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-sm font-black text-white shadow-lg shadow-violet-300/50 transition hover:brightness-105">
+              <Award className="h-5 w-5" aria-hidden /> Achievements
+            </Link>
+          </div>
 
           {/* Mode switch */}
           <div className="mb-4 grid grid-cols-2 gap-3">
@@ -829,19 +900,15 @@ export default function ArenaPage() {
                   : "Create duel & share link"}
           </button>
 
-          <div className="mt-4 flex justify-center gap-4 text-xs font-bold">
-            <Link href="/leaderboard" className="text-violet-600 hover:underline">Weekly leaderboard →</Link>
-            <Link href="/achievements" className="text-violet-600 hover:underline">Achievements →</Link>
-          </div>
-
           {/* How QPoints work */}
           <div className="mt-6 rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
             <p className="text-sm font-black text-slate-900">How QPoints work</p>
             <ul className="mt-2 space-y-1 text-xs text-slate-600">
-              <li>• Duel win: 25 bonus · participation: 5 · +10 per correct answer</li>
-              <li>• Leave a live duel and your opponent wins instantly</li>
-              <li>• Solo drill: +8 per correct answer</li>
-              <li>• Daily earning cap: 300 QPoints — play fair, climb the weekly board</li>
+              <li>• Duel win: 25 bonus + 5 participation + 10 per correct answer</li>
+              <li>• Play a duel to the end and both players keep 5 + 10 per correct answer — the loser just misses the win bonus</li>
+              <li>• Leave or forfeit a live duel: you earn 0 — your opponent takes the win and the points</li>
+              <li>• Games that never finish (abandoned/expired) pay nothing</li>
+              <li>• Solo drill: +8 per correct answer · daily cap: 300 QPoints</li>
               <li>• Leaderboard resets weekly (set by admins)</li>
             </ul>
           </div>
@@ -873,7 +940,13 @@ function ResultScreen({ match, myId, onExit }: { match: MatchState; myId: string
       <p className="mt-1 text-sm opacity-90">
         Final score {match.yourScore} – {match.oppScore} · {match.subject}
       </p>
-      <p className="mt-3 text-xs opacity-80">QPoints have been added to your ledger — check the leaderboard.</p>
+      <p className="mt-3 text-xs opacity-80">
+        {match.isDuel && !tie
+          ? won
+            ? "Win bonus + points added — check the leaderboard."
+            : "QPoints settled by the result — win next time for the 25-point bonus."
+          : "QPoints have been added to your ledger — check the leaderboard."}
+      </p>
       <div className="mt-5 flex justify-center gap-3">
         <button type="button" onClick={onExit}
           className="rounded-full bg-white px-5 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-100">
