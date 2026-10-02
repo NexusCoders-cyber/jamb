@@ -136,5 +136,6 @@ export default function StreaksPage() {
         </AuthGuard>
       </div>
     </AppShell>
+    </PaywallGate>
   );
 }

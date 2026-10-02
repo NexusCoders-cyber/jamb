@@ -158,17 +158,19 @@ export async function POST(req: Request) {
     // Record discount redemption
     const codeId = paymentRow?.metadata?.code_id ?? txn.metadata?.code_id;
     if (codeId) {
-      await admin.from("discount_redemptions").insert({
-        code_id: codeId,
-        user_id: user.id,
-        payment_id: paymentRow?.id ?? null,
-        amount_off_kobo: paymentRow?.metadata?.discount_kobo ?? txn.metadata?.discount_kobo ?? 0,
-      }).then(() => {
-        // Increment used_count
-        return admin.rpc("increment_discount_used", { p_code_id: codeId });
-      }).catch(() => {
-        // increment RPC may not exist yet — silently skip
-      });
+      try {
+        await admin.from("discount_redemptions").insert({
+          code_id: codeId,
+          user_id: user.id,
+          payment_id: paymentRow?.id ?? null,
+          amount_off_kobo: paymentRow?.metadata?.discount_kobo ?? txn.metadata?.discount_kobo ?? 0,
+        });
+        // Increment used_count — RPC may not exist on older DBs, ignore failure
+        await admin.rpc("increment_discount_used", { p_code_id: codeId }).then(
+          undefined,
+          () => { /* RPC not deployed yet */ },
+        );
+      } catch (_e) { /* silently skip */ }
     }
 
     // Pro notification

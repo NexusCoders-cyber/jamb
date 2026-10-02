@@ -241,5 +241,6 @@ export default function AchievementsPage() {
         </div>
       </AuthGuard>
     </AppShell>
+    </PaywallGate>
   );
 }
