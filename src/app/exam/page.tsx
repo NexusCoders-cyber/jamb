@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { startTransition, Suspense, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
+import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
 import RichText from "@/components/RichText";
@@ -270,7 +270,10 @@ function InlineReview({
   subject,
   onRetry,
   tabs = [],
-  saveFailed = false,
+  saveProblem = null,
+  saveNote = null,
+  onRetrySave,
+  retryingSave = false,
 }: {
   entries: ReviewEntry[];
   score: number;
@@ -279,8 +282,12 @@ function InlineReview({
   onRetry: () => void;
   /** Subject boundaries — lets the review number each subject 1..N like the exam did */
   tabs?: SubjectTab[];
-  /** The attempt could not be stored — warn the student that it will not appear in history/analytics */
-  saveFailed?: boolean;
+  /** Why the attempt could not be stored (null = it was stored) */
+  saveProblem?: string | null;
+  /** The attempt was stored, but with less detail than usual */
+  saveNote?: string | null;
+  onRetrySave?: () => void;
+  retryingSave?: boolean;
 }) {
   const [filter, setFilter] = useState<"all" | "wrong" | "unanswered" | "correct">("all");
   // Which subject card is open (multi-subject mock). Single-subject sessions always show their corrections.
@@ -383,9 +390,33 @@ function InlineReview({
           </div>
         </div>
 
-        {saveFailed && (
-          <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-900 ring-1 ring-amber-200">
-            We could not save this attempt to your history, so it will not appear in Analytics. Check your connection and try again. Your answers and corrections are still shown below.
+        {saveProblem && (
+          <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
+            <p className="font-semibold">
+              We could not save this attempt to your history, so it may be missing from Analytics. Your answers and corrections are still shown below.
+            </p>
+            {/failed to fetch|networkerror|network request|load failed|offline/i.test(saveProblem) && (
+              <p className="mt-1">It looks like your internet connection dropped. Reconnect and try again.</p>
+            )}
+            {onRetrySave && (
+              <button
+                type="button"
+                onClick={onRetrySave}
+                disabled={retryingSave}
+                className="mt-3 touch-manipulation rounded-full bg-amber-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+              >
+                {retryingSave ? "Saving…" : "Try saving again"}
+              </button>
+            )}
+            <details className="mt-3 text-xs text-amber-800">
+              <summary className="cursor-pointer font-bold">Technical details</summary>
+              <p className="mt-1 break-words font-mono">{saveProblem}</p>
+            </details>
+          </div>
+        )}
+        {!saveProblem && saveNote && (
+          <div role="status" className="mb-4 rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+            {saveNote}
           </div>
         )}
 
@@ -634,7 +665,10 @@ function ExamPageContent() {
 
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
   const [reviewScore, setReviewScore] = useState(0);
-  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [retryingSave, setRetryingSave] = useState(false);
+  const streakDoneRef = useRef(false);
 
   const q = questions[currentQuestion];
   // Position inside the current subject (drives the 1-60 / 1-40 numbering)
@@ -1013,6 +1047,92 @@ function ExamPageContent() {
     );
   }
 
+  /**
+   * Store the attempt: every question (blank ones too, in paper order), then the score.
+   * The score is recorded even if the answers could not be stored, so the attempt still counts in
+   * History and the JAMB estimate. Safe to call again: it only re-sends the same rows.
+   */
+  async function persistAttempt(list: ReviewEntry[], correct: number): Promise<{ problem: string | null; note: string | null }> {
+    if (!user) return { problem: null, note: null }; // guests have no history to save to
+    const supabase = createSupabaseBrowserClient();
+    let problem: string | null = null;
+    let note: string | null = null;
+    const attemptRows = (() => {
+      return list.map((e) => {
+        const place = locateInSubject(subjectTabs, e.questionIdx, questionTotal);
+        return {
+          question_id: e.question.id,
+          selected_option: e.selectedIdx,
+          is_correct: e.selectedIdx === null ? null : e.question.answer === e.selectedIdx,
+          marked_for_review: marked.has(e.questionIdx),
+          question: {
+            id: e.question.id,
+            prompt: e.question.prompt,
+            prompt_segments: e.question.promptSegments ?? undefined,
+            options: e.question.options,
+            option_segments: e.question.optionSegments ?? undefined,
+            section: e.question.section ?? undefined,
+            section_kind: e.question.sectionKind ?? undefined,
+            image: e.question.image ?? undefined,
+            images: e.question.images?.length ? e.question.images : undefined,
+            option_images: e.question.optionImages ?? undefined,
+            section_images: e.question.sectionImages ?? undefined,
+            explanation_images: e.question.explanationImages ?? undefined,
+            novel: e.question.novel ?? undefined,
+            correct_option: e.question.answer,
+            explanation: e.question.explanation,
+            difficulty: "medium",
+            subject_name: e.question.subject ?? sessionLabel,
+            position: e.questionIdx,
+            subject_number: place.number,
+            passage_id: e.question.passageId ?? undefined,
+            year: e.question.year ?? undefined,
+          },
+        };
+      });
+    })();
+
+    const result = await storeAttempt(supabase, {
+      userId: user.id,
+      attemptId: attemptIdRef.current,
+      questionCount: questionTotal,
+      rows: attemptRows,
+      score: correct,
+    });
+    if (result.attemptId) attemptIdRef.current = result.attemptId;
+    problem = result.problem;
+    note = result.note;
+
+    // Streak and achievements run once, and only after the attempt is really submitted
+    if (result.submitted && !streakDoneRef.current) {
+      streakDoneRef.current = true;
+      try {
+        await updateStreak(supabase, user.id);
+      } catch {
+        /* streaks are optional — never block submission */
+      }
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        await fetch("/api/achievements/evaluate", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.session?.access_token ?? ""}` },
+        });
+      } catch {
+        /* achievements are optional — never block submission */
+      }
+    }
+    return { problem, note };
+  }
+
+  async function retrySave() {
+    if (!reviewEntries || retryingSave) return;
+    setRetryingSave(true);
+    const saved = await persistAttempt(reviewEntries, reviewScore);
+    setSaveProblem(saved.problem);
+    setSaveNote(saved.note);
+    setRetryingSave(false);
+  }
+
   async function doSubmit() {
     if (submitting) return;
     setConfirmOpen(false);
@@ -1025,61 +1145,9 @@ function ExamPageContent() {
     }));
     const correct = entries.filter((e) => e.selectedIdx === e.question.answer).length;
 
-    try {
-      if (user && attemptIdRef.current) {
-        const supabase = createSupabaseBrowserClient();
-        // Every question is saved — including the ones left blank — so Review shows the full paper in
-        // order and Analytics can count unanswered questions. Blank rows keep is_correct = null.
-        const rows = entries.map((e) => {
-          const place = locateInSubject(subjectTabs, e.questionIdx, questionTotal);
-          return {
-            question_id: e.question.id,
-            selected_option: e.selectedIdx,
-            is_correct: e.selectedIdx === null ? null : e.question.answer === e.selectedIdx,
-            marked_for_review: marked.has(e.questionIdx),
-            question: {
-              id: e.question.id,
-              prompt: e.question.prompt,
-              prompt_segments: e.question.promptSegments ?? undefined,
-              options: e.question.options,
-              option_segments: e.question.optionSegments ?? undefined,
-              section: e.question.section ?? undefined,
-              section_kind: e.question.sectionKind ?? undefined,
-              image: e.question.image ?? undefined,
-              images: e.question.images?.length ? e.question.images : undefined,
-              option_images: e.question.optionImages ?? undefined,
-              section_images: e.question.sectionImages ?? undefined,
-              explanation_images: e.question.explanationImages ?? undefined,
-              novel: e.question.novel ?? undefined,
-              correct_option: e.question.answer,
-              explanation: e.question.explanation,
-              difficulty: "medium",
-              subject_name: e.question.subject ?? sessionLabel,
-              position: e.questionIdx,
-              subject_number: place.number,
-              passage_id: e.question.passageId ?? undefined,
-              year: e.question.year ?? undefined,
-            },
-          };
-        });
-        await saveAnswers(supabase, attemptIdRef.current, rows);
-        await submitAttempt(supabase, attemptIdRef.current, correct);
-        await updateStreak(supabase, user.id);
-
-        // Achievements: evaluate unlocks after every submitted attempt
-        try {
-          const { data: session } = await supabase.auth.getSession();
-          await fetch("/api/achievements/evaluate", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${session.session?.access_token ?? ""}` },
-          });
-        } catch { /* achievements are optional — never block submission */ }
-      }
-    } catch (saveErr) {
-      // The student still sees their result, but tell them it was not stored (history/analytics would be empty otherwise)
-      console.error("Saving attempt failed:", saveErr);
-      setSaveFailed(true);
-    }
+    const saved = await persistAttempt(entries, correct);
+    setSaveProblem(saved.problem);
+    setSaveNote(saved.note);
 
     setReviewScore(correct);
     setReviewEntries(entries);
@@ -1096,7 +1164,9 @@ function ExamPageContent() {
 
   function handleRetry() {
     setReviewEntries(null);
-    setSaveFailed(false);
+    setSaveProblem(null);
+    setSaveNote(null);
+    streakDoneRef.current = false;
     setAnswers({});
     setMarked(new Set());
     setSkipped(new Set());
@@ -1135,7 +1205,10 @@ function ExamPageContent() {
         subject={sessionLabel}
         onRetry={handleRetry}
         tabs={subjectTabs}
-        saveFailed={saveFailed}
+        saveProblem={saveProblem}
+        saveNote={saveNote}
+        onRetrySave={retrySave}
+        retryingSave={retryingSave}
       />
     );
   }
