@@ -455,6 +455,27 @@ async function fetchAllPages(
  *  1. Fast path: one joined query that returns only the columns we need.
  *  2. Fallback (older database setups): attempt ids in chunks + the full snapshot.
  */
+/**
+ * Answer rows for a handful of attempts (e.g. the dashboard's "Revisit" sessions).
+ * Much lighter than getAnswerRows(): only the requested attempts are read, so it stays well under
+ * Supabase's 1000-row page (5 mocks × 180 answers = 900). Returns [] on any failure so callers degrade quietly.
+ */
+export async function getAnswerRowsForAttempts(supabase: SupabaseClient, attemptIds: string[]): Promise<AnswerLite[]> {
+  const ids = Array.from(new Set(attemptIds)).slice(0, 5);
+  if (ids.length === 0) return [];
+  try {
+    const { data, error } = await supabase
+      .from("attempt_answers")
+      .select("attempt_id, selected_option, is_correct, subject_name:question_data->>subject_name")
+      .in("attempt_id", ids)
+      .limit(1000);
+    if (error || !data) return [];
+    return (data as AnyRow[]).map(toAnswerLite);
+  } catch {
+    return [];
+  }
+}
+
 export async function getAnswerRows(supabase: SupabaseClient, userId: string): Promise<AnswerLite[]> {
   const fast = await fetchAllPages(
     (from, to) =>
