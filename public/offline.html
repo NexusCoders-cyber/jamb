@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Offline — Orbit Prep</title>
+<script>
+  // Same rule as the app: saved choice (light/dark/system), default light
+  (function () {
+    try {
+      var p = localStorage.getItem("qubit-theme");
+      var d = p === "dark" || (p === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      if (d) document.documentElement.className = "dark";
+    } catch (e) {}
+  })();
+</script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: system-ui, sans-serif; background: #f5f4ff; color: #211b3d; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 1rem; }
@@ -11,6 +21,9 @@
   .icon { font-size: 3.5rem; margin-bottom: 1rem; }
   h1 { font-size: 1.5rem; font-weight: 900; margin-bottom: .5rem; }
   p { font-size: .875rem; color: #64748b; line-height: 1.6; }
+  .dark body { background: #0d0c18; color: #f1f0ff; }
+  .dark .card { background: #1b1a31; box-shadow: 0 8px 32px rgba(0,0,0,.45); }
+  .dark p { color: #a3a0c4; }
   .btn { display: inline-block; margin-top: 1.5rem; background: #6557d9; color: #fff; font-weight: 700; font-size: .875rem; padding: .75rem 1.5rem; border-radius: 999px; text-decoration: none; }
 </style>
 </head>
