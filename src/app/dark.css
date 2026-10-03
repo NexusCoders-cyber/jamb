@@ -2,7 +2,7 @@
    GENERATED FILE — do not edit by hand.
    Source: scripts/gen-dark-css.mjs   (runs automatically before `dev` and `build`)
    Dark-mode colour overrides for every Tailwind colour class used in src/.
-   179 rules.
+   180 rules.
    ────────────────────────────────────────────────────────────────────────────── */
 .dark .bg-\[\#e6f5ef\] { background-color: color-mix(in srgb, #e6f5ef 16%, #141327); }
 .dark .bg-\[\#e8eef8\] { background-color: color-mix(in srgb, #e8eef8 16%, #141327); }
@@ -126,6 +126,7 @@
 .dark .text-rose-800 { color: var(--color-rose-200, #fecdd3); }
 .dark .text-sky-700 { color: var(--color-sky-300, #7dd3fc); }
 .dark .text-slate-400 { color: #8c89ae; }
+.dark .text-slate-400\/30 { color: color-mix(in srgb, #8c89ae 30%, transparent); }
 .dark .text-slate-500 { color: #a3a0c4; }
 .dark .text-slate-600 { color: #bcb9d9; }
 .dark .text-slate-700 { color: #d5d2ee; }
