@@ -1,0 +1,199 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+   GENERATED FILE — do not edit by hand.
+   Source: scripts/gen-dark-css.mjs   (runs automatically before `dev` and `build`)
+   Dark-mode colour overrides for every Tailwind colour class used in src/.
+   179 rules.
+   ────────────────────────────────────────────────────────────────────────────── */
+.dark .bg-\[\#e6f5ef\] { background-color: color-mix(in srgb, #e6f5ef 16%, #141327); }
+.dark .bg-\[\#e8eef8\] { background-color: color-mix(in srgb, #e8eef8 16%, #141327); }
+.dark .bg-\[\#e8f2f5\] { background-color: color-mix(in srgb, #e8f2f5 16%, #141327); }
+.dark .bg-\[\#ede8fb\] { background-color: color-mix(in srgb, #ede8fb 16%, #141327); }
+.dark .bg-\[\#eee9f8\] { background-color: color-mix(in srgb, #eee9f8 16%, #141327); }
+.dark .bg-\[\#eeecff\] { background-color: color-mix(in srgb, #eeecff 16%, #141327); }
+.dark .bg-\[\#eef2ff\] { background-color: color-mix(in srgb, #eef2ff 16%, #141327); }
+.dark .bg-\[\#eef6f1\] { background-color: color-mix(in srgb, #eef6f1 16%, #141327); }
+.dark .bg-\[\#f1e5c9\] { background-color: color-mix(in srgb, #f1e5c9 16%, #141327); }
+.dark .bg-\[\#f5eee1\] { background-color: color-mix(in srgb, #f5eee1 16%, #141327); }
+.dark .bg-\[\#f5f4ff\] { background-color: #0d0c18; }
+.dark .bg-\[\#f6e9e1\] { background-color: color-mix(in srgb, #f6e9e1 16%, #141327); }
+.dark .bg-\[\#f8e8ed\] { background-color: color-mix(in srgb, #f8e8ed 16%, #141327); }
+.dark .bg-\[\#f8fafb\] { background-color: color-mix(in srgb, #f8fafb 16%, #141327); }
+.dark .bg-\[\#fff3d9\] { background-color: color-mix(in srgb, #fff3d9 16%, #141327); }
+.dark .bg-\[\#fff8f4\] { background-color: color-mix(in srgb, #fff8f4 16%, #141327); }
+.dark .bg-\[\#fffaf0\] { background-color: color-mix(in srgb, #fffaf0 16%, #141327); }
+.dark .bg-amber-100 { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 17%, #141327); }
+.dark .bg-amber-50 { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 11%, #141327); }
+.dark .bg-blue-100 { background-color: color-mix(in srgb, var(--color-blue-500, #3b82f6) 17%, #141327); }
+.dark .bg-blue-50 { background-color: color-mix(in srgb, var(--color-blue-500, #3b82f6) 11%, #141327); }
+.dark .bg-emerald-100 { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 17%, #141327); }
+.dark .bg-emerald-200 { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 25%, #141327); }
+.dark .bg-emerald-50 { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 11%, #141327); }
+.dark .bg-orange-50 { background-color: color-mix(in srgb, var(--color-orange-500, #f97316) 11%, #141327); }
+.dark .bg-red-50 { background-color: color-mix(in srgb, var(--color-red-500, #ef4444) 11%, #141327); }
+.dark .bg-rose-100 { background-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 17%, #141327); }
+.dark .bg-rose-200 { background-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 25%, #141327); }
+.dark .bg-rose-50 { background-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 11%, #141327); }
+.dark .bg-sky-50 { background-color: color-mix(in srgb, var(--color-sky-500, #0ea5e9) 11%, #141327); }
+.dark .bg-slate-100 { background-color: #232240; }
+.dark .bg-slate-200 { background-color: #2c2b4c; }
+.dark .bg-slate-300 { background-color: #3b3a5f; }
+.dark .bg-slate-50 { background-color: #151428; }
+.dark .bg-slate-50\/95 { background-color: color-mix(in srgb, #151428 95%, transparent); }
+.dark .bg-slate-700 { background-color: #3a3961; }
+.dark .bg-slate-800 { background-color: #2a2950; }
+.dark .bg-slate-800\/50 { background-color: color-mix(in srgb, #2a2950 50%, transparent); }
+.dark .bg-slate-800\/60 { background-color: color-mix(in srgb, #2a2950 60%, transparent); }
+.dark .bg-slate-900 { background-color: #2d2c52; }
+.dark .bg-slate-900\/40 { background-color: color-mix(in srgb, #2d2c52 40%, transparent); }
+.dark .bg-slate-900\/60 { background-color: color-mix(in srgb, #2d2c52 60%, transparent); }
+.dark .bg-slate-900\/70 { background-color: color-mix(in srgb, #2d2c52 70%, transparent); }
+.dark .bg-slate-900\/90 { background-color: color-mix(in srgb, #2d2c52 90%, transparent); }
+.dark .bg-slate-950 { background-color: #0a0914; }
+.dark .bg-slate-950\/60 { background-color: color-mix(in srgb, #0a0914 60%, transparent); }
+.dark .bg-slate-950\/90 { background-color: color-mix(in srgb, #0a0914 90%, transparent); }
+.dark .bg-slate-950\/95 { background-color: color-mix(in srgb, #0a0914 95%, transparent); }
+.dark .bg-violet-100 { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 17%, #141327); }
+.dark .bg-violet-50 { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 11%, #141327); }
+.dark .bg-violet-50\/60 { background-color: color-mix(in srgb, color-mix(in srgb, var(--color-violet-500, #8b5cf6) 11%, #141327) 60%, transparent); }
+.dark .bg-white { background-color: #1b1a31; }
+.dark .bg-white\/60 { background-color: color-mix(in srgb, #1b1a31 60%, transparent); }
+.dark .bg-white\/80 { background-color: color-mix(in srgb, #1b1a31 80%, transparent); }
+.dark .bg-white\/90 { background-color: color-mix(in srgb, #1b1a31 90%, transparent); }
+.dark .bg-white\/95 { background-color: color-mix(in srgb, #1b1a31 95%, transparent); }
+.dark .border-amber-200 { border-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 32%, #141327); }
+.dark .border-amber-300 { border-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 40%, #141327); }
+.dark .border-emerald-100 { border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 26%, #141327); }
+.dark .border-emerald-200 { border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
+.dark .border-emerald-300 { border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 40%, #141327); }
+.dark .border-red-200 { border-color: color-mix(in srgb, var(--color-red-500, #ef4444) 32%, #141327); }
+.dark .border-rose-200 { border-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 32%, #141327); }
+.dark .border-rose-300 { border-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 40%, #141327); }
+.dark .border-slate-100 { border-color: #24233f; }
+.dark .border-slate-200 { border-color: #2e2d4e; }
+.dark .border-slate-200\/60 { border-color: color-mix(in srgb, #2e2d4e 60%, transparent); }
+.dark .border-slate-200\/80 { border-color: color-mix(in srgb, #2e2d4e 80%, transparent); }
+.dark .border-slate-300 { border-color: #3d3c62; }
+.dark .border-violet-200 { border-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 32%, #141327); }
+.dark .border-white { border-color: #1b1a31; }
+.dark .divide-slate-100 > :not(:last-child) { border-color: #24233f; }
+.dark .fill-violet-600 { fill: var(--color-violet-400, #a78bfa); }
+.dark .from-amber-50 { --tw-gradient-from: color-mix(in srgb, var(--color-amber-500, #f59e0b) 11%, #141327); }
+.dark .from-slate-700 { --tw-gradient-from: #3a3961; }
+.dark .ring-amber-100 { --tw-ring-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 26%, #141327); }
+.dark .ring-amber-200 { --tw-ring-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 32%, #141327); }
+.dark .ring-amber-300 { --tw-ring-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 40%, #141327); }
+.dark .ring-blue-100 { --tw-ring-color: color-mix(in srgb, var(--color-blue-500, #3b82f6) 26%, #141327); }
+.dark .ring-emerald-100 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 26%, #141327); }
+.dark .ring-emerald-200 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
+.dark .ring-orange-200 { --tw-ring-color: color-mix(in srgb, var(--color-orange-500, #f97316) 32%, #141327); }
+.dark .ring-rose-100 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 26%, #141327); }
+.dark .ring-rose-200 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 32%, #141327); }
+.dark .ring-sky-200 { --tw-ring-color: color-mix(in srgb, var(--color-sky-500, #0ea5e9) 32%, #141327); }
+.dark .ring-slate-100 { --tw-ring-color: #24233f; }
+.dark .ring-slate-200 { --tw-ring-color: #2e2d4e; }
+.dark .ring-slate-50 { --tw-ring-color: #1d1c36; }
+.dark .ring-violet-100 { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 26%, #141327); }
+.dark .ring-violet-200 { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 32%, #141327); }
+.dark .ring-violet-300 { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 40%, #141327); }
+.dark .ring-white { --tw-ring-color: #1b1a31; }
+.dark .text-\[\#0d6b3f\] { color: color-mix(in srgb, #0d6b3f 32%, #ffffff); }
+.dark .text-\[\#211b3d\] { color: #f1f0ff; }
+.dark .text-\[\#28527d\] { color: #f1f0ff; }
+.dark .text-\[\#2d6875\] { color: color-mix(in srgb, #2d6875 32%, #ffffff); }
+.dark .text-\[\#4f35c2\] { color: color-mix(in srgb, #4f35c2 32%, #ffffff); }
+.dark .text-\[\#5145b5\] { color: color-mix(in srgb, #5145b5 32%, #ffffff); }
+.dark .text-\[\#654b8d\] { color: color-mix(in srgb, #654b8d 32%, #ffffff); }
+.dark .text-\[\#6557d9\] { color: color-mix(in srgb, #6557d9 32%, #ffffff); }
+.dark .text-\[\#8a6325\] { color: color-mix(in srgb, #8a6325 32%, #ffffff); }
+.dark .text-\[\#975334\] { color: color-mix(in srgb, #975334 32%, #ffffff); }
+.dark .text-\[\#9a6814\] { color: color-mix(in srgb, #9a6814 32%, #ffffff); }
+.dark .text-\[\#a24b67\] { color: color-mix(in srgb, #a24b67 32%, #ffffff); }
+.dark .text-amber-600 { color: var(--color-amber-400, #fbbf24); }
+.dark .text-amber-700 { color: var(--color-amber-300, #fcd34d); }
+.dark .text-amber-800 { color: var(--color-amber-200, #fde68a); }
+.dark .text-amber-900 { color: var(--color-amber-100, #fef3c7); }
+.dark .text-amber-900\/80 { color: color-mix(in srgb, var(--color-amber-100, #fef3c7) 80%, transparent); }
+.dark .text-amber-950 { color: var(--color-amber-100, #fef3c7); }
+.dark .text-blue-700 { color: var(--color-blue-300, #93c5fd); }
+.dark .text-emerald-600 { color: var(--color-emerald-400, #34d399); }
+.dark .text-emerald-700 { color: var(--color-emerald-300, #6ee7b7); }
+.dark .text-emerald-800 { color: var(--color-emerald-200, #a7f3d0); }
+.dark .text-emerald-900 { color: var(--color-emerald-100, #d1fae5); }
+.dark .text-orange-700 { color: var(--color-orange-300, #fdba74); }
+.dark .text-red-700 { color: var(--color-red-300, #fca5a5); }
+.dark .text-rose-600 { color: var(--color-rose-400, #fb7185); }
+.dark .text-rose-700 { color: var(--color-rose-300, #fda4af); }
+.dark .text-rose-800 { color: var(--color-rose-200, #fecdd3); }
+.dark .text-sky-700 { color: var(--color-sky-300, #7dd3fc); }
+.dark .text-slate-400 { color: #8c89ae; }
+.dark .text-slate-500 { color: #a3a0c4; }
+.dark .text-slate-600 { color: #bcb9d9; }
+.dark .text-slate-700 { color: #d5d2ee; }
+.dark .text-slate-800 { color: #e7e5fb; }
+.dark .text-slate-900 { color: #f4f3ff; }
+.dark .text-slate-950 { color: #f8f7ff; }
+.dark .text-violet-600 { color: var(--color-violet-400, #a78bfa); }
+.dark .text-violet-700 { color: var(--color-violet-300, #c4b5fd); }
+.dark .text-violet-800 { color: var(--color-violet-200, #ddd6fe); }
+.dark .text-violet-900 { color: var(--color-violet-100, #ede9fe); }
+.dark .to-white { --tw-gradient-to: #1b1a31; }
+
+/* state variants */
+.dark .active\:bg-violet-100:active { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 17%, #141327); }
+.dark .focus\:bg-white:focus { background-color: #1b1a31; }
+.dark .focus\:ring-violet-100:focus { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 26%, #141327); }
+.dark .group:hover .group-hover\:text-violet-600 { color: var(--color-violet-400, #a78bfa); }
+.dark .group:hover .group-hover\:text-violet-700 { color: var(--color-violet-300, #c4b5fd); }
+.dark .hover\:bg-amber-100:hover { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 21%, #141327); }
+.dark .hover\:bg-amber-50:hover { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 15%, #141327); }
+.dark .hover\:bg-emerald-100:hover { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 21%, #141327); }
+.dark .hover\:bg-emerald-200:hover { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 29%, #141327); }
+.dark .hover\:bg-emerald-50:hover { background-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 15%, #141327); }
+.dark .hover\:bg-rose-100:hover { background-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 21%, #141327); }
+.dark .hover\:bg-rose-50:hover { background-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 15%, #141327); }
+.dark .hover\:bg-slate-100:hover { background-color: #2a2950; }
+.dark .hover\:bg-slate-200:hover { background-color: #34335a; }
+.dark .hover\:bg-slate-300:hover { background-color: #43426a; }
+.dark .hover\:bg-slate-50:hover { background-color: #201f3a; }
+.dark .hover\:bg-slate-700:hover { background-color: #454470; }
+.dark .hover\:bg-slate-700\/50:hover { background-color: color-mix(in srgb, #454470 50%, transparent); }
+.dark .hover\:bg-slate-800:hover { background-color: #363560; }
+.dark .hover\:bg-slate-800\/40:hover { background-color: color-mix(in srgb, #363560 40%, transparent); }
+.dark .hover\:bg-slate-800\/60:hover { background-color: color-mix(in srgb, #363560 60%, transparent); }
+.dark .hover\:bg-violet-100:hover { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 21%, #141327); }
+.dark .hover\:bg-violet-200:hover { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 29%, #141327); }
+.dark .hover\:bg-violet-50:hover { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 15%, #141327); }
+.dark .hover\:bg-white:hover { background-color: #232140; }
+.dark .hover\:border-emerald-200:hover { border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
+.dark .hover\:border-emerald-300:hover { border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 40%, #141327); }
+.dark .hover\:border-violet-200:hover { border-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 32%, #141327); }
+.dark .hover\:border-violet-300:hover { border-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 40%, #141327); }
+.dark .hover\:ring-amber-200:hover { --tw-ring-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 32%, #141327); }
+.dark .hover\:ring-amber-300:hover { --tw-ring-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 40%, #141327); }
+.dark .hover\:ring-slate-300:hover { --tw-ring-color: #3d3c62; }
+.dark .hover\:ring-violet-200:hover { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 32%, #141327); }
+.dark .hover\:ring-violet-300:hover { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 40%, #141327); }
+.dark .hover\:text-emerald-800:hover { color: var(--color-emerald-200, #a7f3d0); }
+.dark .hover\:text-rose-700:hover { color: var(--color-rose-300, #fda4af); }
+.dark .hover\:text-slate-600:hover { color: #bcb9d9; }
+.dark .hover\:text-slate-700:hover { color: #d5d2ee; }
+.dark .hover\:text-slate-800:hover { color: #e7e5fb; }
+.dark .hover\:text-violet-600:hover { color: var(--color-violet-400, #a78bfa); }
+.dark .hover\:text-violet-700:hover { color: var(--color-violet-300, #c4b5fd); }
+.dark .hover\:text-violet-800:hover { color: var(--color-violet-200, #ddd6fe); }
+.dark .placeholder\:text-slate-400::placeholder { color: #8c89ae; }
+.dark .placeholder\:text-slate-500::placeholder { color: #a3a0c4; }
+
+@media (min-width: 64rem) {
+  .dark .lg\:bg-white { background-color: #1b1a31; }
+  .dark .lg\:border-slate-200\/80 { border-color: color-mix(in srgb, #2e2d4e 80%, transparent); }
+}
+
+/* Elements that have a bright fill AND dark text keep that dark text */
+.dark .bg-\[\#f6c978\].text-\[\#211b3d\] { color: #211b3d; }
+.dark .bg-rose-400.text-slate-600 { color: #475569; }
+.dark .bg-amber-500.text-slate-600 { color: #475569; }
+.dark .bg-amber-500.text-amber-800 { color: var(--color-amber-800); }
+
+/* Opt-out: anything marked keep-light stays light (diagrams, photos on white) */
+.dark .bg-white.keep-light { background-color: #ffffff; }
