@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Logo from "@/components/Logo";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -230,6 +231,7 @@ function Sidebar({ pathname, inviteCount }: { pathname: string; inviteCount: num
 
       {/* Bottom hint */}
       <div className="border-t border-slate-100 p-4">
+        <ThemeToggle variant="switch" className="mb-3" />
         <Link href="/practice"
           className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 px-4 py-3 text-white shadow-lg shadow-violet-400/30 transition hover:shadow-violet-400/50">
           <PenLine className="h-5 w-5 shrink-0" aria-hidden />
@@ -306,6 +308,7 @@ function TopBar({ title, back, unread }: { title?: string; back?: string; unread
         </div>
       )}
       <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Qubit"}</h1>
+      <ThemeToggle />
       {unread > 0 && (
         <Link href="/messages" aria-label={`${unread} unread messages`}
           className="flex h-6 min-w-6 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-black text-white">
