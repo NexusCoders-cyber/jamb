@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { OnlineProvider } from "@/components/OnlineDot";
 import PwaInstall from "@/components/PwaInstall";
+import ThemeSync from "@/components/ThemeSync";
+import { THEME_INIT_SCRIPT } from "@/lib/theme-init";
 import "./globals.css";
 
 const inter = Inter({
@@ -60,14 +62,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`h-full antialiased ${inter.variable}`}>
+    // suppressHydrationWarning: the theme script adds the "dark" class to <html> before React loads
+    <html lang="en" className={`h-full antialiased ${inter.variable}`} suppressHydrationWarning>
       <head>
+        {/* Runs before first paint so a dark-mode student never sees a white flash */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icons/icon-180.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="h-full font-[family-name:var(--font-inter)] text-slate-900">
+        <ThemeSync />
         <OnlineProvider>
           {children}
           <PwaInstall />
