@@ -8,9 +8,15 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { getProfile, updateProfile } from "@/lib/queries";
-import { Check } from "lucide-react";
+import { Check, Monitor, Moon, Sun } from "lucide-react";
+import { useTheme, type ThemePref } from "@/lib/theme";
 
-type Theme = "light" | "dark" | "system";
+// Mini previews drawn with inline styles on purpose: they must look the same in light AND dark mode
+const THEME_OPTIONS: { value: ThemePref; label: string; icon: typeof Sun; swatch: string; bar: string; accent: string; card: string }[] = [
+  { value: "light", label: "Light", icon: Sun, swatch: "#f5f4ff", card: "#ffffff", bar: "#e2e0f5", accent: "#6557d9" },
+  { value: "dark", label: "Dark", icon: Moon, swatch: "#0d0c18", card: "#1b1a31", bar: "#2e2d4e", accent: "#8b5cf6" },
+  { value: "system", label: "System", icon: Monitor, swatch: "linear-gradient(135deg,#f5f4ff 50%,#0d0c18 50%)", card: "linear-gradient(135deg,#ffffff 50%,#1b1a31 50%)", bar: "linear-gradient(135deg,#e2e0f5 50%,#2e2d4e 50%)", accent: "#8b5cf6" },
+];
 
 export default function SettingsPage() {
   const { user, loading: authLoading } = useUser();
@@ -19,7 +25,7 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [targetScore, setTargetScore] = useState(300);
-  const [theme, setTheme] = useState<Theme>("system");
+  const { pref: themePref, resolved: themeResolved, setPref: setThemePref } = useTheme();
   const [dailyGoal, setDailyGoal] = useState(20);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -45,8 +51,7 @@ export default function SettingsPage() {
         try {
           const pref = localStorage.getItem("orbit_prefs");
           if (pref) {
-            const parsed = JSON.parse(pref) as { theme?: Theme; dailyGoal?: number };
-            if (parsed.theme) setTheme(parsed.theme);
+            const parsed = JSON.parse(pref) as { dailyGoal?: number };
             if (parsed.dailyGoal) setDailyGoal(parsed.dailyGoal);
           }
         } catch (_e) { /* ignore */ }
@@ -77,9 +82,11 @@ export default function SettingsPage() {
     if (err) {
       setError(err.message);
     } else {
-      // Persist local preferences
+      // Persist local preferences (merged: the signup subjects live in the same key and must survive).
+      // The theme is NOT saved here — it applies and saves the moment it is chosen.
       try {
-        localStorage.setItem("orbit_prefs", JSON.stringify({ theme, dailyGoal }));
+        const existing = JSON.parse(localStorage.getItem("orbit_prefs") ?? "{}") as Record<string, unknown>;
+        localStorage.setItem("orbit_prefs", JSON.stringify({ ...existing, dailyGoal }));
       } catch { /* ignore */ }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -134,22 +141,42 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Appearance */}
+            {/* Appearance — applies instantly and is remembered on this device */}
             <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
-              <h2 className="mb-4 text-xl font-black text-slate-900">Appearance</h2>
-              <div className="space-y-2">
-                {(["light", "dark", "system"] as Theme[]).map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTheme(t)}
-                    className={`flex w-full items-center justify-between rounded-2xl p-3 text-sm font-semibold ring-1 transition ${theme === t ? "bg-violet-50 ring-violet-300 text-violet-900" : "bg-white ring-slate-200 text-slate-700 hover:ring-violet-200"}`}
-                  >
-                    <span className="capitalize">{t} mode</span>
-                    {theme === t && <span className="text-xs text-violet-600">Active</span>}
-                  </button>
-                ))}
+              <h2 className="text-xl font-black text-slate-900">Appearance</h2>
+              <p className="mb-4 mt-1 text-xs leading-5 text-slate-500">Choose how Qubit looks. It changes straight away and is saved on this device.</p>
+              <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2.5">
+                {THEME_OPTIONS.map((o) => {
+                  const active = themePref === o.value;
+                  const Icon = o.icon;
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setThemePref(o.value)}
+                      className={`touch-manipulation rounded-2xl bg-white p-2 text-center transition ${active ? "ring-2 ring-violet-600" : "ring-1 ring-slate-200 hover:ring-violet-300"}`}
+                    >
+                      <span className="relative block h-14 overflow-hidden rounded-xl" style={{ background: o.swatch }} aria-hidden>
+                        <span className="absolute inset-x-2 top-2 h-8 rounded-lg" style={{ background: o.card }} />
+                        <span className="absolute left-3.5 top-4 h-1.5 w-8 rounded-full" style={{ background: o.bar }} />
+                        <span className="absolute left-3.5 top-7 h-1.5 w-5 rounded-full" style={{ background: o.accent }} />
+                      </span>
+                      <span className={`mt-2 flex items-center justify-center gap-1 text-xs font-bold ${active ? "text-violet-700" : "text-slate-700"}`}>
+                        <Icon className="h-3.5 w-3.5" aria-hidden />
+                        {o.label}
+                        {active && <Check className="h-3 w-3" aria-hidden />}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+              <p className="mt-3 text-xs text-slate-500" aria-live="polite">
+                {themePref === "system"
+                  ? `Following your device: showing ${themeResolved} mode.`
+                  : `${themePref === "dark" ? "Dark" : "Light"} mode is on.`}
+              </p>
             </div>
 
             {/* Study */}
