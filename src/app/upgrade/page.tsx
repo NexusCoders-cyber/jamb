@@ -9,8 +9,10 @@ import { useUser } from "@/lib/useUser";
 import { usePro } from "@/lib/usePro";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type PlanId = "weekly" | "monthly" | "biannual";
+
 type Plan = {
-  id: "weekly" | "monthly" | "biannual";
+  id: PlanId;
   label: string;
   price: string;
   naira: number;
@@ -19,12 +21,15 @@ type Plan = {
   highlight?: boolean;
 };
 
-const PLANS: Plan[] = [
-  { id: "weekly",   label: "Weekly",  price: "₦200",   naira: 200,  duration: "7 days" },
-  { id: "monthly",  label: "Monthly", price: "₦800",   naira: 800,  duration: "30 days", badge: "Most popular", highlight: true },
-  { id: "biannual", label: "6-Month", price: "₦1,700", naira: 1700, duration: "180 days", badge: "Best value" },
-];
+type LivePrices = {
+  weekly: number;
+  monthly: number;
+  biannual: number;
+  freeTrialEnabled: boolean;
+  freeTrialDays: number;
+};
 
+// ─── What Pro includes (no ads perk) ─────────────────────────────────────────
 const PRO_PERKS = [
   { icon: "✏️", label: "Unlimited practice & past questions" },
   { icon: "📝", label: "Full 180-question mock CBT exams" },
@@ -35,7 +40,7 @@ const PRO_PERKS = [
   { icon: "💬", label: "Community & Arena always free" },
 ];
 
-// ─── Paystack inline popup ────────────────────────────────────────────────────
+// ─── Paystack inline popup type ───────────────────────────────────────────────
 declare global {
   interface Window {
     PaystackPop?: {
@@ -45,7 +50,6 @@ declare global {
         amount: number;
         ref: string;
         currency?: string;
-        firstname?: string;
         onClose: () => void;
         callback: (resp: { reference: string }) => void;
       }) => { openIframe: () => void };
@@ -54,21 +58,25 @@ declare global {
 }
 
 // ─── Success screen ───────────────────────────────────────────────────────────
-function SuccessScreen({ premiumUntil, plan }: { premiumUntil: string | null; plan: string }) {
+function SuccessScreen({ premiumUntil, plan, isTrial }: { premiumUntil: string | null; plan: string; isTrial?: boolean }) {
   const planLabel: Record<string, string> = { weekly: "7-day", monthly: "30-day", biannual: "6-month" };
   const until = premiumUntil
     ? new Date(premiumUntil).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })
     : null;
   return (
-    <AppShell title="You're Pro!">
+    <AppShell title={isTrial ? "Free Trial Active!" : "You're Pro!"}>
       <div className="flex min-h-[80vh] flex-col items-center justify-center px-4 py-12 text-center">
         <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-amber-50 text-5xl ring-4 ring-amber-200">
-          ⭐
+          {isTrial ? "🎁" : "⭐"}
         </div>
-        <h1 className="text-3xl font-black text-slate-900">You&apos;re Pro!</h1>
+        <h1 className="text-3xl font-black text-slate-900">
+          {isTrial ? "Free trial activated!" : "You're Pro!"}
+        </h1>
         <p className="mt-3 text-base text-slate-500">
-          Your {planLabel[plan] ?? plan} subscription is active.
-          {until && <> Renews or expires on <strong>{until}</strong>.</>}
+          {isTrial
+            ? `Your free trial is active.`
+            : `Your ${planLabel[plan] ?? plan} subscription is active.`}
+          {until && <> Access expires on <strong>{until}</strong>.</>}
         </p>
         <div className="mt-4">
           <ProBadge isPro size="md" />
@@ -98,12 +106,37 @@ function UpgradePageContent() {
   const { user, loading: authLoading } = useUser();
   const { isPro, loading: proLoading, premiumUntil, refresh } = usePro();
 
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"]>("monthly");
+  // Live prices from admin_settings
+  const [livePrices, setLivePrices] = useState<LivePrices | null>(null);
+  const [pricesLoading, setPricesLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/payments/prices")
+      .then((r) => r.json())
+      .then((d: LivePrices) => { setLivePrices(d); })
+      .catch(() => setLivePrices({ weekly: 200, monthly: 800, biannual: 1700, freeTrialEnabled: false, freeTrialDays: 1 }))
+      .finally(() => setPricesLoading(false));
+  }, []);
+
+  // Build plans dynamically from live prices
+  const plans: Plan[] = livePrices ? [
+    { id: "weekly",   label: "Weekly",  price: `₦${livePrices.weekly.toLocaleString()}`,   naira: livePrices.weekly,   duration: "7 days" },
+    { id: "monthly",  label: "Monthly", price: `₦${livePrices.monthly.toLocaleString()}`,  naira: livePrices.monthly,  duration: "30 days", badge: "Most popular", highlight: true },
+    { id: "biannual", label: "6-Month", price: `₦${livePrices.biannual.toLocaleString()}`, naira: livePrices.biannual, duration: "180 days", badge: "Best value" },
+  ] : [
+    { id: "weekly",   label: "Weekly",  price: "₦200",   naira: 200,  duration: "7 days" },
+    { id: "monthly",  label: "Monthly", price: "₦800",   naira: 800,  duration: "30 days", badge: "Most popular", highlight: true },
+    { id: "biannual", label: "6-Month", price: "₦1,700", naira: 1700, duration: "180 days", badge: "Best value" },
+  ];
+
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("monthly");
   const [discountCode, setDiscountCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState("");
   const [successPlan, setSuccessPlan] = useState<string | null>(null);
   const [successUntil, setSuccessUntil] = useState<string | null>(null);
+  const [isTrial, setIsTrial] = useState(false);
   const paystackScriptRef = useRef(false);
 
   // Load Paystack inline JS once
@@ -114,10 +147,12 @@ function UpgradePageContent() {
     script.src = "https://js.paystack.co/v1/inline.js";
     script.async = true;
     document.body.appendChild(script);
-    return () => { document.body.removeChild(script); };
+    return () => {
+      if (document.body.contains(script)) document.body.removeChild(script);
+    };
   }, []);
 
-  // Auto-verify if returning from Paystack redirect (callback_url)
+  // Auto-verify if returning from Paystack redirect
   const verifyRef = useRef(false);
   const verifyPayment = useCallback(async (ref: string) => {
     if (verifyRef.current) return;
@@ -147,6 +182,31 @@ function UpgradePageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Free trial claim
+  async function claimFreeTrial() {
+    if (!user) { setError("Sign in first to claim your free trial."); return; }
+    setTrialLoading(true); setError("");
+    try {
+      const res = await fetch("/api/payments/trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = (await res.json()) as { ok?: boolean; premiumUntil?: string; error?: string };
+      if (res.ok && data.ok) {
+        refresh();
+        setIsTrial(true);
+        setSuccessPlan("trial");
+        setSuccessUntil(data.premiumUntil ?? null);
+      } else {
+        setError(data.error ?? "Could not activate free trial. Try again.");
+      }
+    } catch (_e) {
+      setError("Something went wrong. Try again.");
+    } finally {
+      setTrialLoading(false);
+    }
+  }
+
   async function handleCheckout() {
     if (!user) { setError("Sign in first to subscribe."); return; }
     setError("");
@@ -170,7 +230,7 @@ function UpgradePageContent() {
         return;
       }
 
-      // Try inline popup first; fall back to redirect if Paystack JS not loaded
+      // Inline popup → redirect fallback
       if (window.PaystackPop && data.publicKey) {
         const handler = window.PaystackPop.setup({
           key: data.publicKey,
@@ -187,7 +247,6 @@ function UpgradePageContent() {
         });
         handler.openIframe();
       } else if (data.authorizationUrl) {
-        // Redirect checkout (mobile / popup blocker fallback)
         window.location.href = data.authorizationUrl;
       } else {
         setError("Payment could not be opened. Try again.");
@@ -199,21 +258,20 @@ function UpgradePageContent() {
     }
   }
 
-  // Show success screen after successful payment
+  // Show success screen
   if (successPlan) {
-    return <SuccessScreen plan={successPlan} premiumUntil={successUntil} />;
+    return <SuccessScreen plan={successPlan} premiumUntil={successUntil} isTrial={isTrial} />;
   }
 
-  // Already Pro — show status
-  const isReady = !authLoading && !proLoading;
-  const currentPlan = PLANS.find((p) => p.id === selectedPlan)!;
+  const isReady = !authLoading && !proLoading && !pricesLoading;
+  const currentPlan = plans.find((p) => p.id === selectedPlan) ?? plans[1];
 
   return (
     <AppShell title="Upgrade to Pro">
       <div className="mx-auto max-w-2xl px-4 py-6 lg:px-6">
 
         {/* Header */}
-        <div className="mb-8 text-center">
+        <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 text-3xl ring-4 ring-amber-100">
             ⭐
           </div>
@@ -234,6 +292,30 @@ function UpgradePageContent() {
           )}
         </div>
 
+        {/* Free trial banner */}
+        {isReady && !isPro && livePrices?.freeTrialEnabled && (
+          <div className="mb-5 rounded-[20px] bg-emerald-50 p-4 ring-1 ring-emerald-200">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-emerald-800">
+                  🎁 Free {livePrices.freeTrialDays}-day trial available!
+                </p>
+                <p className="mt-0.5 text-xs text-emerald-600">
+                  Try Pro free for {livePrices.freeTrialDays} day{livePrices.freeTrialDays !== 1 ? "s" : ""} — no payment needed.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void claimFreeTrial()}
+                disabled={trialLoading || !user}
+                className="shrink-0 rounded-full bg-emerald-600 px-4 py-2 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {trialLoading ? "Activating…" : "Claim free trial"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Perks */}
         <div className="mb-6 rounded-[24px] bg-white p-5 ring-1 ring-slate-200 shadow-sm">
           <p className="mb-4 text-xs font-black uppercase tracking-[0.18em] text-violet-600">What you get</p>
@@ -252,31 +334,37 @@ function UpgradePageContent() {
         {/* Plan selector */}
         <div className="mb-5">
           <p className="mb-3 text-sm font-black text-slate-800">Choose your plan</p>
-          <div className="grid grid-cols-3 gap-3">
-            {PLANS.map((plan) => (
-              <button
-                key={plan.id}
-                type="button"
-                onClick={() => setSelectedPlan(plan.id)}
-                className={`relative rounded-[20px] border-2 p-4 text-center transition ${
-                  selectedPlan === plan.id
-                    ? "border-violet-500 bg-violet-50"
-                    : "border-slate-200 bg-white hover:border-violet-200"
-                }`}
-              >
-                {plan.badge && (
-                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
-                    {plan.badge}
-                  </span>
-                )}
-                <p className="text-xs font-bold text-slate-500">{plan.label}</p>
-                <p className={`mt-1.5 text-2xl font-black ${selectedPlan === plan.id ? "text-violet-700" : "text-slate-900"}`}>
-                  {plan.price}
-                </p>
-                <p className="mt-0.5 text-[10px] text-slate-400">{plan.duration}</p>
-              </button>
-            ))}
-          </div>
+          {pricesLoading ? (
+            <div className="grid grid-cols-3 gap-3">
+              {[1, 2, 3].map((n) => <div key={n} className="h-24 animate-pulse rounded-[20px] bg-slate-100" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {plans.map((plan) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className={`relative rounded-[20px] border-2 p-4 text-center transition ${
+                    selectedPlan === plan.id
+                      ? "border-violet-500 bg-violet-50"
+                      : "border-slate-200 bg-white hover:border-violet-200"
+                  }`}
+                >
+                  {plan.badge && (
+                    <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-violet-600 px-2 py-0.5 text-[9px] font-black text-white">
+                      {plan.badge}
+                    </span>
+                  )}
+                  <p className="text-xs font-bold text-slate-500">{plan.label}</p>
+                  <p className={`mt-1.5 text-2xl font-black ${selectedPlan === plan.id ? "text-violet-700" : "text-slate-900"}`}>
+                    {plan.price}
+                  </p>
+                  <p className="mt-0.5 text-[10px] text-slate-400">{plan.duration}</p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Discount code */}
@@ -291,6 +379,15 @@ function UpgradePageContent() {
               className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold uppercase text-slate-800 outline-none focus:border-violet-400 focus:bg-white"
             />
           </label>
+        </div>
+
+        {/* Payment method note */}
+        <div className="mb-5 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
+          <span className="text-lg">🏦</span>
+          <p className="text-xs text-slate-600">
+            <strong className="font-bold text-slate-800">Bank transfer only.</strong>{" "}
+            After clicking pay, you&apos;ll receive bank account details to transfer to. Pro activates once payment is confirmed.
+          </p>
         </div>
 
         {error && (
@@ -321,23 +418,18 @@ function UpgradePageContent() {
             disabled={loading || !isReady}
             className="flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-base font-black text-white shadow-lg shadow-violet-400/30 disabled:opacity-60"
           >
-            {loading ? "Opening payment…" : `Get Pro — ${currentPlan.price} for ${currentPlan.duration} ⭐`}
+            {loading ? "Opening payment…" : `Pay — ${currentPlan.price} (bank transfer) ⭐`}
           </button>
         )}
 
         <p className="mt-3 text-center text-xs text-slate-400">
-          Secured by Paystack · No auto-renewal · Cancel anytime
+          Secured by Paystack · Bank transfer · No auto-renewal
         </p>
 
-        {/* Already subscribed — manage */}
         {isReady && isPro && (
           <div className="mt-8 rounded-[20px] bg-emerald-50 p-4 text-center ring-1 ring-emerald-200">
-            <p className="text-sm font-bold text-emerald-800">
-              You&apos;re already Pro ⭐
-            </p>
-            <p className="mt-1 text-xs text-emerald-600">
-              Use the button above to extend your subscription at any time.
-            </p>
+            <p className="text-sm font-bold text-emerald-800">You&apos;re already Pro ⭐</p>
+            <p className="mt-1 text-xs text-emerald-600">Use the button above to extend your subscription at any time.</p>
           </div>
         )}
       </div>

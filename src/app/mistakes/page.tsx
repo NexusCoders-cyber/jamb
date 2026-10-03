@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
-import AuthGuard from "@/components/AuthGuard";
 import { PaywallGate } from "@/components/Paywall";
 import { getWrongAnswers } from "@/lib/queries";
 import RichText from "@/components/RichText";
@@ -74,8 +73,7 @@ export default function MistakesPage() {
           <h1 className="text-2xl font-black text-slate-900">Mistakes</h1>
           <Link href="/practice" className="rounded-full bg-violet-600 px-4 py-2 text-sm font-bold text-white">Practice</Link>
         </div>
-        <AuthGuard user={user} loading={authLoading}>
-          {loading ? (
+        {loading ? (
           <div className="grid gap-6 md:grid-cols-2">
             {[1, 2].map((n) => (
               <div key={n} className="animate-pulse rounded-[28px] bg-slate-100 p-5 h-48" />
@@ -195,7 +193,6 @@ export default function MistakesPage() {
             </div>
           </div>
         )}
-        </AuthGuard>
       </div>
     </AppShell>
     </PaywallGate>

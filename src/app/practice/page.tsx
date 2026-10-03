@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, FileText, Library, ListChecks } from "lucide-react";
 
 import AppShell from "@/components/AppShell";
-import { PaywallGate } from "@/components/Paywall";
 
 type StudyMode = "past-questions" | "study" | "mock-cbt" | "syllabus";
 
@@ -44,7 +43,6 @@ const NOVELS = [
 
 export default function PracticePage() {
   return (
-    <PaywallGate feature="Practice">
     <AppShell title="Learn">
       <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-5xl lg:px-6">
         <h1 className="mb-4 text-2xl font-black text-slate-900 lg:hidden">Learn</h1>
@@ -98,6 +96,5 @@ export default function PracticePage() {
         </div>
       </div>
     </AppShell>
-    </PaywallGate>
   );
 }

@@ -64,6 +64,10 @@ export default function AdminPaymentsPage() {
     price_biannual_naira: "1700",
   });
 
+  // ── Free trial ─────────────────────────────────────────────────────────────
+  const [trialEnabled, setTrialEnabled] = useState(false);
+  const [trialDays, setTrialDays]       = useState("1");
+
   // ── Discount codes ─────────────────────────────────────────────────────────
   const [codes, setCodes]     = useState<DiscountCode[]>([]);
   const [newCode, setNewCode] = useState("");
@@ -93,8 +97,7 @@ export default function AdminPaymentsPage() {
   const load = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
     const [settingsRes, codesRes, paymentsRes, proRes] = await Promise.all([
-      supabase.from("admin_settings").select("key, value"),
-      supabase.from("discount_codes").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("admin_settings").select("key, value"),      supabase.from("discount_codes").select("*").order("created_at", { ascending: false }).limit(100),
       supabase
         .from("payments")
         .select("id, reference, amount_kobo, status, plan, discount_code, created_at, paid_at, user:profiles(full_name, email)")
@@ -120,6 +123,8 @@ export default function AdminPaymentsPage() {
       price_monthly_naira:  settings.price_monthly_naira  ?? "800",
       price_biannual_naira: settings.price_biannual_naira ?? "1700",
     });
+    setTrialEnabled(settings.free_trial_enabled === "true");
+    setTrialDays(settings.free_trial_days ?? "1");
     setCodes(((codesRes.data ?? []) as unknown) as DiscountCode[]);
     setPayments(((paymentsRes.data ?? []) as unknown) as PaymentRow[]);
     setProUsers(((proRes.data ?? []) as unknown) as ProUser[]);
@@ -155,7 +160,23 @@ export default function AdminPaymentsPage() {
     setBusy(false);
   }
 
-  // ── Create discount code ───────────────────────────────────────────────────
+  // ── Save trial settings ────────────────────────────────────────────────────
+  async function saveTrial() {
+    const days = parseInt(trialDays, 10);
+    if (Number.isNaN(days) || days < 1 || days > 30) {
+      flash("Trial duration must be between 1 and 30 days.", false); return;
+    }
+    setBusy(true);
+    const supabase = createSupabaseBrowserClient();
+    const { error } = await supabase.from("admin_settings").upsert([
+      { key: "free_trial_enabled", value: trialEnabled ? "true" : "false", updated_at: new Date().toISOString() },
+      { key: "free_trial_days",    value: String(days),                     updated_at: new Date().toISOString() },
+    ]);
+    flash(error ? error.message : `Free trial ${trialEnabled ? `enabled (${days} day${days !== 1 ? "s" : ""})` : "disabled"}.`, !error);
+    setBusy(false);
+  }
+
+  // ── Create discount code ─────────────────────────────────────────────────────
   async function createCode() {
     const code = newCode.trim().toUpperCase().replace(/\s+/g, "");
     const value = parseInt(newValue, 10);
@@ -315,7 +336,55 @@ export default function AdminPaymentsPage() {
         </div>
       </section>
 
-      {/* ── 3. Discount codes ─────────────────────────────────────────────── */}
+      {/* ── 3. Free Trial ─────────────────────────────────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
+        <p className="mb-1 text-sm font-black text-white">Free Trial</p>
+        <p className="mb-4 text-xs text-slate-400">
+          When enabled, new users see a "Claim free trial" button on the upgrade page.
+          Each account can only claim once. Changes take effect immediately.
+        </p>
+        <div className="flex flex-wrap items-end gap-4">
+          {/* Toggle */}
+          <div>
+            <span className="mb-1.5 block text-xs font-bold text-slate-400">Status</span>
+            <button
+              type="button"
+              onClick={() => setTrialEnabled((v) => !v)}
+              className={`flex h-10 items-center gap-2 rounded-full px-4 text-sm font-black transition ${
+                trialEnabled
+                  ? "bg-emerald-500/20 text-emerald-300 ring-1 ring-emerald-500/30"
+                  : "bg-slate-800 text-slate-400 ring-1 ring-slate-700"
+              }`}
+            >
+              <span className={`h-2.5 w-2.5 rounded-full ${trialEnabled ? "bg-emerald-400" : "bg-slate-600"}`} />
+              {trialEnabled ? "Enabled" : "Disabled"}
+            </button>
+          </div>
+          {/* Duration */}
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-bold text-slate-400">Duration (days)</span>
+            <input
+              value={trialDays}
+              onChange={(e) => setTrialDays(e.target.value)}
+              inputMode="numeric"
+              placeholder="1"
+              className="w-24 rounded-xl bg-slate-800 px-3 py-2 text-sm font-bold text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500"
+            />
+          </label>
+          <button type="button" onClick={() => void saveTrial()} disabled={busy}
+            className="rounded-full bg-violet-600 px-5 py-2.5 text-xs font-black text-white hover:bg-violet-700 disabled:opacity-50">
+            Save trial settings
+          </button>
+        </div>
+        {trialEnabled && (
+          <div className="mt-3 rounded-2xl bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-300 ring-1 ring-emerald-500/20">
+            ✓ Free trial is <strong>active</strong> — users who have never subscribed will see a
+            "{trialDays}-day free trial" claim button on the upgrade page.
+          </div>
+        )}
+      </section>
+
+      {/* ── 4. Discount codes ─────────────────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
         <div className="mb-4 flex items-center gap-2">
           <Tag className="h-4 w-4 text-violet-400" />
@@ -378,7 +447,7 @@ export default function AdminPaymentsPage() {
         </div>
       </section>
 
-      {/* ── 4. Pro subscribers ────────────────────────────────────────────── */}
+      {/* ── 5. Pro subscribers ────────────────────────────────────────────── */}
       <section className="rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
         <div className="mb-4 flex items-center justify-between">
           <p className="text-sm font-black text-white">
@@ -437,7 +506,7 @@ export default function AdminPaymentsPage() {
         )}
       </section>
 
-      {/* ── 5. Recent payments ────────────────────────────────────────────── */}
+      {/* ── 6. Recent payments ────────────────────────────────────────────── */}
       <section>
         <h2 className="mb-3 text-sm font-black uppercase tracking-[0.18em] text-slate-400">Recent Payments</h2>
         {loading ? (

@@ -6,7 +6,7 @@ import { startTransition, Suspense, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
-import { PaywallGate } from "@/components/Paywall";
+import { usePro } from "@/lib/usePro";
 import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import RichText from "@/components/RichText";
@@ -609,6 +609,7 @@ type SubjectPlan = { name: string; count: number };
 function ExamPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
+  const { isPro, loading: proLoading } = usePro();
 
   const rawMode = searchParams.get("mode");
   const mode = rawMode === "study" ? "study" : rawMode === "practice" ? "practice" : "exam";
@@ -911,7 +912,6 @@ function ExamPageContent() {
       );
     }
     return (
-      <PaywallGate feature="Exam">
       <AppShell title={urlNovel ? "Novel Study" : isStudyMode ? "Study Mode" : "Mock Exam"} back={setupHref}>
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
           <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
@@ -1036,17 +1036,26 @@ function ExamPageContent() {
             </div>
           )}
 
-          <button type="button" onClick={() => void startSession()} disabled={preparing}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700 disabled:opacity-60">
-            <Play className="h-5 w-5" aria-hidden />
-            {preparing ? "Preparing questions…" : "Start now"}
-          </button>
+          {/* Pro-gated start button — free users see upgrade CTA, Pro users start */}
+          {!proLoading && !isPro ? (
+            <Link
+              href={`/upgrade?next=${encodeURIComponent(`/exam?mode=${mode}${urlSubject ? `&subject=${encodeURIComponent(urlSubject)}` : ""}`)}`}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-base font-black text-white shadow-lg shadow-amber-300/30 transition hover:shadow-amber-300/50"
+            >
+              ⭐ Upgrade to Pro to start
+            </Link>
+          ) : (
+            <button type="button" onClick={() => void startSession()} disabled={preparing || proLoading}
+              className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700 disabled:opacity-60">
+              <Play className="h-5 w-5" aria-hidden />
+              {preparing ? "Preparing questions…" : "Start now"}
+            </button>
+          )}
           <Link href={setupHref} className="mt-3 flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
             Change session setup
           </Link>
         </div>
       </AppShell>
-      </PaywallGate>
     );
   }
 

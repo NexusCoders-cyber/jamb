@@ -69,7 +69,7 @@ const PRO_PERKS = [
   "Detailed analytics & weak-subject tracking",
   "Mistake bank & personalised review",
   "⭐ Pro badge on your profile",
-  "Ad-free experience",
+  "Community & Arena always free",
 ];
 
 // ─── Paywall wall UI ──────────────────────────────────────────────────────────

@@ -149,6 +149,7 @@ export async function POST(req: Request) {
         email,
         amount: finalKobo,
         currency: "NGN",
+        channels: ["bank_transfer"],   // bank transfer only
         metadata: {
           user_id: user.id,
           full_name: name,
