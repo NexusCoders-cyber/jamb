@@ -85,7 +85,7 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
   }
 
   const frame = (
-    <div className={`relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 ${status === "loading" ? (compact ? "min-h-[64px]" : "min-h-[140px]") : ""} ${className}`}>
+    <div className={`keep-light relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 ${status === "loading" ? (compact ? "min-h-[64px]" : "min-h-[140px]") : ""} ${className}`}>
       {status === "loading" && <div className="absolute inset-0 animate-pulse bg-slate-100" aria-hidden />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -153,7 +153,7 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
                 alt={alt}
                 referrerPolicy="no-referrer"
                 draggable={false}
-                className="rounded-xl bg-white object-contain"
+                className="keep-light rounded-xl bg-white object-contain"
                 style={zoom === 1 ? { maxWidth: "100%", maxHeight: "calc(100dvh - 6rem)" } : { width: `${zoom * 100}%`, maxWidth: "none" }}
               />
             </div>
