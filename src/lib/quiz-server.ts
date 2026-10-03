@@ -10,6 +10,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv, getAlocApiKey } from "@/lib/env";
 import { fetchAlocMany, ALOC_SUBJECTS } from "@/lib/aloc";
+import { LEKKI_QUESTIONS, sampleLekkiQuestions } from "@/lib/lekki-questions";
 import { evaluateAchievements } from "@/lib/achievements-server";
 
 export type QuizPlayer = "host" | "guest";
@@ -74,12 +75,31 @@ export function errorResponse(e: unknown): Response {
   return Response.json({ error: "Server error" }, { status: 500 });
 }
 
-export const ARENA_SUBJECTS = ALOC_SUBJECTS.map((s) => s.name);
+export const ARENA_SUBJECTS = [
+  ...ALOC_SUBJECTS.map((s) => s.name),
+  "The Lekki Headmaster (Novel)",
+];
 export const DEFAULT_QUESTION_COUNT = 10;
 
-/** Pull a fresh set of ALOC questions for a match. Count is capped at 10. */
+const NOVEL_SUBJECTS = ["The Lekki Headmaster (Novel)", "the lekki headmaster"];
+
+/** Pull a fresh set of questions for a match. Count is capped at 10.
+ *  Novel subjects draw from the static bank; all others hit ALOC. */
 export async function buildQuestionSet(subject: string, count = DEFAULT_QUESTION_COUNT): Promise<StoredQuestion[]> {
-  const clamped = Math.min(count, DEFAULT_QUESTION_COUNT); // never exceed 10
+  const clamped = Math.min(count, DEFAULT_QUESTION_COUNT);
+
+  // ── Novel: use static bank ──────────────────────────────────────────────
+  if (NOVEL_SUBJECTS.some((n) => subject.toLowerCase().includes(n.toLowerCase()))) {
+    const sampled = sampleLekkiQuestions(clamped);
+    return sampled.map((q) => ({
+      id: q.id,
+      prompt: q.prompt,
+      options: q.options,
+      answer: q.answer,
+      explanation: q.explanation,
+      subject: "The Lekki Headmaster",
+    }));
+  }
   const apiKey = getAlocApiKey();
   let raw: Awaited<ReturnType<typeof fetchAlocMany>>;
   try {

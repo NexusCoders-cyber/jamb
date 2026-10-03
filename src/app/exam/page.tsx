@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { usePro } from "@/lib/usePro";
+import { getCachedQuestions, setCachedQuestions, cacheKey as idbCacheKey } from "@/lib/questionCache";
 import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import RichText from "@/components/RichText";
@@ -749,22 +750,31 @@ function ExamPageContent() {
       const yearParam = examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
 
       async function fetchPool(name: string, want: number): Promise<ExamQuestion[]> {
-        const cacheKey = examYear === "random" ? name : `${name}:${examYear}`;
-        const cached = questionCache.current.get(cacheKey);
+        const ck = examYear === "random" ? name : `${name}:${examYear}`;
+        const cached = questionCache.current.get(ck);
         const batches: ExamQuestion[][] = [];
         if (cached) {
           batches.push(cached);
         } else {
-          const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
-            .then((r) => r.json())
-            .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
-              if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-                questionCache.current.set(cacheKey, res.data);
-                return res.data;
-              }
-              throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
-            });
-          batches.push(first);
+          // Check IDB first (offline/fast cache)
+          const idbCached = await getCachedQuestions<ExamQuestion>(idbCacheKey(name, examYear === "random" ? undefined : examYear));
+          if (idbCached && idbCached.length > 0) {
+            questionCache.current.set(ck, idbCached);
+            batches.push(idbCached);
+          } else {
+            const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
+              .then((r) => r.json())
+              .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
+                if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
+                  questionCache.current.set(ck, res.data);
+                  // Persist to IDB for offline use
+                  void setCachedQuestions(idbCacheKey(name, examYear === "random" ? undefined : examYear), res.data);
+                  return res.data;
+                }
+                throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
+              });
+            batches.push(first);
+          }
         }
 
         const seen = new Set(batches[0].map((q) => String(q.id)));

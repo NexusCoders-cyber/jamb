@@ -13,7 +13,7 @@ import FriendButton from "@/components/FriendButton";
 import { getMyFriendships, getProfile, type Friendship } from "@/lib/queries";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
-  Award, Check, Copy, Crown, Link2, MessageCircle, Play, Send, Swords, Timer, Trophy, Users, X, Zap,
+  Award, Check, Copy, Crown, Link2, MessageCircle, Send, Swords, Timer, Trophy, Users, X, Zap,
 } from "lucide-react";
 
 const TURN_SECONDS = 10;
@@ -54,6 +54,7 @@ const ARENA_SUBJECTS: ArenaSubject[] = [
   { name: "Economics" },
   { name: "Government" },
   { name: "Literature" },
+  { name: "The Lekki Headmaster (Novel)" },
 ];
 
 type PersonRow = { id: string; full_name: string; avatar_url: string | null; user_code: string | null };
@@ -68,7 +69,6 @@ export default function ArenaPage() {
   const [subject, setSubject] = useState("");
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [friendsLoaded, setFriendsLoaded] = useState(false);
-  const [mode, setMode] = useState<"solo" | "duel">("solo");
   const [guestId, setGuestId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
@@ -374,13 +374,13 @@ export default function ArenaPage() {
     } catch { /* user dismissed */ }
   }
 
-  async function createMatch(m: "solo" | "duel") {
+  async function createMatch() {
     if (!subject) { setError("Pick a subject first."); return; }
     setCreating(true); setError("");
     const res = await fetch("/api/quiz/match", {
       method: "POST",
       headers: await authHeaders(),
-      body: JSON.stringify({ subject, mode: m, guestId: m === "duel" ? guestId : null }),
+      body: JSON.stringify({ subject, mode: "duel", guestId }),
     });
     const json = (await res.json()) as { matchId?: string; error?: string };
     setCreating(false);
@@ -425,7 +425,7 @@ export default function ArenaPage() {
       ? "Leave this game? Your opponent wins immediately."
       : match.isDuel
         ? "Cancel this duel?"
-        : "End this game?";
+        : "Cancel this game?";
     if (!window.confirm(msg)) return;
     stopPolling();
     await fetch(`/api/quiz/match/${match.matchId}`, {
@@ -788,20 +788,19 @@ export default function ArenaPage() {
             </Link>
           </div>
 
-          {/* Mode switch */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => setMode("solo")}
-              className={`rounded-[24px] p-4 text-left ring-2 transition ${mode === "solo" ? "bg-violet-50 ring-violet-500" : "bg-white ring-slate-200"}`}>
-              <Play className="h-5 w-5 text-violet-600" aria-hidden />
-              <p className="mt-2 text-base font-black text-slate-900">Solo drill</p>
-              <p className="text-xs text-slate-500">10 questions, 8 QPoints per correct answer</p>
-            </button>
-            <button type="button" onClick={() => setMode("duel")}
-              className={`rounded-[24px] p-4 text-left ring-2 transition ${mode === "duel" ? "bg-violet-50 ring-violet-500" : "bg-white ring-slate-200"}`}>
-              <Users className="h-5 w-5 text-violet-600" aria-hidden />
-              <p className="mt-2 text-base font-black text-slate-900">Duel someone</p>
-              <p className="text-xs text-slate-500">Turn-based, 10s per turn · win bonus 25</p>
-            </button>
+          {/* Mode switch — DUEL only, solo removed */}
+          <div className="mb-5 rounded-[24px] bg-gradient-to-r from-violet-600 to-violet-500 p-5 text-white">
+            <p className="flex items-center gap-2 text-sm font-black">
+              <Users className="h-5 w-5" aria-hidden /> Duel mode — 10 questions, 10s per turn
+            </p>
+            <p className="mt-1 text-xs text-violet-200">
+              Challenge a friend or share an open link. First to finish with the most correct answers wins.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-violet-100">
+              <span className="rounded-full bg-white/15 px-2.5 py-1">Win bonus: +25 QPoints</span>
+              <span className="rounded-full bg-white/15 px-2.5 py-1">+10 per correct</span>
+              <span className="rounded-full bg-white/15 px-2.5 py-1">+5 participation</span>
+            </div>
           </div>
 
           {/* Subject — dropdown */}
@@ -819,7 +818,7 @@ export default function ArenaPage() {
           </select>
 
           {/* Online players — anyone, not just friends */}
-          {mode === "duel" && people.length > 0 && (
+          {people.length > 0 && (
             <div className="mb-4 rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
                 Online now — tap to challenge
@@ -853,8 +852,7 @@ export default function ArenaPage() {
           )}
 
           {/* Friends (offline friends can still be invited) */}
-          {mode === "duel" && (
-            <div className="mb-4 rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
+          <div className="mb-4 rounded-[24px] bg-white p-4 ring-1 ring-slate-200">
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Invite a friend</p>
               {!friendsLoaded ? (
                 <p className="text-sm text-slate-400">Loading friends…</p>
@@ -884,20 +882,17 @@ export default function ArenaPage() {
                   })}
                 </div>
               )}
-            </div>
-          )}
+          </div>
 
           {error && <p className="mb-3 text-sm font-semibold text-rose-600">{error}</p>}
 
-          <button type="button" onClick={() => void createMatch(mode)} disabled={creating}
+          <button type="button" onClick={() => void createMatch()} disabled={creating}
             className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-violet-600 text-base font-black text-white shadow-lg shadow-violet-300/30 transition hover:bg-violet-700 disabled:opacity-50">
             {creating
               ? "Setting up the board…"
-              : mode === "solo"
-                ? "Start solo drill"
-                : guestId
-                  ? "Send duel invite"
-                  : "Create duel & share link"}
+              : guestId
+                ? "Send duel invite"
+                : "Create duel & share link"}
           </button>
 
           {/* How QPoints work */}
@@ -905,11 +900,10 @@ export default function ArenaPage() {
             <p className="text-sm font-black text-slate-900">How QPoints work</p>
             <ul className="mt-2 space-y-1 text-xs text-slate-600">
               <li>• Duel win: 25 bonus + 5 participation + 10 per correct answer</li>
-              <li>• Play a duel to the end and both players keep 5 + 10 per correct answer — the loser just misses the win bonus</li>
-              <li>• Leave or forfeit a live duel: you earn 0 — your opponent takes the win and the points</li>
+              <li>• Both players keep 5 + 10 per correct answer even when you lose</li>
+              <li>• Leave or forfeit a live duel: you earn 0 — your opponent takes the win</li>
               <li>• Games that never finish (abandoned/expired) pay nothing</li>
-              <li>• Solo drill: +8 per correct answer · daily cap: 300 QPoints</li>
-              <li>• Leaderboard resets weekly (set by admins)</li>
+              <li>• Daily cap: 300 QPoints · Leaderboard resets weekly</li>
             </ul>
           </div>
         </div>
