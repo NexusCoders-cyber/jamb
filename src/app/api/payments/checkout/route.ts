@@ -127,7 +127,10 @@ export async function POST(req: Request) {
       codeId = codeRow.id;
     }
 
-    const finalKobo = Math.max(100, baseNaira * 100 - discountKobo); // min ₦1
+    // Paystack's channels on this merchant reject charges below ₦100 with
+    // "No active channel to process transaction" — so after discounts, never
+    // charge less than the ₦100 floor (verified against the live account).
+    const finalKobo = Math.max(10000, baseNaira * 100 - discountKobo);
 
     // Create Paystack transaction
     const { data: profile } = await admin

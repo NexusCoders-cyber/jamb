@@ -31,13 +31,14 @@ export async function POST(req: Request) {
 
     const supabase = getAdminClient();
 
-    // Admin-set prices
+    // Admin-set prices + Paystack key (admin_settings is the source of truth —
+    // the env fallback may be stale/invalid, which broke this checkout before)
     const { data: settingsData } = await supabase.from("admin_settings").select("key, value");
     const settings = Object.fromEntries(((settingsData ?? []) as Array<{ key: string; value: string }>).map((s) => [s.key, s.value]));
     const baseNaira = plan === "lifetime"
       ? Number(settings.price_lifetime_naira ?? 1000)
       : Number(settings.price_monthly_naira ?? 500);
-    const baseKobo = Math.max(100, baseNaira * 100); // Paystack minimum ₦1
+    const baseKobo = Math.max(10000, baseNaira * 100); // keep realistic charge floor (₦100)
 
     // Validate the discount code entirely server-side
     let discount: DiscountRow | null = null;
@@ -69,7 +70,9 @@ export async function POST(req: Request) {
         : Math.min(discount.value, baseKobo);
     }
 
-    const payableKobo = Math.max(100, baseKobo - discountKobo);
+    // Paystack's channels on this merchant reject charges below ₦100 with
+    // "No active channel to process transaction" — keep the ₦100 floor.
+    const payableKobo = Math.max(10000, baseKobo - discountKobo);
     const reference = `QB-${plan.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     // Record the pending payment BEFORE redirecting, so /confirm can match it
@@ -84,12 +87,14 @@ export async function POST(req: Request) {
     });
     if (insertErr) throw new HttpError(500, `Could not record payment: ${insertErr.message}`);
 
-    // Paystack initialize
+    // Paystack initialize — use the admin-configured key first, env as fallback
+    const settingsMap = Object.fromEntries(((settingsData ?? []) as Array<{ key: string; value: string }>).map((s) => [s.key, s.value]));
+    const secretKey = (settingsMap.paystack_secret_key ?? "").trim() || getPaystackSecretKey();
     const origin = new URL(req.url).origin;
     const initRes = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${getPaystackSecretKey()}`,
+        Authorization: `Bearer ${secretKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

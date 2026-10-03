@@ -453,8 +453,8 @@ function UpgradePageContent() {
         <div className="mb-5 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200">
           <span className="text-lg">🏦</span>
           <p className="text-xs text-slate-600">
-            <strong className="font-bold text-slate-800">Bank transfer only.</strong>{" "}
-            After clicking pay, you&apos;ll receive bank account details to transfer to. Pro activates once payment is confirmed.
+            <strong className="font-bold text-slate-800">Pay your way.</strong>{" "}
+            Card, bank transfer, USSD — every channel active on our Paystack account is available at checkout. Pro activates once payment is confirmed.
           </p>
         </div>
 
@@ -491,7 +491,7 @@ function UpgradePageContent() {
         )}
 
         <p className="mt-3 text-center text-xs text-slate-400">
-          Secured by Paystack · Bank transfer · No auto-renewal
+          Secured by Paystack · No auto-renewal
         </p>
 
         {isReady && isPro && (

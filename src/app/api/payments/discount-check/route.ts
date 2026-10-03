@@ -79,13 +79,17 @@ export async function POST(req: Request) {
     }
 
     // baseNaira is display-only (the client's selected plan price); the real
-    // charged amount is recomputed server-side at checkout.
+    // charged amount is recomputed server-side at checkout. Paystack channels
+    // on this merchant reject charges below ₦100, so the discount is capped so
+    // the student always pays at least the ₦100 floor (same rule as checkout).
+    const MIN_PAYABLE_KOBO = 10000;
     const baseNaira = Math.max(0, Math.round(Number(body.baseNaira ?? 0)));
     const baseKobo = baseNaira * 100;
-    const discountKobo = dc.kind === "percent"
+    const rawDiscountKobo = dc.kind === "percent"
       ? Math.round((baseKobo * dc.value) / 100)
       : Math.min(dc.value, baseKobo);
-    const finalNaira = Math.max(1, Math.round((baseKobo - discountKobo) / 100));
+    const discountKobo = Math.min(rawDiscountKobo, Math.max(0, baseKobo - MIN_PAYABLE_KOBO));
+    const finalNaira = Math.max(Math.round(MIN_PAYABLE_KOBO / 100), Math.round((baseKobo - discountKobo) / 100));
 
     return NextResponse.json({
       valid: true,
@@ -96,7 +100,7 @@ export async function POST(req: Request) {
       finalNaira,
       message: dc.kind === "percent"
         ? `${dc.value}% off applied`
-        : `₦${dc.value.toLocaleString()} off applied`,
+        : `₦${Math.round(discountKobo / 100).toLocaleString()} off applied`,
     });
   } catch (e) {
     console.error("[discount-check]", e);
