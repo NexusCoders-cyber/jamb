@@ -5,9 +5,15 @@ import { ArrowRight, BookOpen, FileText, Library, ListChecks } from "lucide-reac
 
 import AppShell from "@/components/AppShell";
 
-type StudyMode = "past-questions" | "study" | "mock-cbt" | "syllabus";
+type StudyMode = "topics" | "past-questions" | "study" | "mock-cbt" | "syllabus";
 
 const modes: { id: StudyMode; label: string; detail: string; href: string }[] = [
+  {
+    id: "topics",
+    label: "Topics",
+    detail: "Pick a subject, choose a syllabus topic, and study or practise it straight away.",
+    href: "/topics",
+  },
   {
     id: "past-questions",
     label: "Past questions",

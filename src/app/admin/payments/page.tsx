@@ -64,6 +64,9 @@ export default function AdminPaymentsPage() {
     price_biannual_naira: "1700",
   });
 
+  // ── Payment channels ──────────────────────────────────────────────────────
+  const [channels, setChannels] = useState("");
+
   // ── Free trial ─────────────────────────────────────────────────────────────
   const [trialEnabled, setTrialEnabled] = useState(false);
   const [trialDays, setTrialDays]       = useState("1");
@@ -125,6 +128,8 @@ export default function AdminPaymentsPage() {
     });
     setTrialEnabled(settings.free_trial_enabled === "true");
     setTrialDays(settings.free_trial_days ?? "1");
+    setChannels(settings.paystack_channels ?? "");
+    setChannels(settings.paystack_channels ?? "");
     setCodes(((codesRes.data ?? []) as unknown) as DiscountCode[]);
     setPayments(((paymentsRes.data ?? []) as unknown) as PaymentRow[]);
     setProUsers(((proRes.data ?? []) as unknown) as ProUser[]);
@@ -145,6 +150,25 @@ export default function AdminPaymentsPage() {
       { key: "paystack_public_key", value: publicKey.trim(),  updated_at: new Date().toISOString() },
     ]);
     flash(error ? error.message : "Paystack keys saved — checkout will use them immediately.", !error);
+    setBusy(false);
+  }
+
+  // ── Save payment channels ──────────────────────────────────────────────
+  async function saveChannels() {
+    setBusy(true);
+    const supabase = createSupabaseBrowserClient();
+    const list = channels.split(",").map((c) => c.trim().toLowerCase()).filter(Boolean).join(",");
+    const { error } = await supabase.from("admin_settings").upsert([
+      { key: "paystack_channels", value: list, updated_at: new Date().toISOString() },
+    ]);
+    flash(
+      error
+        ? error.message
+        : list
+          ? `Channels saved — checkout will only offer: ${list}`
+          : "Saved — checkout now uses every channel enabled on your Paystack account.",
+      !error,
+    );
     setBusy(false);
   }
 
@@ -309,6 +333,37 @@ export default function AdminPaymentsPage() {
           className="mt-4 rounded-full bg-violet-600 px-5 py-2.5 text-xs font-black text-white hover:bg-violet-700 disabled:opacity-50">
           Save keys
         </button>
+      </section>
+
+      {/* ── 1b. Payment channels ──────────────────────────────────────────── */}
+      <section className="rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
+        <p className="mb-1 text-sm font-black text-white">Payment Channels</p>
+        <p className="mb-4 text-xs text-slate-400">
+          Connect the checkout to the payment channels active on your Paystack account.
+          Leave this <strong className="text-slate-300">empty</strong> to let Paystack use every channel enabled on the account
+          (recommended — it prevents the "no active channel to process this transaction" error).
+          Valid values: card, bank, bank_transfer, ussd, qr, mobile_money — separated by commas.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block flex-1 min-w-[240px]">
+            <span className="text-xs font-bold text-slate-400">Channels (comma-separated, empty = all)</span>
+            <input
+              value={channels}
+              onChange={(e) => setChannels(e.target.value)}
+              placeholder="e.g. card, bank_transfer, ussd"
+              className="mt-1 w-full rounded-xl bg-slate-800 px-3 py-2 text-sm font-bold text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500"
+            />
+          </label>
+          <button type="button" onClick={() => void saveChannels()} disabled={busy}
+            className="rounded-full bg-violet-600 px-5 py-2.5 text-xs font-black text-white hover:bg-violet-700 disabled:opacity-50">
+            Save channels
+          </button>
+        </div>
+        {channels.trim() === "" && (
+          <p className="mt-3 rounded-2xl bg-emerald-500/10 px-4 py-2.5 text-xs text-emerald-300 ring-1 ring-emerald-500/20">
+            ✓ No restriction set — students can pay with any channel your Paystack account supports (card, transfer, USSD…).
+          </p>
+        )}
       </section>
 
       {/* ── 2. Plan prices ────────────────────────────────────────────────── */}

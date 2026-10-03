@@ -131,6 +131,9 @@ function UpgradePageContent() {
 
   const [selectedPlan, setSelectedPlan] = useState<PlanId>("monthly");
   const [discountCode, setDiscountCode] = useState("");
+  const [applied, setApplied] = useState<{ code: string; finalNaira: number; discountNaira: number; message: string } | null>(null);
+  const [checkingCode, setCheckingCode] = useState(false);
+  const [codeMsg, setCodeMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [error, setError] = useState("");
@@ -138,6 +141,12 @@ function UpgradePageContent() {
   const [successUntil, setSuccessUntil] = useState<string | null>(null);
   const [isTrial, setIsTrial] = useState(false);
   const paystackScriptRef = useRef(false);
+
+  // Switching plans invalidates a previously applied discount preview
+  useEffect(() => {
+    setApplied(null);
+    setCodeMsg(null);
+  }, [selectedPlan]);
 
   // Load Paystack inline JS once
   useEffect(() => {
@@ -204,6 +213,43 @@ function UpgradePageContent() {
       setError("Something went wrong. Try again.");
     } finally {
       setTrialLoading(false);
+    }
+  }
+
+  // Live discount-code validation — shows the new price before paying
+  async function applyCode() {
+    const code = discountCode.trim();
+    if (!code || checkingCode) return;
+    setCheckingCode(true);
+    setCodeMsg(null);
+    setApplied(null);
+    try {
+      const res = await fetch("/api/payments/discount-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, plan: selectedPlan, baseNaira: currentPlan?.naira ?? 0 }),
+      });
+      const d = (await res.json()) as {
+        valid?: boolean;
+        finalNaira?: number;
+        discountNaira?: number;
+        message?: string;
+        error?: string;
+      };
+      if (res.ok && d.valid) {
+        setApplied({
+          code: code.toUpperCase(),
+          finalNaira: d.finalNaira ?? 0,
+          discountNaira: d.discountNaira ?? 0,
+          message: d.message ?? "Discount applied",
+        });
+      } else {
+        setCodeMsg(d.message ?? d.error ?? "That code could not be applied.");
+      }
+    } catch (_e) {
+      setCodeMsg("Could not check the code. Try again.");
+    } finally {
+      setCheckingCode(false);
     }
   }
 
@@ -369,16 +415,38 @@ function UpgradePageContent() {
 
         {/* Discount code */}
         <div className="mb-5">
-          <label className="block">
-            <span className="text-xs font-bold text-slate-500">Discount code (optional)</span>
+          <span className="text-xs font-bold text-slate-500">Discount code (optional)</span>
+          <div className="mt-1.5 flex gap-2">
             <input
               type="text"
               value={discountCode}
-              onChange={(e) => setDiscountCode(e.target.value.toUpperCase())}
+              onChange={(e) => {
+                setDiscountCode(e.target.value.toUpperCase());
+                setApplied(null);
+                setCodeMsg(null);
+              }}
               placeholder="e.g. JAMB2026"
-              className="mt-1.5 h-11 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold uppercase text-slate-800 outline-none focus:border-violet-400 focus:bg-white"
+              className="h-11 min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold uppercase text-slate-800 outline-none focus:border-violet-400 focus:bg-white"
             />
-          </label>
+            <button
+              type="button"
+              onClick={() => void applyCode()}
+              disabled={checkingCode || !discountCode.trim()}
+              className="h-11 shrink-0 rounded-xl bg-violet-600 px-5 text-xs font-black text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {checkingCode ? "Checking…" : "Apply"}
+            </button>
+          </div>
+          {applied ? (
+            <p className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+              ✅ {applied.code}: {applied.message} — pay ₦{applied.finalNaira.toLocaleString()}
+              {applied.discountNaira > 0 && <> instead of ₦{currentPlan?.naira.toLocaleString()}</>}
+            </p>
+          ) : codeMsg ? (
+            <p className="mt-2 text-xs font-semibold text-rose-600">{codeMsg}</p>
+          ) : (
+            <p className="mt-2 text-[11px] text-slate-400">Tap Apply to check the code — the price updates before you pay.</p>
+          )}
         </div>
 
         {/* Payment method note */}
@@ -409,7 +477,7 @@ function UpgradePageContent() {
             disabled={loading}
             className="flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-amber-500 to-amber-400 text-base font-black text-white shadow-lg shadow-amber-400/30 disabled:opacity-60"
           >
-            {loading ? "Processing…" : `Extend Pro — ${currentPlan.price} for ${currentPlan.duration}`}
+            {loading ? "Processing…" : `Extend Pro — ₦${(applied?.finalNaira ?? currentPlan?.naira ?? 0).toLocaleString()} for ${currentPlan?.duration ?? ""}`}
           </button>
         ) : (
           <button
@@ -418,7 +486,7 @@ function UpgradePageContent() {
             disabled={loading || !isReady}
             className="flex h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 text-base font-black text-white shadow-lg shadow-violet-400/30 disabled:opacity-60"
           >
-            {loading ? "Opening payment…" : `Pay — ${currentPlan.price} (bank transfer) ⭐`}
+            {loading ? "Opening payment…" : `Pay — ₦${(applied?.finalNaira ?? currentPlan?.naira ?? 0).toLocaleString()}${applied ? " ✅" : " (bank transfer)"} ⭐`}
           </button>
         )}
 

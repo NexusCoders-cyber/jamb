@@ -23,6 +23,7 @@ import {
   PenLine,
   BookOpen,
   FileText,
+  ListChecks,
   Star,
   BarChart3,
   Library,
@@ -47,6 +48,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
     items: [
       { label: "Home",            href: "/dashboard",           icon: Home },
       { label: "Practice",        href: "/practice",            icon: PenLine },
+      { label: "Topics",          href: "/topics",              icon: ListChecks },
       { label: "Study Mode",      href: "/practice/study",      icon: BookOpen },
       { label: "Mock Exam",       href: "/exam",                icon: FileText },
       { label: "Daily Challenge", href: "/daily-challenge",     icon: Star },

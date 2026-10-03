@@ -33,13 +33,13 @@ function adminClient() {
 async function getSettings(supabase: ReturnType<typeof adminClient>) {
   const { data } = await supabase
     .from("admin_settings")
-    .select("key, value")
-    .in("key", [
+    .select("key, value")      .in("key", [
       "price_weekly_naira",
       "price_monthly_naira",
       "price_biannual_naira",
       "paystack_secret_key",
       "paystack_public_key",
+      "paystack_channels",
     ]);
   return Object.fromEntries(
     ((data ?? []) as Array<{ key: string; value: string }>).map((r) => [r.key, r.value]),
@@ -139,6 +139,16 @@ export async function POST(req: Request) {
     const email = profile?.email ?? user.email ?? "";
     const name = (profile?.full_name as string | undefined) ?? "";
 
+    // Payment channels set by the admin in /admin/payments. Leaving it empty is
+    // important: with no `channels` in the request, Paystack uses EVERY channel
+    // enabled on the business account, which avoids the
+    // "There is no active channel to process this transaction" error that a
+    // hard-coded channel list causes when a channel isn't active.
+    const channelsRaw = settings.paystack_channels?.trim() ?? "";
+    const channels = channelsRaw
+      ? channelsRaw.split(",").map((c) => c.trim().toLowerCase()).filter(Boolean)
+      : [];
+
     const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
@@ -149,7 +159,7 @@ export async function POST(req: Request) {
         email,
         amount: finalKobo,
         currency: "NGN",
-        channels: ["bank_transfer"],   // bank transfer only
+        ...(channels.length > 0 ? { channels } : {}), // admin-set channels; empty = account defaults
         metadata: {
           user_id: user.id,
           full_name: name,

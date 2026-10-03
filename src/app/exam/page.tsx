@@ -627,8 +627,10 @@ function ExamPageContent() {
   const urlYear = searchParams.get("year") ?? "All years";
   // Novel study: only questions drawn from this set text
   const urlNovel = searchParams.get("novel") ?? "";
+  // Topic session (Learn → Topics): syllabus-topic practice/study
+  const urlTopic = searchParams.get("topic") ?? "";
   // Standalone setup page this session was launched from (Learn hub modes)
-  const setupHref = urlNovel ? "/practice/novel" : isPracticeMode ? "/practice/past-questions" : isStudyMode ? "/practice/study" : "/practice";
+  const setupHref = urlTopic ? "/topics" : urlNovel ? "/practice/novel" : isPracticeMode ? "/practice/past-questions" : isStudyMode ? "/practice/study" : "/practice";
 
   const [started, setStarted] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -804,6 +806,20 @@ function ExamPageContent() {
         return res.data;
       }
 
+      let combined: ExamQuestion[];
+      if (!isExamMode && urlTopic) {
+        // Topic session (Learn → Topics): the server fetches a big ALOC pool and
+        // filters it with the syllabus keywords for this topic.
+        const res = (await fetch(`/api/topics/questions?subject=${encodeURIComponent(studySubject)}&topic=${encodeURIComponent(urlTopic)}&count=${studyCount}`).then((r) => r.json())) as {
+          ok: boolean;
+          data?: ExamQuestion[];
+          error?: string;
+        };
+        if (!res.ok || !Array.isArray(res.data) || res.data.length === 0) {
+          throw new Error(res.error ?? `No questions found for "${urlTopic}" yet. Try another topic.`);
+        }
+        combined = res.data.map((qn) => ({ ...qn, subject: studySubject }));
+      } else {
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
           if (isExamMode && !urlNovel && name === ENGLISH) {
@@ -823,7 +839,8 @@ function ExamPageContent() {
         }),
       );
 
-      const combined = perSubject.flat();
+      combined = perSubject.flat();
+      }
       if (combined.length === 0) {
         throw new Error(
           urlNovel
@@ -833,12 +850,9 @@ function ExamPageContent() {
       }
 
       const tabs: { name: string; start: number }[] = [];
-      let offset = 0;
-      for (const group of perSubject) {
-        if (group.length > 0) {
-          tabs.push({ name: group[0].subject ?? "", start: offset });
-          offset += group.length;
-        }
+      for (let i = 0; i < combined.length; i++) {
+        const name = combined[i].subject ?? "";
+        if (i === 0 || name !== combined[i - 1].subject) tabs.push({ name, start: i });
       }
 
       startTransition(() => {
@@ -850,7 +864,7 @@ function ExamPageContent() {
             ? entries.length > 1
               ? `Mock exam · ${entries.map((e) => e.name.replace(" Language", "")).join(" + ")}`
               : entries[0].name
-            : studySubject,
+            : urlTopic ? `${studySubject} · ${urlTopic}` : studySubject,
         );
         if (isExamMode) {
           const totalQ = combined.length;
