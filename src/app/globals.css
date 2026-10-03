@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Dark-mode colour overrides, generated from the colour classes used in src/ (see scripts/gen-dark-css.mjs) */
+@import "./dark.css";
+
+/* Lets new code use Tailwind's own variant too:  className="bg-white dark:bg-slate-900" */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #f5f4ff;
@@ -139,4 +144,34 @@ button:active, a:active {
 
 .bubble-flash {
   animation: bubbleFlash 1.4s ease-out 1;
+}
+
+/* ── Dark mode ──────────────────────────────────────────────────────────────── */
+.dark {
+  --background: #0d0c18;
+  --foreground: #f1f0ff;
+  --card: rgba(27, 26, 49, 0.98);
+  color-scheme: dark;
+}
+.dark .page-card {
+  background: #1b1a31;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+}
+.dark .card-glass {
+  background: rgba(27, 26, 49, 0.75);
+}
+.dark .soft-shadow {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+.dark ::-webkit-scrollbar-thumb { background: rgba(167, 139, 250, 0.28); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(167, 139, 250, 0.5); }
+.dark :focus-visible { outline-color: #a78bfa; }
+.dark ::selection { background: rgba(139, 92, 246, 0.45); color: #fff; }
+
+/* Smooth switch when the student toggles the theme (added for ~250ms by applyTheme) */
+.theme-transition,
+.theme-transition *,
+.theme-transition *::before,
+.theme-transition *::after {
+  transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease, fill 0.22s ease, stroke 0.22s ease !important;
 }
