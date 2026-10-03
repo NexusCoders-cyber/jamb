@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, startTransition } from "react";
-import { Bell, BookOpen, FileText, MessagesSquare, PenLine } from "lucide-react";
+import { useEffect, useMemo, useState, startTransition } from "react";
+import { ArrowRight, Bell, BookOpen, FileText, MessagesSquare, PenLine, RotateCcw } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { getProfile, getUserAttempts, getSubjectStats, getActivePromos } from "@/lib/queries";
+import { getProfile, getUserAttempts, getSubjectStats, getActivePromos, getAnswerRowsForAttempts } from "@/lib/queries";
 import type { ExamAttempt, Promo, SubjectStats } from "@/lib/queries";
 import { weightedJambEstimate, targetStatus } from "@/lib/scoring";
+import { attemptLabel, attemptSubjects, accuracyToJamb, WEAK_BELOW, MIN_ANSWERED } from "@/lib/analytics";
+import type { AttemptSubject } from "@/lib/analytics";
 import AppShell from "@/components/AppShell";
 
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
@@ -20,6 +22,41 @@ const quickActions: { label: string; detail: string; href: string; tone: string;
 ];
 
 const SUBJECT_COLORS = ["bg-[#d7a62d]", "bg-[#2b9b6a]", "bg-[#4a78a8]", "bg-[#b9684a]"];
+
+/** "Today", "Yesterday", "3 days ago", then a plain date — easier to scan than a bare "2 Oct". */
+function whenLabel(ts: string | null | undefined): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "";
+  const lagos = (x: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(x);
+  const days = Math.round((new Date(lagos(new Date())).getTime() - new Date(lagos(d)).getTime()) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return d.toLocaleDateString("en-NG", { day: "numeric", month: "short" });
+}
+
+/** Small score ring used by the Revisit rows. */
+function MiniRing({ pct }: { pct: number }) {
+  const R = 16;
+  const C = 2 * Math.PI * R;
+  const tone = pct >= 50 ? "stroke-amber-500 text-amber-700" : "stroke-rose-500 text-rose-700";
+  return (
+    <span className="relative flex h-11 w-11 shrink-0 items-center justify-center" role="img" aria-label={`Score ${pct} percent`}>
+      <svg viewBox="0 0 40 40" className="absolute inset-0 h-full w-full -rotate-90">
+        <circle cx="20" cy="20" r={R} fill="none" strokeWidth="4" stroke="currentColor" className="text-slate-400/30" />
+        <circle
+          cx="20" cy="20" r={R} fill="none" strokeWidth="4" strokeLinecap="round"
+          className={tone.split(" ")[0]}
+          strokeDasharray={C}
+          strokeDashoffset={C * (1 - Math.min(Math.max(pct, 0), 100) / 100)}
+        />
+      </svg>
+      <span className={`text-[11px] font-black tabular-nums ${tone.split(" ")[1]}`}>{pct}</span>
+    </span>
+  );
+}
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useUser();
@@ -32,6 +69,7 @@ export default function DashboardPage() {
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectStats[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+  const [revisitSubjects, setRevisitSubjects] = useState<Map<string, AttemptSubject[]>>(new Map());
   const [promos, setPromos] = useState<Promo[]>([]);
   const [slide, setSlide] = useState(0); // 0 = target card, 1..n = promos
 
@@ -129,6 +167,25 @@ export default function DashboardPage() {
   const weakSessions = attempts
     .filter((a) => a.question_count > 0 && (a.score / a.question_count) * 100 < 60)
     .slice(0, 3);
+  const weakIdsKey = weakSessions.map((a) => a.id).join(",");
+  const moreWeak = attempts.filter((a) => a.question_count > 0 && (a.score / a.question_count) * 100 < 60).length - weakSessions.length;
+
+  // Subjects the student keeps getting wrong (enough answers to be meaningful) — shown as practise chips
+  const weakSubjects = useMemo(
+    () => subjectStats.filter((x) => x.total >= MIN_ANSWERED && x.accuracy < WEAK_BELOW).sort((a, b) => a.accuracy - b.accuracy).slice(0, 4),
+    [subjectStats],
+  );
+
+  // Which subjects each weak session covered (small query: only those few attempts)
+  useEffect(() => {
+    if (!weakIdsKey) return;
+    let alive = true;
+    const supabase = createSupabaseBrowserClient();
+    getAnswerRowsForAttempts(supabase, weakIdsKey.split(","))
+      .then((rows) => { if (alive) startTransition(() => setRevisitSubjects(attemptSubjects(rows))); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [weakIdsKey]);
 
   // Per-subject colour map — derived from real stats, capped at 4 subjects
   const subjectProgressItems = subjectStats.length > 0
@@ -350,27 +407,84 @@ export default function DashboardPage() {
         </section>
 
         {/* Sessions to revisit */}
-        {weakSessions.length > 0 && (
+        {(weakSessions.length > 0 || weakSubjects.length > 0) && (
           <section className="mb-5 rounded-[24px] bg-white p-4 ring-1 ring-slate-100 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-black text-slate-800">Revisit</h2>
+              <div>
+                <h2 className="text-base font-black text-slate-800">Revisit</h2>
+                <p className="text-[11px] font-semibold text-slate-400">Sessions under {WEAK_BELOW}% — fix these first</p>
+              </div>
               <Link href="/analytics" className="text-xs font-bold text-violet-600">Analytics</Link>
             </div>
-            <div className="space-y-2">
-              {weakSessions.map((a) => (
-                <div key={a.id} className="flex items-center justify-between rounded-xl bg-[#fff8f4] px-4 py-3 ring-1 ring-[#f1ded5]">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">
-                      {new Date(a.started_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}
-                    </p>
-                    <p className="text-xs text-rose-500">Score {Math.round((a.score / a.question_count) * 100)}%</p>
-                  </div>
-                  <Link href={`/review?attemptId=${a.id}`} className="rounded-lg bg-rose-100 px-3 py-1.5 text-xs font-bold text-rose-700">
-                    Review
+
+            {weakSessions.length > 0 && (
+              <div className="space-y-2">
+                {weakSessions.map((a) => {
+                  const pct = Math.round((a.score / a.question_count) * 100);
+                  const subjects = revisitSubjects.get(a.id);
+                  const label = attemptLabel(a, subjects);
+                  const weakest = subjects && subjects.length > 1
+                    ? [...subjects].filter((x) => x.answered > 0).sort((x, y) => x.correct / x.answered - y.correct / y.answered)[0]
+                    : null;
+                  return (
+                    <div key={a.id} className="flex items-center gap-3 rounded-2xl bg-[#fff8f4] p-3 ring-1 ring-[#f1ded5]">
+                      <MiniRing pct={pct} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-black text-slate-800">{label.title}</p>
+                        <p className="text-xs font-semibold text-slate-500">
+                          {whenLabel(a.submitted_at ?? a.started_at)} · {a.score}/{a.question_count} correct
+                          {label.kind === "mock" ? ` · ≈ ${accuracyToJamb(a.score, a.question_count)}/400` : ""}
+                        </p>
+                        <p className={`text-xs font-bold ${pct < 40 ? "text-rose-600" : "text-amber-700"}`}>
+                          Score {pct}%
+                          {weakest && (
+                            <span className="font-semibold text-slate-500">
+                              {" "}· weakest: {weakest.name.replace(" Language", "")} {Math.round((weakest.correct / weakest.answered) * 100)}%
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/review?attemptId=${a.id}`}
+                        className="inline-flex min-h-10 shrink-0 touch-manipulation items-center gap-1 rounded-xl bg-rose-100 px-3 text-xs font-black text-rose-700 active:scale-[0.98]"
+                      >
+                        Review <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+                      </Link>
+                    </div>
+                  );
+                })}
+                {moreWeak > 0 && (
+                  <Link href="/analytics" className="block rounded-xl py-1.5 text-center text-xs font-bold text-violet-600">
+                    + {moreWeak} more session{moreWeak === 1 ? "" : "s"} to revisit
                   </Link>
+                )}
+              </div>
+            )}
+
+            {weakSubjects.length > 0 && (
+              <div className={weakSessions.length > 0 ? "mt-4" : ""}>
+                <p className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-slate-400">Weak subjects — practise these</p>
+                <div className="flex flex-wrap gap-2">
+                  {weakSubjects.map((x) => (
+                    <Link
+                      key={x.subjectName}
+                      href="/practice"
+                      className="inline-flex min-h-10 touch-manipulation items-center gap-1.5 rounded-full bg-slate-100 px-3.5 text-xs font-bold text-slate-700 active:scale-[0.98]"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5 text-violet-600" aria-hidden />
+                      {x.subjectName.replace(" Language", "")}
+                      <span className={x.accuracy < 40 ? "text-rose-600" : "text-amber-700"}>{x.accuracy}%</span>
+                    </Link>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+          </section>
+        )}
+        {!dataLoading && attempts.length > 0 && weakSessions.length === 0 && weakSubjects.length === 0 && (
+          <section className="mb-5 rounded-[24px] bg-emerald-50 p-4 ring-1 ring-emerald-100">
+            <p className="text-sm font-black text-emerald-800">Nothing to revisit 🎉</p>
+            <p className="mt-0.5 text-xs font-semibold text-emerald-700">Your recent sessions are all above {WEAK_BELOW}%. Keep the streak going.</p>
           </section>
         )}
 
