@@ -14,6 +14,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // The browser must always re-check the service worker so fixes reach phones quickly
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
@@ -30,7 +38,7 @@ const nextConfig: NextConfig = {
               // https: (any host) — ALOC diagrams are not guaranteed to live on the three hosts we used to allow,
               // and a blocked image just silently disappears. Scripts/connect stay locked down.
               "img-src 'self' data: blob: https:",
-              "connect-src 'self' https://*.supabase.co https://api.paystack.co https://questions.aloc.com.ng wss://*.supabase.co",
+              "connect-src 'self' https://*.supabase.co https://api.paystack.co https://questions.aloc.com.ng https://res.cloudinary.com wss://*.supabase.co",
               "frame-ancestors 'none'",
             ].join("; "),
           },

@@ -45,16 +45,36 @@ const BLOCKED_V4: [string, number][] = [
   ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
 ];
 const BLOCKED_V6: [string, number][] = [
-  ["::", 128], ["::1", 128], ["::ffff:0:0", 96], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64],
+  ["::", 128], ["::1", 128], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["100::", 64],
   ["2001::", 32], ["2001:db8::", 32], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8],
 ];
 for (const [addr, prefix] of BLOCKED_V4) blocked.addSubnet(addr, prefix, "ipv4");
 for (const [addr, prefix] of BLOCKED_V6) blocked.addSubnet(addr, prefix, "ipv6");
 
+/**
+ * "::ffff:127.0.0.1" / "::ffff:7f00:1" are IPv4 addresses in IPv6 clothing. They are judged by the IPv4 rules.
+ * (A blanket ::ffff:0:0/96 rule must NOT be used: Node's BlockList then treats every IPv4 address as blocked.)
+ */
+function embeddedV4(ip: string): string | null {
+  const dotted = ip.match(/^(?:0{0,4}:){0,5}:?ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
+  if (dotted) return dotted[1];
+  const hex = ip.match(/^(?:0{0,4}:){0,5}:?ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+  if (hex) {
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    return `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  }
+  return null;
+}
+
 export function isBlockedAddress(ip: string): boolean {
   const family = net.isIP(ip);
   if (!family) return true;
   try {
+    if (family === 6) {
+      const v4 = embeddedV4(ip);
+      if (v4) return isBlockedAddress(v4);
+    }
     return blocked.check(ip, family === 4 ? "ipv4" : "ipv6");
   } catch {
     return true; // anything we cannot classify is refused

@@ -8,7 +8,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import ScoreSummary from "@/components/ScoreSummary";
 import { usePro } from "@/lib/usePro";
-import { getCachedQuestions, setCachedQuestions, cacheKey as idbCacheKey } from "@/lib/questionCache";
+import { cacheKey as idbCacheKey } from "@/lib/questionCache";
+import { buildSessionPool, markQuestionsSeen } from "@/lib/questionPool";
+import { preloadImages } from "@/lib/imagePreload";
 import {
   clearLocalSession,
   getLocalSession,
@@ -161,6 +163,15 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
 /** Every diagram for a question, including older saved ones that only have `image` */
 function questionImageList(q: { images?: string[]; image?: string | null }): string[] {
   return q.images?.length ? q.images : q.image ? [q.image] : [];
+}
+
+/** Every picture a question can show: its diagrams, option pictures and passage pictures. */
+function imagesOf(q: ExamQuestion): string[] {
+  return [
+    ...questionImageList(q),
+    ...(q.optionImages ?? []).filter((u): u is string => !!u),
+    ...(q.sectionImages ?? []),
+  ];
 }
 
 function QuestionMedia({ question, hidePassage = false }: { question: ExamQuestion; hidePassage?: boolean }) {
@@ -729,7 +740,6 @@ function ExamPageContent() {
   const [studySubject, setStudySubject] = useState(urlSubject);
   const [studyCount, setStudyCount] = useState(urlCount);
 
-  const questionCache = useRef<Map<string, ExamQuestion[]>>(new Map());
   const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [subjectTabs, setSubjectTabs] = useState<{ name: string; start: number }[]>([]);
   const [sessionLabel, setSessionLabel] = useState(urlSubject);
@@ -785,19 +795,13 @@ function ExamPageContent() {
   }, [activeSubjectName, started, calcManuallySet]);
   const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
 
-  // Warm the cache for the next two questions' diagrams so they appear instantly.
+  // Pictures are loaded BEFORE their question is shown: the next few first, then the rest of the paper
+  // in the background. Each one is checked once (direct, else through the proxy) and kept in the browser cache.
   useEffect(() => {
     if (!started || typeof window === "undefined") return;
-    for (const i of [currentQuestion + 1, currentQuestion + 2]) {
-      const nq = questions[i];
-      if (!nq) continue;
-      const urls = [...questionImageList(nq), ...(nq.optionImages ?? []).filter((u): u is string => !!u)];
-      for (const u of urls) {
-        const im = new window.Image();
-        im.referrerPolicy = "no-referrer";
-        im.src = u;
-      }
-    }
+    const upcoming = questions.slice(currentQuestion, currentQuestion + 6).flatMap(imagesOf);
+    const rest = questions.slice(currentQuestion + 6).flatMap(imagesOf);
+    void preloadImages(upcoming, 3).then(() => preloadImages(rest, 2));
   }, [currentQuestion, started, questions]);
 
   // Phones/tablets: whenever the question changes, bring its top into view.
@@ -832,58 +836,23 @@ function ExamPageContent() {
         : [{ name: studySubject, count: studyCount }];
       const yearParam = examYear !== "random" ? `&year=${encodeURIComponent(examYear)}` : "";
 
+      // A different set every session: fresh batch from the server (several random years for "Random mix"),
+      // merged into the pool kept on this device, never-seen questions first. Offline it simply uses the pool.
       async function fetchPool(name: string, want: number): Promise<ExamQuestion[]> {
-        const ck = examYear === "random" ? name : `${name}:${examYear}`;
-        const cached = questionCache.current.get(ck);
-        const batches: ExamQuestion[][] = [];
-        if (cached) {
-          batches.push(cached);
-        } else {
-          // Check IDB first (offline/fast cache)
-          const idbCached = await getCachedQuestions<ExamQuestion>(idbCacheKey(name, examYear === "random" ? undefined : examYear));
-          if (idbCached && idbCached.length > 0) {
-            questionCache.current.set(ck, idbCached);
-            batches.push(idbCached);
-          } else {
-            const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${Math.min(200, Math.max(want, 40))}`)
-              .then((r) => r.json())
-              .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
-                if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
-                  questionCache.current.set(ck, res.data);
-                  // Persist to IDB for offline use
-                  void setCachedQuestions(idbCacheKey(name, examYear === "random" ? undefined : examYear), res.data);
-                  return res.data;
-                }
-                throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
-              });
-            batches.push(first);
-          }
-        }
-
-        const seen = new Set(batches[0].map((q) => String(q.id)));
-        let round = 1;
-        while (seen.size < want && round < 3) {
-          const more = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${Math.min(200, Math.max(want, 40))}&t=${Date.now()}-${round}`)
-            .then((r) => r.json())
-            .then((res: { ok: boolean; data?: ExamQuestion[] }) =>
-              (res.ok && Array.isArray(res.data) ? res.data : []) as ExamQuestion[],
-            )
-            .catch(() => [] as ExamQuestion[]);
-          if (more.length === 0) break;
-          let added = 0;
-          for (const qn of more) {
-            const id = String(qn.id);
-            if (!seen.has(id)) {
-              seen.add(id);
-              batches.push([qn]);
-              added += 1;
-            }
-            if (seen.size >= want) break;
-          }
-          if (added === 0) break;
-          round += 1;
-        }
-        return batches.flat();
+        const yearKey = examYear === "random" ? undefined : examYear;
+        const size = Math.min(200, Math.max(want, 60));
+        return buildSessionPool<ExamQuestion>({
+          subject: name,
+          cacheKey: idbCacheKey(name, yearKey),
+          fetchBatch: async () => {
+            const spread = examYear === "random" ? "&spread=1" : "";
+            const res = (await fetch(
+              `/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${size}${spread}&t=${Date.now()}`,
+            ).then((r) => r.json())) as { ok: boolean; data?: ExamQuestion[]; error?: string };
+            if (res.ok && Array.isArray(res.data) && res.data.length > 0) return res.data;
+            throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
+          },
+        });
       }
 
       // English in Mock/Exam mode: a JAMB-style paper (whole comprehension/cloze passages,
@@ -955,11 +924,22 @@ function ExamPageContent() {
         );
       }
 
+      // Remember what was given so the next session prefers questions the student has not met
+      const bySubject = new Map<string, string[]>();
+      for (const qn of combined) bySubject.set(qn.subject ?? "", [...(bySubject.get(qn.subject ?? "") ?? []), String(qn.id)]);
+      for (const [subjectName, ids] of bySubject) if (subjectName) void markQuestionsSeen(subjectName, ids);
+
       const tabs: { name: string; start: number }[] = [];
       for (let i = 0; i < combined.length; i++) {
         const name = combined[i].subject ?? "";
         if (i === 0 || name !== combined[i - 1].subject) tabs.push({ name, start: i });
       }
+
+      // Have the first questions' pictures ready so they are there the moment the exam opens (max ~5 s wait)
+      await Promise.race([
+        preloadImages(combined.slice(0, 3).flatMap(imagesOf), 3),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 5000)),
+      ]);
 
       startTransition(() => {
         setQuestions(combined);
