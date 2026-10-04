@@ -108,6 +108,22 @@ export async function buildSessionPool<T extends WithId>(opts: {
   }
   if (fresh.length > 0) void setCachedQuestions(opts.cacheKey, pool);
 
+  // Grow the device pool in the background (one more batch a few seconds after the session starts),
+  // so even if the server tends to repeat itself the next session has more to choose from.
+  if (fresh.length > 0 && typeof window !== "undefined") {
+    window.setTimeout(() => {
+      void (async () => {
+        try {
+          const more = await opts.fetchBatch();
+          const current = (await getCachedQuestions<T>(opts.cacheKey, { allowStale: true })) ?? pool;
+          await setCachedQuestions(opts.cacheKey, mergeUnique(more, current).slice(0, MAX_POOL));
+        } catch {
+          /* background top-up only */
+        }
+      })();
+    }, 4000);
+  }
+
   const seen = await loadSeen(opts.subject);
   const unseen = shuffle(pool.filter((q) => seen[String(q.id)] === undefined));
   const met = pool.filter((q) => seen[String(q.id)] !== undefined).sort((a, b) => seen[String(a.id)] - seen[String(b.id)]);

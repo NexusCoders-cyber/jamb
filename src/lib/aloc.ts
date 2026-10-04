@@ -14,6 +14,7 @@ import { convertSupSub, decodeEntities, formatExplanationText, htmlToExplanation
 
 const ALOC_BASE = process.env.ALOC_BASE_URL?.trim() || "https://questions.aloc.com.ng/api/v2";
 /** Where relative image paths from ALOC (e.g. "images/bio/cell.png") are served from */
+const CLOUDINARY_BASE = (process.env.ALOC_CLOUDINARY_BASE?.trim() || "https://res.cloudinary.com/aloc-ng/image/upload/").replace(/\/?$/, "/");
 const ALOC_ASSET_BASE = (process.env.ALOC_ASSET_BASE?.trim() || "https://questions.aloc.com.ng/").replace(/\/?$/, "/");
 
 // ─── All supported ALOC subject slugs ────────────────────────────────────────
@@ -331,6 +332,11 @@ export function resolveImageUrl(raw: string | null | undefined): string | null {
 
   v = v.replace(/\\/g, "/").replace(/^\.?\//, "");
   if (!IMAGE_EXT.test(v) && !v.includes("/")) return null;
+  // ALOC keeps its question pictures on Cloudinary ("…/upload/v123/ALOC-Questions/Chemistry/UTME/2020/x.png").
+  // A bare path such as "ALOC-Questions/Chemistry/…" belongs there, not on the API host.
+  if (/^(?:upload\/)?(?:v\d+\/)?ALOC-Questions\//i.test(v)) {
+    return `${CLOUDINARY_BASE}${v.replace(/^upload\//i, "").split("/").map((seg) => safeEncodeURI(safeDecodeURI(seg))).join("/")}`;
+  }
   return `${ALOC_ASSET_BASE}${v.split("/").map((seg) => safeEncodeURI(safeDecodeURI(seg))).join("/")}`;
 }
 
@@ -971,7 +977,26 @@ export async function fetchAlocQuestions(
   if (opts.type && opts.type !== "utme") params.set("type", opts.type);
 
   const want = opts.count && opts.count > 0 ? Math.min(Math.floor(opts.count), 200) : 40;
-  return collectQuestions(apiKey, slug, want, params, `${ALOC_BASE}/m?${params.toString()}`);
+  const main = collectQuestions(apiKey, slug, want, params, `${ALOC_BASE}/m?${params.toString()}`);
+  if (want <= 40 && !opts.count) return main;
+
+  // Larger pools: ask the two ALOC endpoints side by side (/m and /q/{n}) and merge. If one of them keeps
+  // handing back the same page, the other still brings new questions, so the pool is varied and bigger.
+  const alt = collectQuestions(apiKey, slug, Math.min(40, want), params, `${ALOC_BASE}/q/${Math.min(40, want)}?${params.toString()}`);
+  const [a, b] = await Promise.allSettled([main, alt]);
+  if (a.status === "rejected" && b.status === "rejected") throw a.reason;
+  const got = new Map<string, NormalizedQuestion>();
+  const seen = new Set<string>();
+  for (const list of [a, b]) {
+    if (list.status !== "fulfilled") continue;
+    for (const q of list.value) {
+      const keys = questionDedupeKeys(q);
+      if (keys.some((k) => seen.has(k))) continue;
+      keys.forEach((k) => seen.add(k));
+      got.set(q.id, q);
+    }
+  }
+  return shuffled(Array.from(got.values())).slice(0, Math.max(want, 1));
 }
 
 

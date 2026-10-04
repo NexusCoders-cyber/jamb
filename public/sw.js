@@ -8,7 +8,7 @@
  *   • Offline fallback → /offline.html
  */
 
-const CACHE = "orbitprep-v2";
+const CACHE = "orbitprep-v3";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE = [
@@ -47,6 +47,11 @@ self.addEventListener("fetch", (event) => {
 
   // Skip non-GET and browser-extension requests
   if (request.method !== "GET" || !url.protocol.startsWith("http")) return;
+
+  // Only this site's own files are handled here. Pictures from other hosts (question diagrams on Cloudinary
+  // etc.) must go straight from the browser to the host: the site's security policy blocks the service
+  // worker from fetching them, which used to make every question image fail to display.
+  if (url.origin !== self.location.origin) return;
 
   // API calls — always network, never cache
   if (url.pathname.startsWith("/api/")) return;
