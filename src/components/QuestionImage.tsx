@@ -24,16 +24,41 @@ type Props = {
 export default function QuestionImage({ src, alt = "Question illustration", zoomable = true, compact = false, className = "" }: Props) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
+  const [via, setVia] = useState<"direct" | "proxy">("direct");
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
-  // Cache-bust only on retry (and never for data: URIs)
-  const url = attempt > 0 && !src.startsWith("data:") ? `${src}${src.includes("?") ? "&" : "?"}r=${attempt}` : src;
+  // Only remote http(s) pictures can be re-fetched through our server; data:/blob:/same-origin cannot.
+  const canProxy = /^https?:\/\//i.test(src) && !src.includes("/api/image-proxy");
+
+  // Direct load first. If the browser cannot show it (http-only host, hot-link protection, bad certificate),
+  // the same picture is fetched through /api/image-proxy before we give up.
+  let url = src;
+  if (via === "proxy") {
+    url = `/api/image-proxy?u=${encodeURIComponent(src)}${attempt > 0 ? `&r=${attempt}` : ""}`;
+  } else if (attempt > 0 && !src.startsWith("data:")) {
+    // Cache-bust only on retry (and never for data: URIs)
+    url = `${src}${src.includes("?") ? "&" : "?"}r=${attempt}`;
+  }
+
+  const handleFailure = useCallback(() => {
+    if (via === "direct" && canProxy) {
+      setVia("proxy");
+      setStatus("loading");
+    } else {
+      setStatus("error");
+    }
+  }, [via, canProxy]);
 
   // An image that was already cached can finish loading before React attaches onLoad
-  const imgRef = useCallback((node: HTMLImageElement | null) => {
-    if (node && node.complete) setStatus(node.naturalWidth > 0 ? "loaded" : "error");
-  }, []);
+  const imgRef = useCallback(
+    (node: HTMLImageElement | null) => {
+      if (!node || !node.complete) return;
+      if (node.naturalWidth > 0) setStatus("loaded");
+      else handleFailure();
+    },
+    [handleFailure],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +94,8 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
           <button
             type="button"
             onClick={() => {
+              // A manual retry goes through the server, which can reach hosts the phone cannot
+              if (canProxy) setVia("proxy");
               setStatus("loading");
               setAttempt((n) => n + 1);
             }}
@@ -95,7 +122,7 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
         decoding="async"
         referrerPolicy="no-referrer"
         onLoad={() => setStatus("loaded")}
-        onError={() => setStatus("error")}
+        onError={handleFailure}
         draggable={false}
         className={`mx-auto block h-auto w-auto max-w-full object-contain transition-opacity duration-200 ${compact ? "max-h-40 p-1" : "max-h-72 p-2 sm:max-h-96"} ${status === "loaded" ? "opacity-100" : "opacity-0"}`}
       />

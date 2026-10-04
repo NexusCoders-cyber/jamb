@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
 import { usePro } from "@/lib/usePro";
+import { CURRENT_UTME_NOVEL } from "@/lib/setTexts";
 import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, Play, Loader2, Lock } from "lucide-react";
 
 type ModeSlug = "past-questions" | "study" | "mock-cbt" | "novel";
@@ -53,12 +54,9 @@ const ALL_YEARS = [
 ];
 const counts = [10, 20, 40];
 
+// Only current set texts are offered. Retired JAMB English books live under /novels → Archived.
 const NOVEL_TITLES = [
-  "The Lekki Headmaster",
-  "The Life Changer",
-  "Sweet Sixteen",
-  "The Last Days at Forcados High",
-  "Independence",
+  CURRENT_UTME_NOVEL,
   "Nineteen Eighty-Four",
 ];
 

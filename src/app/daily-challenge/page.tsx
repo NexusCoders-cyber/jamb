@@ -1,12 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
-import { createAttempt, saveAnswers, submitAttempt, updateStreak } from "@/lib/queries";
+import { newId, saveLocalAttempt, type LocalAnswerRow } from "@/lib/localDb";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import { Check, XCircle } from "lucide-react";
 
@@ -45,6 +44,7 @@ export default function DailyChallengePage() {
   const [finished, setFinished] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showExpl, setShowExpl] = useState(false);
+  const startedAtRef = useRef(new Date().toISOString());
 
   useEffect(() => {
     // Wait for auth to resolve before calling the gated /api/aloc endpoint
@@ -71,26 +71,40 @@ export default function DailyChallengePage() {
     setSubmitting(true); setFinished(true);
     try {
       if (user && questions.length > 0) {
-        const supabase = createSupabaseBrowserClient();
-        const attempt = await createAttempt(supabase, user.id, null, questions.length);
-        if (attempt) {
-          const rows = Object.entries(answers).map(([i, sel]) => ({
-            question_id: questions[Number(i)].id, selected_option: sel,
-            is_correct: questions[Number(i)].answer === sel, marked_for_review: false,
+        // Saved on the device (works offline); it reaches the cloud on the next explicit backup
+        const now = new Date().toISOString();
+        const rows: LocalAnswerRow[] = questions.map((qn, i) => {
+          const sel = answers[i];
+          return {
+            question_id: qn.id,
+            selected_option: sel ?? null,
+            is_correct: sel === undefined ? null : qn.answer === sel,
+            marked_for_review: false,
             question: {
-              id: questions[Number(i)].id,
-              prompt: questions[Number(i)].prompt,
-              options: questions[Number(i)].options,
-              correct_option: questions[Number(i)].answer,
-              explanation: questions[Number(i)].explanation,
+              id: qn.id,
+              prompt: qn.prompt,
+              options: qn.options,
+              correct_option: qn.answer,
+              explanation: qn.explanation,
               difficulty: "medium",
               subject_name: todaySubject,
+              position: i,
+              subject_number: i + 1,
             },
-          }));
-          await saveAnswers(supabase, attempt.id, rows);
-          await submitAttempt(supabase, attempt.id, correct);
-          await updateStreak(supabase, user.id);
-        }
+          };
+        });
+        await saveLocalAttempt({
+          id: newId(),
+          userId: user.id,
+          questionCount: questions.length,
+          score: correct,
+          startedAt: startedAtRef.current,
+          submittedAt: now,
+          label: `Daily Challenge · ${todaySubject}`,
+          mode: "daily",
+          answers: rows,
+          syncedAt: null,
+        });
       }
     } catch (_e) { /* ignore */ }
     setSubmitting(false);

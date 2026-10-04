@@ -9,8 +9,18 @@ import {
 import { getAlocApiKey } from "@/lib/env";
 import { assembleEnglishPaper } from "@/lib/englishPaper";
 
+// Question sets are topped up over several ALOC calls, which can take longer than a single page
+export const maxDuration = 30;
+
 function getApiKey(): string {
   return getAlocApiKey();
+}
+
+/** Parse an optional positive integer query value (null when absent / invalid). */
+function parseCount(value: string | null): number | null {
+  if (value === null || value.trim() === "") return null;
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 // ─── GET /api/aloc?endpoint=...  ──────────────────────────────────────────────
@@ -20,7 +30,8 @@ export async function GET(request: Request) {
   const subject = searchParams.get("subject") ?? "";
   const year = searchParams.get("year") ?? undefined;
   const type = searchParams.get("type") ?? "utme";
-  const count = Number(searchParams.get("count") ?? 40);
+  const requested = parseCount(searchParams.get("count"));
+  const count = requested ?? 40;
   const apiKey = getApiKey();
 
   // ── Health check — public, no auth needed ─────────────────────────────────
@@ -66,11 +77,19 @@ export async function GET(request: Request) {
     }
 
     try {
-      const questions = await fetchAlocQuestions(apiKey, subject, { year, type });
+      // `count` is optional: without it the response is the usual ~40-question page; with it the
+      // set is topped up server-side so the client gets a full pool in one round trip.
+      const questions = await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
       if (questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }
-      return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: questions });
+      return NextResponse.json({
+        ok: true,
+        provider: "ALOC",
+        source: "aloc",
+        data: questions,
+        meta: { requested: requested ?? 40, returned: questions.length, short: Math.max(0, (requested ?? 0) - questions.length) },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ALOC request failed";
       return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
@@ -109,7 +128,13 @@ export async function GET(request: Request) {
       if (questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No questions returned" }, { status: 404 });
       }
-      return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: questions });
+      return NextResponse.json({
+        ok: true,
+        provider: "ALOC",
+        source: "aloc",
+        data: questions,
+        meta: { requested: count, returned: questions.length, short: Math.max(0, count - questions.length) },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ALOC request failed";
       return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
