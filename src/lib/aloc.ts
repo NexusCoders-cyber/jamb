@@ -4,6 +4,10 @@
  * Docs: https://github.com/Seunope/aloc-endpoints/wiki/API-Parameters
  *
  * Auth: AccessToken header (e.g. ALOC-xxxx or QB-xxxx from .env)
+ *
+ * IMPORTANT: no regex lookbehind anywhere in this file. It is bundled for the browser
+ * (the exam page imports it) and iPhones older than iOS 16.4 refuse to parse a script
+ * that contains one.
  */
 
 import { convertSupSub, decodeEntities, formatExplanationText, htmlToExplanationText } from "./explanation";
@@ -134,6 +138,8 @@ export type NormalizedQuestion = {
   explanationImages?: string[];
   year?: string | null;
   subject?: string | null;
+  /** Where the question came from: the ALOC API, or the app's own bundled dataset (set-text questions) */
+  source?: "aloc" | "local-novel";
 };
 
 export type RichSegment = { text: string; italic?: boolean; bold?: boolean };
@@ -142,6 +148,18 @@ function unescapeEntities(input: string): string {
   // Full entity table (&times; &divide; &sup2; &deg; &pi; … plus numeric ones): the old version threw
   // every unknown entity away, so "2 &times; 3" became "2  3" in Maths/Physics questions.
   return decodeEntities(input);
+}
+
+/** Coerce whatever ALOC sent for a text field (string, number, null, object) into a string. */
+function asText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function unique<T>(list: T[]): T[] {
+  return Array.from(new Set(list));
 }
 
 /**
@@ -195,72 +213,241 @@ export function htmlToSegments(input: string): RichSegment[] {
 }
 
 // ─── Images ──────────────────────────────────────────────────────────────────
-const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp|svg|bmp|avif)(?:[?#].*)?$/i;
+const IMAGE_EXT = /\.(?:png|jpe?g|jfif|gif|webp|svg|bmp|avif|tiff?)(?:[?#].*)?$/i;
+const IMAGE_EXT_LIST = "png|jpe?g|jfif|gif|webp|svg|bmp|avif|tiff?";
+
+/** Magic prefixes of base64-encoded image files that arrive without a "data:" header */
+const RAW_BASE64_IMAGE: { re: RegExp; mime: string }[] = [
+  { re: /^iVBORw0KGgo/, mime: "image/png" },
+  { re: /^\/9j\//, mime: "image/jpeg" },
+  { re: /^R0lGOD[la]/, mime: "image/gif" },
+  { re: /^UklGR/, mime: "image/webp" },
+  { re: /^PHN2Zy|^PD94bWw/, mime: "image/svg+xml" },
+];
+
+/** decodeURI/encodeURI THROW on malformed input ("100%.png", lone surrogates) — one bad file name must not fail a whole question set. */
+function safeDecodeURI(s: string): string {
+  try {
+    return decodeURI(s);
+  } catch {
+    return s;
+  }
+}
+function safeEncodeURI(s: string): string {
+  try {
+    return encodeURI(s);
+  } catch {
+    return s.replace(/ /g, "%20");
+  }
+}
+
+function rawBase64Image(value: string): { mime: string; data: string } | null {
+  const data = value.replace(/\s+/g, "");
+  if (data.length < 80 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) return null;
+  const hit = RAW_BASE64_IMAGE.find(({ re }) => re.test(data));
+  return hit ? { mime: hit.mime, data } : null;
+}
+
+/** Inline <svg>…</svg> markup → a data: URI an <img> can show. */
+function svgToDataUri(svg: string): string | null {
+  let s = svg.trim();
+  if (!/^<svg[\s>]/i.test(s) || !/<\/svg>\s*$/i.test(s)) return null;
+  if (s.length > 400_000) return null;
+  const openTag = s.slice(0, s.indexOf(">") + 1);
+  // A standalone SVG image needs its namespace; inline SVG in HTML usually omits it
+  if (!/\bxmlns\s*=/i.test(openTag)) s = s.replace(/^<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+}
+
+/** Inline SVG diagrams embedded in question / option / passage HTML. */
+export function extractInlineSvgs(html: string | null | undefined): string[] {
+  if (!html || !/<svg\b/i.test(html)) return [];
+  const out: string[] = [];
+  const re = /<svg\b[\s\S]*?<\/svg>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const uri = svgToDataUri(m[0]);
+    if (uri) out.push(uri);
+  }
+  return out;
+}
+
+/** Remove inline SVG blocks so their <text> labels do not leak into the question wording. */
+function stripInlineSvgs(html: string): string {
+  return /<svg\b/i.test(html) ? html.replace(/<svg\b[\s\S]*?<\/svg>/gi, " ") : html;
+}
 
 /**
  * Turn whatever ALOC stored into a URL a browser can load:
  * absolute https, http (upgraded — the app is served over https), protocol-relative,
- * data: URIs, or a relative path resolved against the ALOC asset host.
+ * data: URIs (with or without the "data:" header), inline SVG, bare hosts, or a
+ * relative path resolved against the ALOC asset host. Never throws.
  */
 export function resolveImageUrl(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  let v = unescapeEntities(String(raw)).trim().replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, "").trim();
-  if (!v || v === "null" || v === "undefined" || v === "0") return null;
-  if (/^data:image\//i.test(v)) return v;
-  if (/^javascript:/i.test(v)) return null;
-  if (v.startsWith("//")) return `https:${v}`;
-  if (/^http:\/\//i.test(v)) return v.replace(/^http:\/\//i, "https://");
-  if (/^https:\/\//i.test(v)) return v;
+  if (raw === null || raw === undefined) return null;
+  let v = unescapeEntities(String(raw))
+    .trim()
+    .replace(/^["'“‘]+|["'”’]+$/g, "")
+    .trim();
+  v = v.replace(/\\\//g, "/"); // JSON-escaped slashes: https:\/\/host\/a.png
+  if (!v || /^(?:null|undefined|0|false|none|n\/a)$/i.test(v)) return null;
+
+  if (/^<svg[\s>]/i.test(v)) return svgToDataUri(v);
+
+  if (/^data:image\//i.test(v)) {
+    if (/;base64,/i.test(v)) return v.replace(/\s+/g, ""); // wrapped base64
+    const comma = v.indexOf(",");
+    if (comma < 0) return null;
+    let payload = v.slice(comma + 1);
+    try {
+      payload = decodeURIComponent(payload);
+    } catch {
+      /* already raw text */
+    }
+    return `${v.slice(0, comma + 1)}${encodeURIComponent(payload)}`;
+  }
+  if (/^(?:javascript|vbscript|file):/i.test(v)) return null;
+
+  const b64 = rawBase64Image(v);
+  if (b64) return `data:${b64.mime};base64,${b64.data}`;
+
+  const toUrl = (candidate: string): string => {
+    try {
+      return new URL(candidate).href; // percent-encodes spaces / non-ASCII safely
+    } catch {
+      return candidate.replace(/ /g, "%20");
+    }
+  };
+
+  if (v.startsWith("//")) return toUrl(`https:${v}`);
+  if (/^http:\/\//i.test(v)) return toUrl(v.replace(/^http:/i, "https:"));
+  if (/^https:\/\//i.test(v)) return toUrl(v);
   if (/^[a-z][a-z0-9+.-]*:/i.test(v)) return null; // some other scheme
-  v = v.replace(/^\.?\//, "");
+
+  // "upload.wikimedia.org/wikipedia/commons/a/ab/Cell.png" — a host written without its scheme
+  if (/^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|edu|gov|ng|io|co|uk|info|app|me|ac|biz|us)\/\S+/i.test(v)) {
+    return toUrl(`https://${v}`);
+  }
+
+  v = v.replace(/\\/g, "/").replace(/^\.?\//, "");
   if (!IMAGE_EXT.test(v) && !v.includes("/")) return null;
-  return `${ALOC_ASSET_BASE}${v.split("/").map((seg) => encodeURI(decodeURI(seg))).join("/")}`;
+  return `${ALOC_ASSET_BASE}${v.split("/").map((seg) => safeEncodeURI(safeDecodeURI(seg))).join("/")}`;
+}
+
+/** First usable candidate of an <img> tag: src, then the lazy-load / srcset variants. */
+function imgTagSource(tag: string): string | null {
+  const attr = (name: string): string | undefined => {
+    // (^|boundary) instead of a lookbehind so "data-src" is never mistaken for "src"
+    const m = tag.match(new RegExp(`(?:^|[\\s"'/])${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i"));
+    return m ? (m[1] ?? m[2] ?? m[3]) : undefined;
+  };
+  const srcset = attr("srcset");
+  const candidates = [
+    attr("src"),
+    attr("data-src"),
+    attr("data-original"),
+    attr("data-lazy-src"),
+    srcset ? srcset.trim().split(/\s+/)[0] : undefined,
+  ];
+  for (const c of candidates) {
+    if (!c) continue;
+    // 1×1 lazy-load placeholders are not the picture
+    if (/^data:image\//i.test(c) && c.length < 200) continue;
+    const url = resolveImageUrl(c);
+    if (url) return url;
+  }
+  return null;
 }
 
 /** <img src=…> sources inside an HTML string (question / option / passage / solution text) */
 export function extractImgTagSources(html: string | null | undefined): string[] {
   if (!html) return [];
+  let source = String(html);
+  // Markup that arrived HTML-escaped: &lt;img src=&quot;…&quot;&gt;
+  if (/&lt;\s*img\b|&#0*60;\s*img\b/i.test(source)) source = unescapeEntities(source);
   const out: string[] = [];
   const tagRe = /<img\b[^>]*>/gi;
   let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(html)) !== null) {
-    const src = m[0].match(/\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i);
-    const url = resolveImageUrl(src?.[1] ?? src?.[2] ?? src?.[3]);
+  while ((m = tagRe.exec(source)) !== null) {
+    const url = imgTagSource(m[0]);
     if (url) out.push(url);
   }
-  return Array.from(new Set(out));
+  return unique(out);
+}
+
+function looksLikeImageRef(s: string): boolean {
+  return /^(?:https?:)?\/\//i.test(s) || /^data:image\//i.test(s) || IMAGE_EXT.test(s) || rawBase64Image(s) !== null;
 }
 
 /**
- * The dedicated `image` column is loose: a URL, a relative path, an <img> tag,
- * several URLs separated by commas/spaces/newlines, or a JSON array.
+ * Split a loose "image" column into individual references WITHOUT breaking a single URL
+ * that happens to contain a comma, semicolon, pipe or space (the old splitter cut those apart
+ * and produced a wrong, unloadable path).
  */
-export function extractImageField(value: string | null | undefined): string[] {
-  if (!value || typeof value !== "string") return [];
+function splitImageRefs(text: string): string[] {
+  const out: string[] = [];
+  const boundary = /[\s,;|]+(?=(?:https?:)?\/\/|data:image\/)/gi;
+  const pieces = text
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .flatMap((line) => line.trim().split(boundary));
+  for (const raw of pieces) {
+    const p = raw.trim();
+    if (!p) continue;
+    if (/^(?:https?:)?\/\//i.test(p) || /^data:image\//i.test(p) || rawBase64Image(p)) {
+      out.push(p); // one absolute reference — internal spaces/commas belong to it
+    } else {
+      out.push(
+        ...p
+          .replace(new RegExp(`(\\.(?:${IMAGE_EXT_LIST}))\\s*,\\s*(?=\\S)`, "gi"), "$1\n")
+          .split(/\s*[;|\n]\s*/),
+      );
+    }
+  }
+  return out.map((s) => s.trim()).filter((s) => s && looksLikeImageRef(s));
+}
+
+/**
+ * The dedicated `image` column is loose: a URL, a relative path, an <img> tag, inline SVG,
+ * a base64 string, several references separated by commas/spaces/newlines, a JSON array,
+ * or an object with a url/src. Returns every picture it can find.
+ */
+export function extractImageField(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (Array.isArray(value)) return unique(value.flatMap((item) => extractImageField(item)));
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    return extractImageField(o.url ?? o.src ?? o.href ?? o.path ?? o.image ?? o.file ?? null);
+  }
+  if (typeof value !== "string") return [];
   const trimmed = value.trim();
   if (!trimmed) return [];
-  const found: string[] = [...extractImgTagSources(trimmed)];
-  const withoutTags = trimmed.replace(/<[^>]+>/g, " ");
-  try {
-    const parsed: unknown = JSON.parse(withoutTags.trim());
-    if (Array.isArray(parsed)) {
-      for (const item of parsed) {
-        const url = resolveImageUrl(typeof item === "string" ? item : (item as { url?: string; src?: string })?.url ?? (item as { src?: string })?.src);
-        if (url) found.push(url);
-      }
-      return Array.from(new Set(found));
-    }
-  } catch {
-    /* not JSON — fall through */
-  }
-  for (const token of withoutTags.split(/[\s,;|]+/)) {
-    if (!token) continue;
-    if (/^(?:https?:)?\/\//i.test(token) || IMAGE_EXT.test(token) || /^data:image\//i.test(token)) {
-      const url = resolveImageUrl(token);
-      if (url) found.push(url);
+
+  const found: string[] = [...extractImgTagSources(trimmed), ...extractInlineSvgs(trimmed)];
+  const withoutMarkup = stripInlineSvgs(trimmed).replace(/<[^>]+>/g, " ").trim();
+  if (!withoutMarkup) return unique(found);
+
+  if (/^[[{]/.test(withoutMarkup)) {
+    try {
+      const parsed: unknown = JSON.parse(withoutMarkup);
+      return unique([...found, ...extractImageField(parsed)]);
+    } catch {
+      /* not JSON — fall through to the plain-text splitter */
     }
   }
-  return Array.from(new Set(found));
+  for (const ref of splitImageRefs(withoutMarkup)) {
+    const url = resolveImageUrl(ref);
+    if (url) found.push(url);
+  }
+  return unique(found);
+}
+
+/** Column names different ALOC exports use for a question's picture(s). */
+const IMAGE_FIELD_KEYS = ["image", "images", "img", "picture", "figure", "diagram", "image_url", "imageUrl", "image_path", "imagePath", "photo"];
+
+function gatherImageFields(q: AlocQuestion): string[] {
+  const rec = q as unknown as Record<string, unknown>;
+  return unique(IMAGE_FIELD_KEYS.flatMap((key) => extractImageField(rec[key])));
 }
 
 /**
@@ -276,7 +463,7 @@ export function htmlToParagraphs(input: string): string {
     .replace(/<[^>]+>/g, "");
   return unescapeEntities(withBreaks)
     .split("\n")
-    .map((line) => line.replace(/[ \t\u00a0]+/g, " ").trim())
+    .map((line) => line.replace(/[ \t ]+/g, " ").trim())
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -317,9 +504,9 @@ const NOVEL_TITLE_PATTERNS: { kind: "known" | "quoted" | "run"; re: RegExp }[] =
   // Explicit known JAMB/UTME set texts — cleanest signal, tried first
   { kind: "known", re: /\b(The Lekki Headmaster|The Life Changer|Sweet Sixteen|The Last Days at Forcados High(?: School)?|The Successors|Independence|Nineteen Eighty-?Four|The Joys of Motherhood|Harvest of Corruption|Sons and Daughters|The Tempest|Romeo and Juliet|Hamlet|Macbeth|Ambush|The Proud King|The Anvil and the Hammer)\b/i },
   // Title in quotes: "based on Bolaji Abdullahi's 'Sweet Sixteen'"
-  { kind: "quoted", re: /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["\u201c\u2018']([^"\u201d\u2019']{3,80})["\u201d\u2019']/i },
+  { kind: "quoted", re: /(?:based on|drawn from|from the novel|extracted from|extract for question(?:s)?(?: is)?(?: taken)? from)[^:\n]*?["“‘']([^"”’']{3,80})["”’']/i },
   // Run of 2+ capitalized words after "based on/drawn from", e.g. "based on George Orwell's Nineteen Eighty-Four"
-  { kind: "run", re: /(?:based on|drawn from|from)\s+([A-Z][\w'\u2019.\-]+(?:\s+[A-Z][\w'\u2019.\-]+){1,5})/ },
+  { kind: "run", re: /(?:based on|drawn from|from)\s+([A-Z][\w'’.\-]+(?:\s+[A-Z][\w'’.\-]+){1,5})/ },
 ];
 
 /** Tail fragments that mean we matched an author/category, not a title. */
@@ -362,9 +549,9 @@ export function detectNovel(
     if (raw) {
       let title = raw
         .trim()
-        .replace(/^[\u201c\u2018"']|[\u201d\u2019"'.,\s]+$/g, "")
-        .replace(/\s*[\u2019']s$/i, "") // trailing possessive → author, not title
-        .replace(/^[\w.\s]+[\u2019']s\s+(?=[A-Z])/, "") // author prefix: "Bolaji Abdullahi's X"
+        .replace(/^[“‘"']|[”’"'.,\s]+$/g, "")
+        .replace(/\s*[’']s$/i, "") // trailing possessive → author, not title
+        .replace(/^[\w.\s]+[’']s\s+(?=[A-Z])/, "") // author prefix: "Bolaji Abdullahi's X"
         .replace(TRAILING_GENRE_WORD, "")
         .trim();
       if (title.length < 3 || title.length > 80) continue;
@@ -377,15 +564,27 @@ export function detectNovel(
   return null;
 }
 
-function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[] | null; image: string | null }[] {
-  const fromList = (opt: unknown): { text: string; segments: RichSegment[] | null; image: string | null } | null => {
-    const raw = String(opt ?? "");
-    if (raw.trim().length === 0) return null;
-    let image: string | null = extractImgTagSources(raw)[0] ?? null;
-    const segments = htmlToSegments(raw);
+// ─── Options + answer ────────────────────────────────────────────────────────
+type ResolvedOption = {
+  /** The option's original ALOC letter (a–e), kept so the answer maps correctly even if a middle option was blank */
+  key: string;
+  text: string;
+  segments: RichSegment[] | null;
+  image: string | null;
+};
+
+const OPTION_KEYS = ["a", "b", "c", "d", "e"];
+
+function resolveOptions(q: AlocQuestion): ResolvedOption[] {
+  const fromRaw = (key: string, opt: unknown): ResolvedOption | null => {
+    const rawText = asText(opt);
+    if (rawText.trim().length === 0) return null;
+    const html = stripInlineSvgs(rawText);
+    let image: string | null = extractImgTagSources(rawText)[0] ?? extractInlineSvgs(rawText)[0] ?? null;
+    const segments = htmlToSegments(html);
     let text = segments.map((s) => s.text).join("").trim();
-    // Option stored as a bare URL / file name → it is a picture, not text
-    if (!image && text && !/\s/.test(text) && (/^(?:https?:)?\/\/\S+$/i.test(text) || IMAGE_EXT.test(text))) {
+    // Option stored as a bare URL / file name / base64 → it is a picture, not text
+    if (!image && text && !/\s/.test(text) && (/^(?:https?:)?\/\/\S+$/i.test(text) || IMAGE_EXT.test(text) || rawBase64Image(text))) {
       const asUrl = resolveImageUrl(text);
       if (asUrl) {
         image = asUrl;
@@ -395,36 +594,109 @@ function resolveOptions(q: AlocQuestion): { text: string; segments: RichSegment[
     const hasRich = !!text && segments.some((s) => s.italic || s.bold);
     // An option that is only a picture (e.g. Biology "which diagram shows …") is still a real option
     if (!text && !image) return null;
-    return { text, segments: hasRich ? segments : null, image };
+    return { key, text, segments: hasRich ? segments : null, image };
   };
 
   if (Array.isArray(q.options)) {
-    return q.options.map(fromList).filter((o): o is { text: string; segments: RichSegment[] | null; image: string | null } => o !== null);
+    return q.options
+      .map((opt, i) => fromRaw(OPTION_KEYS[i] ?? String(i), opt))
+      .filter((o): o is ResolvedOption => o !== null);
   }
-  const optObj = q.option ?? (typeof q.options === "object" ? q.options : null);
-  if (!optObj) return [];
+  const optObj = q.option ?? (q.options && typeof q.options === "object" ? q.options : null);
+  if (!optObj || typeof optObj !== "object") return [];
 
-  const keys: (keyof AlocRawOption)[] = ["a", "b", "c", "d", "e"];
-  const list: { text: string; segments: RichSegment[] | null; image: string | null }[] = [];
-  for (const k of keys) {
-    const val = optObj[k];
-    if (typeof val === "string" && val.trim().length > 0) {
-      const o = fromList(val);
-      if (o) list.push(o);
-    }
+  // keys can come as a/A or " a "
+  const lowered: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(optObj as Record<string, unknown>)) lowered[k.trim().toLowerCase()] = v;
+
+  const list: ResolvedOption[] = [];
+  for (const k of OPTION_KEYS) {
+    const o = fromRaw(k, lowered[k]);
+    if (o) list.push(o);
   }
   return list;
 }
 
+/**
+ * Which option is correct, as an index into the (possibly compacted) option list.
+ * Returns -1 when the answer cannot be resolved — such a question cannot be graded,
+ * so it is dropped instead of silently becoming "A" (which marked students wrong).
+ */
+function resolveAnswerIndex(answer: unknown, options: ResolvedOption[]): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (typeof answer === "number") {
+    return Number.isInteger(answer) && answer >= 0 && answer < options.length ? answer : -1;
+  }
+  if (typeof answer !== "string") return -1;
+  const trimmed = answer.trim();
+  if (!trimmed) return -1;
+
+  const letter = trimmed.toLowerCase().match(/^\(?\s*([a-e])\s*\)?\s*[.):-]?\s*$/);
+  if (letter) return options.findIndex((o) => o.key === letter[1]);
+
+  if (/^\d+$/.test(trimmed)) {
+    const n = parseInt(trimmed, 10);
+    return n >= 0 && n < options.length ? n : -1;
+  }
+  // Answer given as the option's own text
+  const t = norm(trimmed);
+  return t ? options.findIndex((o) => norm(o.text) === t) : -1;
+}
+
+/**
+ * Make a raw ALOC record safe to normalise: parse records / option maps that arrive as JSON
+ * strings and coerce the text fields. Returns null for anything that is not a question object.
+ */
+export function hydrateAlocQuestion(input: unknown): AlocQuestion | null {
+  let q: unknown = input;
+  if (typeof q === "string") {
+    try {
+      q = JSON.parse(q);
+    } catch {
+      return null;
+    }
+  }
+  if (!q || typeof q !== "object" || Array.isArray(q)) return null;
+  const rec = { ...(q as Record<string, unknown>) };
+  for (const key of ["option", "options"]) {
+    const v = rec[key];
+    if (typeof v === "string" && /^\s*[[{]/.test(v)) {
+      try {
+        rec[key] = JSON.parse(v);
+      } catch {
+        /* leave as is */
+      }
+    }
+  }
+  for (const key of ["question", "section", "solution", "explanation"]) {
+    if (key in rec) rec[key] = asText(rec[key]);
+  }
+  return rec as unknown as AlocQuestion;
+}
+
 export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string): NormalizedQuestion | null {
+  try {
+    return normalizeAlocQuestionUnsafe(q, defaultSubject);
+  } catch (err) {
+    // One malformed record must never take a whole question set down with it
+    console.warn("Skipped a malformed ALOC question:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+function normalizeAlocQuestionUnsafe(q: AlocQuestion, defaultSubject?: string): NormalizedQuestion | null {
   if (!q) return null;
+  const questionHtml = asText(q.question);
+  const sectionHtml = asText(q.section);
+  const solutionHtml = asText(q.solution) || asText(q.explanation);
+
   // Some ALOC questions (e.g. stress-pattern) put the actual prompt in `section`
   // and leave `question` empty. Fall back to section when that happens.
   const hasPassage = q.hasPassage === true || q.hasPassage === 1 || q.hasPassage === "1" || q.hasPassage === "true";
-  const rawPrompt = stripHtml(q.question ?? "");
-  const flatSection = stripHtml(q.section ?? "");
+  const rawPrompt = stripHtml(stripInlineSvgs(questionHtml));
+  const flatSection = stripHtml(stripInlineSvgs(sectionHtml));
   // Passages keep their paragraph breaks; short instructions stay single-line
-  const rawSection = hasPassage || flatSection.length >= 400 ? htmlToParagraphs(q.section ?? "") : flatSection;
+  const rawSection = hasPassage || flatSection.length >= 400 ? htmlToParagraphs(stripInlineSvgs(sectionHtml)) : flatSection;
   const nubParsed = q.questionNub != null ? parseInt(String(q.questionNub), 10) : NaN;
   const questionNub = Number.isNaN(nubParsed) ? null : nubParsed;
   // Passage questions with an empty `question` (e.g. cloze gaps) must not show the
@@ -435,9 +707,13 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
         ? `Choose the option that best fills gap ${questionNub}.`
         : "Choose the best option based on the passage."
       : "";
-  // Images: the `image` column AND any <img> tags hiding in the question / option / passage / solution HTML
+  // Images: the image column(s) AND any <img> tags / inline SVG hiding in the question HTML
   // (the text cleaner strips tags, so without this a diagram inside the question simply vanished)
-  const questionImages = Array.from(new Set([...extractImageField(q.image), ...extractImgTagSources(q.question)]));
+  const questionImages = unique([
+    ...gatherImageFields(q),
+    ...extractImgTagSources(questionHtml),
+    ...extractInlineSvgs(questionHtml),
+  ]);
   const imagePromptFallback = !rawPrompt && !passagePromptFallback && questionImages.length > 0 ? "Study the image and choose the correct answer." : "";
   const prompt = rawPrompt || passagePromptFallback || imagePromptFallback || rawSection;
   const resolved = resolveOptions(q);
@@ -445,29 +721,14 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   if (!prompt || options.length < 2) return null;
 
   // Keep italics/bold when present (English lexis questions mark keywords)
-  const rawPromptSegments = htmlToSegments(q.question ?? "");
+  const rawPromptSegments = htmlToSegments(stripInlineSvgs(questionHtml));
   const promptSegments = rawPromptSegments.some((s) => s.italic || s.bold) ? rawPromptSegments : null;
   const optionSegments = resolved.map((o) => o.segments);
 
-  let answerIdx = -1;
-  if (typeof q.answer === "number") {
-    answerIdx = q.answer;
-  } else if (typeof q.answer === "string") {
-    const trimmed = q.answer.trim().toLowerCase();
-    const map: Record<string, number> = { a: 0, b: 1, c: 2, d: 3, e: 4 };
-    if (trimmed in map) {
-      answerIdx = map[trimmed];
-    } else {
-      const parsed = parseInt(trimmed, 10);
-      if (!Number.isNaN(parsed)) answerIdx = parsed;
-    }
-  }
+  const answerIdx = resolveAnswerIndex(q.answer, resolved);
+  if (answerIdx < 0 || answerIdx >= options.length) return null;
 
-  if (answerIdx < 0 || answerIdx >= options.length) {
-    answerIdx = 0;
-  }
-
-  const rawSolution = q.solution ?? q.explanation;
+  const rawSolution = solutionHtml;
   // Keep the working readable: line breaks kept, ² ₂ × ÷ ° decoded, steps split onto their own lines
   const explanationSubject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
   const explanationText = rawSolution ? formatExplanationText(htmlToExplanationText(String(rawSolution)), explanationSubject) : "";
@@ -477,8 +738,8 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
   const sectionKind = section ? (hasPassage ? "passage" : classifySection(section)) : null;
   const passageId = sectionKind === "passage" && section ? `p${hashText(section.toLowerCase().replace(/[^a-z0-9]/g, ""))}` : null;
   const image = questionImages[0] ?? null;
-  const sectionImages = extractImgTagSources(q.section);
-  const explanationImages = extractImgTagSources(q.solution ?? q.explanation);
+  const sectionImages = unique([...extractImgTagSources(sectionHtml), ...extractInlineSvgs(sectionHtml)]);
+  const explanationImages = unique([...extractImgTagSources(solutionHtml), ...extractInlineSvgs(solutionHtml)]);
   const optionImages = resolved.map((o) => o.image);
   const year = q.examyear ? String(q.examyear) : null;
   const subject = q.subject ? slugToName(q.subject) : defaultSubject ?? null;
@@ -510,7 +771,41 @@ export function normalizeAlocQuestion(q: AlocQuestion, defaultSubject?: string):
     explanationImages: explanationImages.length ? explanationImages : undefined,
     year,
     subject,
+    source: "aloc",
   };
+}
+
+/** Keys that identify "the same question" even when ALOC repeats it under a different id. */
+export function questionDedupeKeys(q: Pick<NormalizedQuestion, "id" | "prompt" | "options" | "section">): string[] {
+  const text = `${q.section ? q.section.slice(0, 80) : ""}|${q.prompt.toLowerCase().replace(/\s+/g, " ")}|${q.options.join("|").toLowerCase()}`;
+  return [`id:${q.id}`, `t:${hashText(text)}`];
+}
+
+/**
+ * Hydrate + normalise + de-duplicate a raw ALOC list. Questions that cannot be shown
+ * (no prompt, fewer than two options, no resolvable answer, duplicates) are counted in
+ * `dropped` so callers can top the set up instead of silently shipping a short paper.
+ */
+export function normalizeAlocList(raw: unknown[], defaultSubject?: string): { questions: NormalizedQuestion[]; dropped: number } {
+  const out: NormalizedQuestion[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  for (const item of raw) {
+    const hydrated = hydrateAlocQuestion(item);
+    const normalized = hydrated ? normalizeAlocQuestion(hydrated, defaultSubject) : null;
+    if (!normalized) {
+      dropped += 1;
+      continue;
+    }
+    const keys = questionDedupeKeys(normalized);
+    if (keys.some((k) => seen.has(k))) {
+      dropped += 1;
+      continue;
+    }
+    keys.forEach((k) => seen.add(k));
+    out.push(normalized);
+  }
+  return { questions: out, dropped };
 }
 
 // ─── Fetchers (called server-side only from the /api/aloc route) ──────────────
@@ -525,84 +820,158 @@ function alocHeaders(apiKey: string) {
   };
 }
 
+class AlocHttpError extends Error {
+  constructor(message: string, readonly transient: boolean) {
+    super(message);
+    this.name = "AlocHttpError";
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * GET + parse an ALOC endpoint. Network blips, timeouts, HTTP 429 and 5xx are retried once
+ * (a single hiccup used to fail the whole exam start); client errors (401/403/404) are not.
+ */
+async function alocGetJson(url: string, apiKey: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<AlocResponse> {
+  const timeoutMs = opts.timeoutMs ?? 12000;
+  const retries = opts.retries ?? 1;
+  let last: Error | null = null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: alocHeaders(apiKey),
+        cache: "no-store",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!res.ok) {
+        throw new AlocHttpError(`ALOC API returned HTTP ${res.status}`, res.status === 429 || res.status >= 500);
+      }
+      const text = await res.text();
+      try {
+        return JSON.parse(text) as AlocResponse;
+      } catch {
+        throw new AlocHttpError("ALOC API returned an unreadable response", true);
+      }
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error(String(err));
+      last = e.name === "TimeoutError" || e.name === "AbortError" ? new AlocHttpError("ALOC took too long to respond", true) : e;
+      const transient = last instanceof AlocHttpError ? last.transient : true; // network failures are transient
+      if (!transient || attempt === retries) break;
+      await sleep(400 * (attempt + 1));
+    }
+  }
+  throw last ?? new Error("ALOC request failed");
+}
+
+/** The question records inside an ALOC payload (array, single object, or nested). */
+function rawQuestionList(json: AlocResponse | null | undefined): unknown[] {
+  const data = json?.data as unknown;
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const nested = (data as { questions?: unknown; data?: unknown }).questions ?? (data as { data?: unknown }).data;
+    if (Array.isArray(nested)) return nested;
+    return [data];
+  }
+  return [];
+}
+
+type CountOptions = { year?: string; type?: string };
+
+/**
+ * Collect `want` unique, displayable questions. ALOC returns ~40 per call and may repeat
+ * questions or send some we cannot show, so a single call routinely came back short.
+ * We keep topping up (a few rounds, stopping as soon as a round adds nothing new).
+ * `first` is the URL of the opening request; later rounds use /m/{n} (falling back to /q/{n}).
+ */
+async function collectQuestions(
+  apiKey: string,
+  slug: string,
+  want: number,
+  params: URLSearchParams,
+  first: string | null,
+): Promise<NormalizedQuestion[]> {
+  const subjectName = slugToName(slug);
+  const got = new Map<string, NormalizedQuestion>();
+  const seen = new Set<string>();
+  let stagnant = 0;
+  let firstError: Error | null = null;
+
+  for (let round = 0; round < 5 && got.size < want; round++) {
+    const remaining = want - got.size;
+    const urls =
+      round === 0 && first
+        ? [first]
+        : [
+            `${ALOC_BASE}/m/${Math.min(120, Math.max(remaining + 5, 10))}?${params.toString()}`,
+            `${ALOC_BASE}/q/${Math.min(40, Math.max(remaining + 5, 10))}?${params.toString()}`,
+          ];
+    let list: unknown[] | null = null;
+    for (const url of urls) {
+      try {
+        list = rawQuestionList(await alocGetJson(url, apiKey));
+        break;
+      } catch (err) {
+        firstError = firstError ?? (err instanceof Error ? err : new Error(String(err)));
+      }
+    }
+    if (list === null) break;
+
+    const { questions } = normalizeAlocList(list, subjectName);
+    let added = 0;
+    for (const q of questions) {
+      const keys = questionDedupeKeys(q);
+      if (keys.some((k) => seen.has(k))) continue;
+      keys.forEach((k) => seen.add(k));
+      got.set(q.id, q);
+      added += 1;
+      if (got.size >= want) break;
+    }
+    stagnant = added === 0 ? stagnant + 1 : 0;
+    if (stagnant >= 2) break;
+  }
+
+  if (got.size === 0 && firstError) throw firstError;
+  return Array.from(got.values()).slice(0, want);
+}
+
 /**
  * Fetch a specific count of questions.
- * Uses /q/{count} endpoint (max 40) or /m.
+ * Uses /q/{count} for up to 40, then tops the set up so `count` complete questions come back
+ * whenever ALOC has that many (the old version returned a single /m page — about 40 — for any larger ask).
  */
 export async function fetchAlocQuestionCount(
   apiKey: string,
   subject: string,
   count: number,
-  opts: { year?: string; type?: string } = {},
+  opts: CountOptions = {},
 ): Promise<NormalizedQuestion[]> {
   const slug = nameToSlug(subject);
-  const clamped = Math.min(Math.max(count, 1), 60);
+  const want = Math.min(Math.max(Math.floor(count) || 1, 1), 200);
   const params = new URLSearchParams({ subject: slug });
   if (opts.year && opts.year !== "All years") params.set("year", opts.year);
   if (opts.type) params.set("type", opts.type);
 
-  const endpoint = clamped <= 40 ? `${ALOC_BASE}/q/${clamped}?${params.toString()}` : `${ALOC_BASE}/m?${params.toString()}`;
-
-  const res = await fetch(endpoint, {
-    headers: alocHeaders(apiKey),
-    cache: "no-store",
-    signal: AbortSignal.timeout(12000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`ALOC API returned HTTP ${res.status}`);
-  }
-
-  const json = (await res.json()) as AlocResponse;
-  const rawList = Array.isArray(json.data)
-    ? json.data
-    : json.data
-      ? [json.data]
-      : [];
-
-  const normalized = rawList
-    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
-    .filter((q): q is NormalizedQuestion => q !== null);
-
-  return normalized.slice(0, count);
+  const first = want <= 40 ? `${ALOC_BASE}/q/${want}?${params.toString()}` : `${ALOC_BASE}/m?${params.toString()}`;
+  return collectQuestions(apiKey, slug, want, params, first);
 }
 
 /**
  * Fetch bulk questions for a subject (default ~40).
- * Uses the /m endpoint.
+ * Uses the /m endpoint. Pass `count` to ask for more (the set is topped up to that size).
  */
 export async function fetchAlocQuestions(
   apiKey: string,
   subject: string,
-  opts: { year?: string; type?: string } = {},
+  opts: CountOptions & { count?: number } = {},
 ): Promise<NormalizedQuestion[]> {
   const slug = nameToSlug(subject);
   const params = new URLSearchParams({ subject: slug });
   if (opts.year && opts.year !== "All years") params.set("year", opts.year);
   if (opts.type && opts.type !== "utme") params.set("type", opts.type);
 
-  const url = `${ALOC_BASE}/m?${params.toString()}`;
-
-  const res = await fetch(url, {
-    headers: alocHeaders(apiKey),
-    cache: "no-store",
-    signal: AbortSignal.timeout(12000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`ALOC API returned HTTP ${res.status}`);
-  }
-
-  const json = (await res.json()) as AlocResponse;
-  const rawList = Array.isArray(json.data)
-    ? json.data
-    : json.data
-      ? [json.data]
-      : [];
-
-  return rawList
-    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
-    .filter((q): q is NormalizedQuestion => q !== null);
+  const want = opts.count && opts.count > 0 ? Math.min(Math.floor(opts.count), 200) : 40;
+  return collectQuestions(apiKey, slug, want, params, `${ALOC_BASE}/m?${params.toString()}`);
 }
 
 
@@ -625,18 +994,8 @@ export async function fetchAlocMany(
   if (opts.withComprehension) params.set("withComprehension", "true");
   const clamped = Math.min(Math.max(Math.floor(limit), 1), 120);
 
-  const res = await fetch(`${ALOC_BASE}/m/${clamped}?${params.toString()}`, {
-    headers: alocHeaders(apiKey),
-    cache: "no-store",
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`ALOC API returned HTTP ${res.status}`);
-
-  const json = (await res.json()) as AlocResponse;
-  const rawList = Array.isArray(json.data) ? json.data : json.data ? [json.data] : [];
-  return rawList
-    .map((q) => normalizeAlocQuestion(q, slugToName(slug)))
-    .filter((q): q is NormalizedQuestion => q !== null);
+  const json = await alocGetJson(`${ALOC_BASE}/m/${clamped}?${params.toString()}`, apiKey, { timeoutMs: 15000 });
+  return normalizeAlocList(rawQuestionList(json), slugToName(slug)).questions;
 }
 
 let comprehensionYearsCache: { at: number; years: string[] } | null = null;
@@ -656,7 +1015,7 @@ export async function fetchAlocComprehensionYears(apiKey: string): Promise<strin
   const years = (Array.isArray(json.data) ? json.data : [])
     .map((r) => (r?.examyear != null ? String(r.examyear).trim() : ""))
     .filter((y) => /^\d{4}$/.test(y));
-  const unique = Array.from(new Set(years));
-  if (unique.length > 0) comprehensionYearsCache = { at: Date.now(), years: unique };
-  return unique;
+  const uniqueYears = Array.from(new Set(years));
+  if (uniqueYears.length > 0) comprehensionYearsCache = { at: Date.now(), years: uniqueYears };
+  return uniqueYears;
 }

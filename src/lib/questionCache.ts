@@ -93,7 +93,13 @@ export async function clearQuestionCache(): Promise<void> {
   }
 }
 
+/**
+ * Bump when the shape/quality of cached questions changes, so devices holding old (truncated or
+ * badly parsed) question sets stop serving them and fetch fresh, fully hydrated ones.
+ */
+export const QUESTION_CACHE_VERSION = "v2";
+
 /** Build a consistent cache key from subject + optional year. */
 export function cacheKey(subject: string, year?: string): string {
-  return `${subject.toLowerCase().trim()}:${year?.toLowerCase().trim() || "all"}`;
+  return `${QUESTION_CACHE_VERSION}:${subject.toLowerCase().trim()}:${year?.toLowerCase().trim() || "all"}`;
 }

@@ -5,23 +5,27 @@
  *   • App shell (HTML, JS, CSS) → Network-first with cache fallback
  *   • Static assets (fonts, images) → Cache-first
  *   • API calls → Network-only (never cache sensitive data)
- *   • Offline fallback → /offline page
+ *   • Offline fallback → /offline.html
  */
 
-const CACHE = "orbitprep-v1";
-const OFFLINE_URL = "/offline";
+const CACHE = "orbitprep-v2";
+const OFFLINE_URL = "/offline.html";
 
 const PRECACHE = [
   "/",
   "/dashboard",
-  "/offline",
+  "/offline.html",
   "/manifest.json",
 ];
 
 // Install — precache app shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE))
+    // cache.addAll is all-or-nothing: one missing/redirecting URL used to abort the whole install,
+    // leaving the app with no offline support. Cache each entry on its own instead.
+    caches.open(CACHE).then((cache) =>
+      Promise.allSettled(PRECACHE.map((url) => cache.add(url)))
+    )
   );
   self.skipWaiting();
 });
