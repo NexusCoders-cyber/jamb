@@ -14,7 +14,10 @@ import { ALOC_SUBJECTS } from "@/lib/aloc";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
-import { novelMatches } from "@/lib/aloc";
+import { novelMatches, type NormalizedQuestion } from "@/lib/aloc";
+import { finalizeEnglishPaper } from "@/lib/englishPaper";
+import { sampleLekkiForExam } from "@/lib/lekki-questions";
+import { isArchivedNovel, isCurrentNovel } from "@/lib/setTexts";
 import {
   Calculator,
   Check,
@@ -751,7 +754,7 @@ function ExamPageContent() {
             questionCache.current.set(ck, idbCached);
             batches.push(idbCached);
           } else {
-            const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}`)
+            const first = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${Math.min(200, Math.max(want, 40))}`)
               .then((r) => r.json())
               .then((res: { ok: boolean; data?: ExamQuestion[]; error?: string }) => {
                 if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
@@ -769,7 +772,7 @@ function ExamPageContent() {
         const seen = new Set(batches[0].map((q) => String(q.id)));
         let round = 1;
         while (seen.size < want && round < 3) {
-          const more = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&t=${Date.now()}-${round}`)
+          const more = await fetch(`/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${Math.min(200, Math.max(want, 40))}&t=${Date.now()}-${round}`)
             .then((r) => r.json())
             .then((res: { ok: boolean; data?: ExamQuestion[] }) =>
               (res.ok && Array.isArray(res.data) ? res.data : []) as ExamQuestion[],
@@ -821,18 +824,31 @@ function ExamPageContent() {
       } else {
       const perSubject = await Promise.all(
         entries.map(async ({ name, count }) => {
+          // Set-text study (Learn → Novels) for the CURRENT book uses the bundled dataset: complete, offline-ready
+          if (urlNovel && isCurrentNovel(urlNovel)) {
+            const set = sampleLekkiForExam(count) as unknown as ExamQuestion[];
+            return set.map((qn) => ({ ...qn, subject: name }));
+          }
           if (isExamMode && !urlNovel && name === ENGLISH) {
+            // UTME Use of English: 60 questions, the last block (5-10 questions) from The Lekki Headmaster only.
+            // finalizeEnglishPaper strips every other set text, whichever path the paper came from.
+            let paper: ExamQuestion[];
             try {
-              const paper = await fetchEnglishPaper();
-              return paper.slice(0, count).map((qn) => ({ ...qn, subject: name }));
+              paper = await fetchEnglishPaper();
             } catch (paperErr) {
               console.warn("English paper assembly failed, using random pool:", paperErr);
+              paper = await fetchPool(name, count * 2).catch(() => [] as ExamQuestion[]);
             }
+            const finalPaper = finalizeEnglishPaper(paper as unknown as NormalizedQuestion[], { total: count }) as unknown as ExamQuestion[];
+            return finalPaper.map((qn) => ({ ...qn, subject: name }));
           }
           let pool = await fetchPool(name, count * 2);
           // Novel mode: keep only questions drawn from the selected set text
           if (urlNovel) {
             pool = pool.filter((qn) => novelMatches(qn.novel, urlNovel));
+          } else if (name === ENGLISH) {
+            // Practice / study English: older prescribed books are retired
+            pool = pool.filter((qn) => !isArchivedNovel(qn.novel));
           }
           return pool.slice(0, count).map((qn) => ({ ...qn, subject: name }));
         }),

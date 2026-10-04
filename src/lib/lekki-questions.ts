@@ -3,7 +3,12 @@
  * Used in the novel reader, Practice mode, and the Arena novel duel.
  *
  * answer is 0-indexed (A=0, B=1, C=2, D=3).
+ *
+ * This bundled dataset is the ONLY source of set-text questions in English mock exams, so they
+ * keep working offline. Options are kept in their dataset order so the stored answer keys stay valid.
  */
+import type { NormalizedQuestion } from "./aloc";
+import { CURRENT_UTME_NOVEL } from "./setTexts";
 
 export type NovelQuestion = {
   id: string;
@@ -156,8 +161,41 @@ export const LEKKI_QUESTIONS: NovelQuestion[] = [
   q(124, "How does the novel end for Mr. Bepo?", ["He resigns to start his own school", "He is sacked by the MD", "He does not leave and returns to Stardom Schools", "He settles in the UK with his family"], "C", "Bepo does not board the plane. He returns to Stardom Schools telling everyone his heart is with the school."),
 ];
 
+/** Unbiased Fisher–Yates shuffle (the old `sort(() => Math.random() - 0.5)` trick is biased). */
+function shuffled<T>(list: readonly T[], rng: () => number): T[] {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 /** Pick N random questions (shuffled). */
-export function sampleLekkiQuestions(n = 10): NovelQuestion[] {
-  const shuffled = [...LEKKI_QUESTIONS].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, Math.min(n, shuffled.length));
+export function sampleLekkiQuestions(n = 10, rng: () => number = Math.random): NovelQuestion[] {
+  const count = Math.max(0, Math.min(Math.floor(n), LEKKI_QUESTIONS.length));
+  return shuffled(LEKKI_QUESTIONS, rng).slice(0, count);
+}
+
+/** The Lekki Headmaster question in the same shape the exam screen uses for ALOC questions. */
+export function lekkiToNormalized(item: NovelQuestion): NormalizedQuestion {
+  return {
+    id: item.id,
+    prompt: item.prompt,
+    options: item.options.slice(),
+    answer: item.answer,
+    explanation: item.explanation,
+    section: null,
+    sectionKind: null,
+    novel: CURRENT_UTME_NOVEL,
+    category: "Novel",
+    examtype: "utme",
+    subject: "English Language",
+    source: "local-novel",
+  };
+}
+
+/** `n` random, exam-ready Lekki Headmaster questions from the bundled dataset (works fully offline). */
+export function sampleLekkiForExam(n: number, rng: () => number = Math.random): NormalizedQuestion[] {
+  return sampleLekkiQuestions(n, rng).map(lekkiToNormalized);
 }

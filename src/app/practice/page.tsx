@@ -40,10 +40,9 @@ const modes: { id: StudyMode; label: string; detail: string; href: string }[] = 
   },
 ];
 
+// Previously prescribed JAMB books (The Life Changer, Sweet Sixteen …) are archived: see /novels → Archived.
 const NOVELS = [
   { title: "The Lekki Headmaster", slug: "the-lekki-headmaster", note: "Current JAMB English text" },
-  { title: "The Life Changer", slug: "the-life-changer", note: "Recent JAMB English text" },
-  { title: "Sweet Sixteen", slug: "sweet-sixteen", note: "JAMB English text" },
   { title: "Nineteen Eighty-Four", slug: "nineteen-eighty-four", note: "Literature set text" },
 ];
 

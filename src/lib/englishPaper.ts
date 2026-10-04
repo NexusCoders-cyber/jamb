@@ -14,9 +14,17 @@
 import {
   fetchAlocComprehensionYears,
   fetchAlocMany,
-  novelMatches,
   type NormalizedQuestion,
 } from "./aloc";
+import { sampleLekkiForExam } from "./lekki-questions";
+import {
+  CURRENT_UTME_NOVEL,
+  ENGLISH_PAPER_TOTAL,
+  NOVEL_QUESTIONS_MAX,
+  NOVEL_QUESTIONS_MIN,
+  isArchivedNovel,
+  mentionsArchivedNovel,
+} from "./setTexts";
 
 /** Section order of the assembled paper. Change here if you want a different order. */
 export const ENGLISH_PAPER_ORDER = ["passages", "lexis", "oral", "novel"] as const;
@@ -26,7 +34,7 @@ export type EnglishPaperOptions = {
   total?: number;
   /** Set-text (novel) questions: at least this many … */
   novelMin?: number;
-  /** … and at most this many (inclusive). Defaults keep it between 5 and 9. */
+  /** … and at most this many (inclusive). Defaults: 5 to 10, all from the bundled Lekki Headmaster dataset. */
   novelMax?: number;
   /** How many passages to show (JAMB sets 2: a comprehension + a cloze) */
   maxPassages?: number;
@@ -34,8 +42,6 @@ export type EnglishPaperOptions = {
   perPassageMax?: number;
   /** Oral-forms questions in the paper (JAMB syllabus: 10) */
   oralTarget?: number;
-  /** The current official set text; preferred when enough questions exist */
-  preferredNovel?: string;
   rng?: () => number;
 };
 
@@ -43,7 +49,7 @@ export type EnglishPaperMeta = {
   total: number;
   passages: { passageNo: number; questions: number; year: string | null }[];
   passageQuestions: number;
-  novel: { title: string | null; questions: number };
+  novel: { title: string | null; questions: number; source: "local" | "none" };
   lexis: number;
   oral: number;
   /** Set when the paper came out shorter than requested (pool too small) */
@@ -67,9 +73,18 @@ function isOral(q: NormalizedQuestion): boolean {
   return ORAL_HINT.test(`${q.prompt} ${q.section ?? ""}`);
 }
 
-function isNovel(q: NormalizedQuestion): boolean {
+/**
+ * ANY set-text question coming from ALOC. Set-text questions are served from the bundled
+ * The Lekki Headmaster dataset only, so every ALOC one (current book or an older prescribed
+ * book such as The Life Changer or Sweet Sixteen) is kept out of the general pool.
+ */
+export function isSetTextQuestion(q: NormalizedQuestion): boolean {
+  if (q.source === "local-novel") return true;
   if (q.novel) return true;
-  return !!q.category && /novel|reading text|set text|literary/i.test(q.category);
+  if (isArchivedNovel(q.novel)) return true;
+  if (q.category && /novel|reading text|set text|literary/i.test(q.category)) return true;
+  if (mentionsArchivedNovel(q.section) || mentionsArchivedNovel(q.prompt)) return true;
+  return false;
 }
 
 function byNub(a: NormalizedQuestion, b: NormalizedQuestion): number {
@@ -84,13 +99,12 @@ export function buildEnglishPaper(
   options: EnglishPaperOptions = {},
 ): { questions: NormalizedQuestion[]; meta: EnglishPaperMeta } {
   const rng = options.rng ?? Math.random;
-  const total = options.total ?? 60;
-  const novelMin = options.novelMin ?? 5;
-  const novelMax = Math.max(novelMin, options.novelMax ?? 9);
+  const total = options.total ?? ENGLISH_PAPER_TOTAL;
+  const novelMin = Math.max(0, options.novelMin ?? NOVEL_QUESTIONS_MIN);
+  const novelMax = Math.max(novelMin, options.novelMax ?? NOVEL_QUESTIONS_MAX);
   const maxPassages = options.maxPassages ?? 2;
   const perPassageMax = options.perPassageMax ?? 10;
   const oralTargetWanted = options.oralTarget ?? 10;
-  const preferredNovel = options.preferredNovel ?? "The Lekki Headmaster";
 
   // 1. de-duplicate
   const seen = new Set<string>();
@@ -101,26 +115,11 @@ export function buildEnglishPaper(
     return true;
   });
 
-  // 2. novel bucket — ONE set text per paper, like JAMB
-  const novelAll = all.filter(isNovel);
-  const titleGroups = new Map<string, NormalizedQuestion[]>();
-  for (const q of novelAll) {
-    const title = q.novel ?? "Set text";
-    const key = Array.from(titleGroups.keys()).find((k) => novelMatches(k, title)) ?? title;
-    titleGroups.set(key, [...(titleGroups.get(key) ?? []), q]);
-  }
-  let novelTitle: string | null = null;
-  let novelCandidates: NormalizedQuestion[] = [];
-  if (titleGroups.size > 0) {
-    const entries = Array.from(titleGroups.entries());
-    const preferred = entries.find(([k, v]) => novelMatches(k, preferredNovel) && v.length >= novelMin);
-    const best = preferred ?? entries.sort((a, b) => b[1].length - a[1].length)[0];
-    novelTitle = best[0] === "Set text" ? null : best[0];
-    novelCandidates = best[1];
-  }
+  // 2. set text — ALWAYS from the bundled The Lekki Headmaster dataset (5-10 random questions per paper),
+  //    never from ALOC, so older books can not leak in and it works offline.
   const novelWanted = novelMin + Math.floor(rng() * (novelMax - novelMin + 1));
-  const novelPicked = shuffle(novelCandidates, rng).slice(0, Math.min(novelWanted, total));
-  const novelIds = new Set(novelAll.map((q) => String(q.id)));
+  const novelPicked = sampleLekkiForExam(Math.min(novelWanted, total), rng);
+  const novelIds = new Set(all.filter(isSetTextQuestion).map((q) => String(q.id)));
 
   // 3. passages — every passage keeps ALL its questions together, in paper order
   const passageAll = all.filter((q) => !novelIds.has(String(q.id)) && q.passageId);
@@ -170,7 +169,7 @@ export function buildEnglishPaper(
       total: questions.length,
       passages: passageMeta,
       passageQuestions: passageQs.length,
-      novel: { title: novelTitle, questions: novelPicked.length },
+      novel: { title: novelPicked.length > 0 ? CURRENT_UTME_NOVEL : null, questions: novelPicked.length, source: novelPicked.length > 0 ? "local" : "none" },
       lexis: lexisQs.length,
       oral: oralQs.length,
       shortBy: Math.max(0, total - questions.length),
@@ -238,4 +237,33 @@ export async function assembleEnglishPaper(
     questions,
     meta: { ...meta, year: usedYear, usedFallbackYear: !!requested && usedYear !== requested },
   };
+}
+
+
+/**
+ * Last line of defence, used by the exam screen for EVERY English mock paper (server-built paper,
+ * plain random pool, or a copy cached on the device):
+ *  • removes every set-text question that did not come from the bundled Lekki Headmaster dataset
+ *    (so The Life Changer, Sweet Sixteen … can never appear),
+ *  • makes sure the paper ends with 5-10 Lekki Headmaster questions (Q51-60 block of a 60-question paper),
+ *  • never returns more than `total` questions.
+ * Pure and offline-safe.
+ */
+export function finalizeEnglishPaper(
+  questions: NormalizedQuestion[],
+  opts: { total?: number; novelMin?: number; novelMax?: number; rng?: () => number } = {},
+): NormalizedQuestion[] {
+  const rng = opts.rng ?? Math.random;
+  const total = opts.total ?? ENGLISH_PAPER_TOTAL;
+  const novelMin = Math.max(0, opts.novelMin ?? NOVEL_QUESTIONS_MIN);
+  const novelMax = Math.max(novelMin, opts.novelMax ?? NOVEL_QUESTIONS_MAX);
+
+  const existing = questions.filter((q) => q.source === "local-novel");
+  const body = questions.filter((q) => !isSetTextQuestion(q));
+  let novel = existing;
+  if (existing.length < novelMin || existing.length > novelMax) {
+    const wanted = novelMin + Math.floor(rng() * (novelMax - novelMin + 1));
+    novel = sampleLekkiForExam(Math.min(wanted, total), rng);
+  }
+  return [...body.slice(0, Math.max(0, total - novel.length)), ...novel].slice(0, total);
 }

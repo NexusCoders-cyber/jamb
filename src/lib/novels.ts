@@ -3,6 +3,8 @@
  * Each entry powers /novels (list) and /novels/[slug] (reader).
  */
 
+import { isArchivedNovel } from "./setTexts";
+
 export type NovelChapter = {
   title: string;
   summary: string;
@@ -250,6 +252,14 @@ export const NOVELS: NovelNotes[] = [
     ],
   },
 ];
+
+/**
+ * Retired JAMB Use of English set texts. Their notes stay readable (nothing is deleted), but they are
+ * listed under "Archived" and never appear in English mock exams — see lib/setTexts.ts.
+ */
+export function isNovelArchived(novel: NovelNotes): boolean {
+  return isArchivedNovel(novel.title);
+}
 
 export function getNovel(slug: string): NovelNotes | undefined {
   return NOVELS.find((n) => n.slug === slug);
