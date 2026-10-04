@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { knownRoute, preloadImage, proxiedUrl } from "@/lib/imagePreload";
 import { ImageOff, Maximize2, Minus, Plus, RotateCw, X } from "lucide-react";
 
 type Props = {
@@ -22,20 +23,38 @@ type Props = {
  * Render it with `key={src}` so state resets when the question changes.
  */
 export default function QuestionImage({ src, alt = "Question illustration", zoomable = true, compact = false, className = "" }: Props) {
-  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  // If the picture was already checked (preloaded while the previous question was on screen) it shows at once.
+  const initialRoute = knownRoute(src);
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">(
+    initialRoute === "failed" ? "error" : initialRoute ? "loaded" : "loading",
+  );
   const [attempt, setAttempt] = useState(0);
-  const [via, setVia] = useState<"direct" | "proxy">("direct");
+  const [via, setVia] = useState<"direct" | "proxy">(initialRoute === "proxy" ? "proxy" : "direct");
+  const [ready, setReady] = useState(initialRoute !== undefined);
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
 
   // Only remote http(s) pictures can be re-fetched through our server; data:/blob:/same-origin cannot.
   const canProxy = /^https?:\/\//i.test(src) && !src.includes("/api/image-proxy");
 
-  // Direct load first. If the browser cannot show it (http-only host, hot-link protection, bad certificate),
-  // the same picture is fetched through /api/image-proxy before we give up.
+  // Not checked yet (e.g. the very first question): check it now, then show it from the browser cache.
+  useEffect(() => {
+    if (ready) return;
+    let cancelled = false;
+    void preloadImage(src).then((route) => {
+      if (cancelled) return;
+      if (route === "failed") setStatus("error");
+      else setVia(route === "proxy" ? "proxy" : "direct");
+      setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [src, ready]);
+
   let url = src;
   if (via === "proxy") {
-    url = `/api/image-proxy?u=${encodeURIComponent(src)}${attempt > 0 ? `&r=${attempt}` : ""}`;
+    url = `${proxiedUrl(src)}${attempt > 0 ? `&r=${attempt}` : ""}`;
   } else if (attempt > 0 && !src.startsWith("data:")) {
     // Cache-bust only on retry (and never for data: URIs)
     url = `${src}${src.includes("?") ? "&" : "?"}r=${attempt}`;
@@ -115,7 +134,7 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
     <div className={`keep-light relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 ${status === "loading" ? (compact ? "min-h-[64px]" : "min-h-[140px]") : ""} ${className}`}>
       {status === "loading" && <div className="absolute inset-0 animate-pulse bg-slate-100" aria-hidden />}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      {ready && <img
         ref={imgRef}
         src={url}
         alt={alt}
@@ -124,8 +143,8 @@ export default function QuestionImage({ src, alt = "Question illustration", zoom
         onLoad={() => setStatus("loaded")}
         onError={handleFailure}
         draggable={false}
-        className={`mx-auto block h-auto w-auto max-w-full object-contain transition-opacity duration-200 ${compact ? "max-h-40 p-1" : "max-h-72 p-2 sm:max-h-96"} ${status === "loaded" ? "opacity-100" : "opacity-0"}`}
-      />
+        className={`mx-auto block h-auto w-auto max-w-full object-contain ${compact ? "max-h-40 p-1" : "max-h-72 p-2 sm:max-h-96"} ${status === "loaded" ? "opacity-100" : "opacity-0"}`}
+      />}
       {zoomable && status === "loaded" && (
         <span className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full bg-slate-900/70 px-2 py-1 text-[10px] font-bold text-white">
           <Maximize2 className="h-3 w-3" aria-hidden /> Zoom

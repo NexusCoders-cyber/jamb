@@ -975,6 +975,69 @@ export async function fetchAlocQuestions(
 }
 
 
+/** Years ALOC holds UTME past questions for (a request for a year it lacks simply comes back empty). */
+const SPREAD_YEARS = Array.from({ length: 25 }, (_, i) => String(2001 + i));
+
+function shuffled<T>(list: T[]): T[] {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * "Random mix — all years": a fresh, shuffled pool drawn from SEVERAL different years in parallel.
+ * A single un-yeared ALOC call tends to return the same kind of page again and again; asking a handful of
+ * random years each time gives a different spread on every session. Tops up without a year if short.
+ */
+export async function fetchAlocSpread(
+  apiKey: string,
+  subject: string,
+  count: number,
+  opts: { type?: string } = {},
+): Promise<NormalizedQuestion[]> {
+  const slug = nameToSlug(subject);
+  const subjectName = slugToName(slug);
+  const target = Math.min(Math.max(Math.floor(count) || 40, 1), 200);
+  const years = shuffled(SPREAD_YEARS).slice(0, Math.min(6, Math.max(3, Math.ceil(target / 15))));
+  const per = Math.min(60, Math.max(15, Math.ceil(target / years.length) + 10));
+
+  const got = new Map<string, NormalizedQuestion>();
+  const seen = new Set<string>();
+  const take = (list: NormalizedQuestion[]) => {
+    for (const q of list) {
+      const keys = questionDedupeKeys(q);
+      if (keys.some((k) => seen.has(k))) continue;
+      keys.forEach((k) => seen.add(k));
+      got.set(q.id, q);
+    }
+  };
+
+  const settled = await Promise.allSettled(
+    years.map(async (year) => {
+      const params = new URLSearchParams({ subject: slug, year });
+      if (opts.type && opts.type !== "utme") params.set("type", opts.type);
+      const json = await alocGetJson(`${ALOC_BASE}/m/${per}?${params.toString()}`, apiKey, { timeoutMs: 12000 });
+      return normalizeAlocList(rawQuestionList(json), subjectName).questions;
+    }),
+  );
+  for (const r of settled) if (r.status === "fulfilled") take(r.value);
+
+  if (got.size < target) {
+    // Years that came back thin (or failed): top up from a year-less random draw
+    const params = new URLSearchParams({ subject: slug });
+    if (opts.type && opts.type !== "utme") params.set("type", opts.type);
+    try {
+      take(await collectQuestions(apiKey, slug, target - got.size + 10, params, null));
+    } catch (err) {
+      if (got.size === 0) throw err;
+    }
+  }
+  return shuffled(Array.from(got.values())).slice(0, target);
+}
+
 /**
  * Fetch up to `limit` (max 120) random questions via /m/{limit}.
  * `withComprehension` matters for English: ALOC silently DROPS every passage

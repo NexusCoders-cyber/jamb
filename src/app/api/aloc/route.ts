@@ -4,6 +4,7 @@ import { productCatalog } from "@/lib/catalog";
 import {
   ALOC_SUBJECTS,
   fetchAlocQuestions,
+  fetchAlocSpread,
   fetchAlocQuestionCount,
 } from "@/lib/aloc";
 import { getAlocApiKey } from "@/lib/env";
@@ -79,7 +80,11 @@ export async function GET(request: Request) {
     try {
       // `count` is optional: without it the response is the usual ~40-question page; with it the
       // set is topped up server-side so the client gets a full pool in one round trip.
-      const questions = await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
+      // spread=1 (client's "Random mix — all years"): draw from several random years instead of one page
+      const spread = searchParams.get("spread") === "1" && !year;
+      const questions = spread
+        ? await fetchAlocSpread(apiKey, subject, requested ?? 80, { type })
+        : await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
       if (questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }

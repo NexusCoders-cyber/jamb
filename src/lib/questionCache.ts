@@ -40,7 +40,7 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function getCachedQuestions<T = unknown>(key: string): Promise<T[] | null> {
+export async function getCachedQuestions<T = unknown>(key: string, opts: { allowStale?: boolean } = {}): Promise<T[] | null> {
   try {
     const db = await openDB();
     return new Promise((resolve) => {
@@ -49,7 +49,7 @@ export async function getCachedQuestions<T = unknown>(key: string): Promise<T[] 
       req.onsuccess = () => {
         const entry = req.result as CacheEntry | undefined;
         if (!entry) { resolve(null); return; }
-        if (Date.now() - entry.storedAt > TTL_MS) {
+        if (!opts.allowStale && Date.now() - entry.storedAt > TTL_MS) {
           // Expired — delete silently and return null
           db.transaction(STORE, "readwrite").objectStore(STORE).delete(key);
           resolve(null);
