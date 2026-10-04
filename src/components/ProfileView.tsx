@@ -6,7 +6,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
-import { getProfile, getUserAttempts, getSocialStats, followUser, unfollowUser, type Profile, type SocialStats } from "@/lib/queries";
+import { currentStreakFromDates, getProfile, getUserAttempts, getSocialStats, followUser, unfollowUser, type Profile, type SocialStats } from "@/lib/queries";
 import FriendButton from "@/components/FriendButton";
 import OnlineDot from "@/components/OnlineDot";
 import {
@@ -191,7 +191,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
         const totalC = attempts.reduce((s, a) => s + a.score, 0);
         setQuestions(totalQ);
         setAccuracy(totalQ > 0 ? Math.round((totalC / totalQ) * 100) : 0);
-        setStreak(p.streak_days ?? 0);
+        setStreak(Math.max(p.streak_days ?? 0, currentStreakFromDates(dates)));
       } else {
         const { data } = await supabase.rpc("public_profile_stats", { uid: targetUserId });
         const s = Array.isArray(data) ? data[0] : data;

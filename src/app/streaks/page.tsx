@@ -8,7 +8,7 @@ import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
 import AuthGuard from "@/components/AuthGuard";
 import { Check, Lock, Trophy } from "lucide-react";
-import { getProfile, getUserAttempts } from "@/lib/queries";
+import { currentStreakFromDates, getProfile, getUserAttempts } from "@/lib/queries";
 
 const STREAK_MILESTONES = [
   { days: 1, label: "First Step" },
@@ -57,11 +57,11 @@ export default function StreaksPage() {
     const supabase = createSupabaseBrowserClient();
     Promise.all([getProfile(supabase, user.id), getUserAttempts(supabase, user.id, 200)])
       .then(([profile, attempts]) => {
-        if (profile) setStreakDays(profile.streak_days);
-
         const dates = attempts
           .map((a) => a.submitted_at ?? a.started_at)
           .filter(Boolean) as string[];
+        // Attempts that only exist on this device count too
+        setStreakDays(Math.max(profile?.streak_days ?? 0, currentStreakFromDates(dates)));
 
         setLongestStreakDays(longestStreak(dates));
         setWeekly(weeklyActivity(dates));

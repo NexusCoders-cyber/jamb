@@ -6,6 +6,14 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  deleteLocalAttempt,
+  getLocalAttempt,
+  getMeta,
+  listLocalAttempts,
+  setMeta,
+  type LocalAttempt,
+} from "./localDb";
 
 // Rich text segment — italics/bold preserved from the ALOC API
 export type SnapshotSegment = { text: string; italic?: boolean; bold?: boolean };
@@ -123,12 +131,22 @@ export type Notification = {
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export async function getProfile(supabase: SupabaseClient, userId: string): Promise<Profile | null> {
-  const { data } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
-    .single();
-  return data ?? null;
+  if (isOnline()) {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      if (data) {
+        void setMeta(`profile:${userId}`, data); // so the app still opens with no connection
+        return data as Profile;
+      }
+    } catch {
+      /* use the saved copy below */
+    }
+  }
+  return (await getMeta<Profile>(`profile:${userId}`)) ?? null;
 }
 
 export async function updateProfile(
@@ -168,6 +186,83 @@ export async function getPublishedQuestions(
 
 // ─── Exam Attempts ───────────────────────────────────────────────────────────
 
+// ─── Offline-first reads ─────────────────────────────────────────────────────
+// Attempts are stored on the device first (lib/localDb.ts). The readers below merge those with whatever the
+// cloud has (older attempts, other devices) so every page keeps working with no connection at all.
+
+function isOnline(): boolean {
+  return typeof navigator === "undefined" || navigator.onLine !== false;
+}
+
+function localToExamAttempt(a: LocalAttempt): ExamAttempt {
+  return {
+    id: a.id,
+    user_id: a.userId,
+    subject_id: null,
+    question_count: a.questionCount,
+    status: "submitted",
+    score: a.score,
+    started_at: a.startedAt,
+    submitted_at: a.submittedAt,
+  };
+}
+
+function localToAnswers(a: LocalAttempt): AttemptAnswer[] {
+  const list: AttemptAnswer[] = a.answers.map((row, i) => ({
+    id: `${a.id}:${i}`,
+    attempt_id: a.id,
+    question_id: row.question_id,
+    selected_option: row.selected_option,
+    is_correct: row.is_correct,
+    marked_for_review: row.marked_for_review,
+    answered_at: a.submittedAt,
+    question: row.question,
+  }));
+  const hasPosition = list.length > 0 && list.every((r) => typeof r.question?.position === "number");
+  return hasPosition ? list.sort((x, y) => (x.question!.position as number) - (y.question!.position as number)) : list;
+}
+
+function localToLite(a: LocalAttempt): AnswerLite[] {
+  return a.answers.map((row) => ({
+    attempt_id: a.id,
+    subject: row.question?.subject_name || "Unknown",
+    answered: row.selected_option !== null && row.selected_option !== undefined,
+    correct: row.is_correct === true,
+  }));
+}
+
+const REMOTE_HEADER_CACHE = "remoteAttempts";
+
+/** Remember the cloud attempt list so History/Analytics still show older attempts when the phone is offline. */
+async function cacheRemoteAttempts(list: ExamAttempt[]): Promise<void> {
+  if (list.length === 0) return;
+  try {
+    const current = (await getMeta<Record<string, ExamAttempt>>(REMOTE_HEADER_CACHE)) ?? {};
+    for (const a of list) current[a.id] = a;
+    const newest = Object.values(current)
+      .sort((x, y) => (y.submitted_at ?? "").localeCompare(x.submitted_at ?? ""))
+      .slice(0, 400);
+    await setMeta(REMOTE_HEADER_CACHE, Object.fromEntries(newest.map((a) => [a.id, a])));
+  } catch {
+    /* cache is a convenience only */
+  }
+}
+
+async function cachedRemoteAttempts(userId: string): Promise<ExamAttempt[]> {
+  try {
+    const current = (await getMeta<Record<string, ExamAttempt>>(REMOTE_HEADER_CACHE)) ?? {};
+    return Object.values(current).filter((a) => a.user_id === userId);
+  } catch {
+    return [];
+  }
+}
+
+/** Attempts the student deleted on this device that the cloud has not been told about yet. */
+async function deletedAttemptIds(userId: string): Promise<Set<string>> {
+  return new Set((await getMeta<string[]>(`deletedAttempts:${userId}`)) ?? []);
+}
+
+
 export async function createAttempt(
   supabase: SupabaseClient,
   userId: string,
@@ -187,22 +282,30 @@ export async function getAttempt(
   supabase: SupabaseClient,
   attemptId: string,
 ): Promise<ExamAttempt | null> {
-  const { data } = await supabase
-    .from("exam_attempts")
-    .select("*")
-    .eq("id", attemptId)
-    .single();
-  return data ?? null;
+  const local = await getLocalAttempt(attemptId);
+  if (local) return localToExamAttempt(local);
+  if (isOnline()) {
+    try {
+      const { data } = await supabase.from("exam_attempts").select("*").eq("id", attemptId).single();
+      if (data) return data as ExamAttempt;
+    } catch {
+      /* fall through to the cached copy */
+    }
+  }
+  const cache = (await getMeta<Record<string, ExamAttempt>>(REMOTE_HEADER_CACHE)) ?? {};
+  return cache[attemptId] ?? null;
 }
 
 export async function submitAttempt(
   supabase: SupabaseClient,
   attemptId: string,
   score: number,
+  /** Original finish time. Offline attempts are backed up later; they must keep the day they were taken. */
+  submittedAt: string = new Date().toISOString(),
 ): Promise<void> {
   const { error } = await supabase
     .from("exam_attempts")
-    .update({ status: "submitted", score, submitted_at: new Date().toISOString() })
+    .update({ status: "submitted", score, submitted_at: submittedAt })
     .eq("id", attemptId);
   // A failed update used to vanish silently, leaving the attempt "in progress" and out of History/Analytics
   if (error) throw new Error(describeSaveError(error));
@@ -213,19 +316,57 @@ export async function getUserAttempts(
   userId: string,
   limit = 20,
 ): Promise<ExamAttempt[]> {
-  const { data } = await supabase
-    .from("exam_attempts")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "submitted")
-    .order("submitted_at", { ascending: false })
-    .limit(limit);
-  return data ?? [];
+  const [local, deleted] = await Promise.all([listLocalAttempts(userId), deletedAttemptIds(userId)]);
+  let remote: ExamAttempt[] | null = null;
+  if (isOnline()) {
+    try {
+      const { data, error } = await supabase
+        .from("exam_attempts")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("status", "submitted")
+        .order("submitted_at", { ascending: false })
+        .limit(Math.max(limit, 50));
+      if (!error && data) {
+        remote = data as ExamAttempt[];
+        void cacheRemoteAttempts(remote);
+      }
+    } catch {
+      /* offline or blocked: the device copy below is enough */
+    }
+  }
+  if (!remote) remote = await cachedRemoteAttempts(userId);
+
+  const byId = new Map<string, ExamAttempt>();
+  for (const a of remote) if (!deleted.has(a.id)) byId.set(a.id, a);
+  for (const a of local) byId.set(a.id, localToExamAttempt(a)); // the device copy wins
+  return Array.from(byId.values())
+    .sort((a, b) => (b.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))
+    .slice(0, limit);
 }
 
-export async function deleteAttempt(supabase: SupabaseClient, attemptId: string): Promise<boolean> {
-  const { error } = await supabase.from("exam_attempts").delete().eq("id", attemptId);
-  return !error;
+/** Deletes the attempt on this device straight away and in the cloud when possible (otherwise on the next backup). */
+export async function deleteAttempt(supabase: SupabaseClient, attemptId: string, userId?: string): Promise<boolean> {
+  const local = await getLocalAttempt(attemptId);
+  const owner = userId ?? local?.userId;
+  await deleteLocalAttempt(attemptId);
+  let remoteDone = false;
+  if (isOnline()) {
+    try {
+      const { error } = await supabase.from("exam_attempts").delete().eq("id", attemptId);
+      remoteDone = !error;
+    } catch {
+      remoteDone = false;
+    }
+  }
+  if (!remoteDone && owner && (!local || local.syncedAt)) {
+    // It exists in the cloud (or might): remember to remove it there on the next backup
+    const key = `deletedAttempts:${owner}`;
+    const list = new Set((await getMeta<string[]>(key)) ?? []);
+    list.add(attemptId);
+    await setMeta(key, Array.from(list));
+  }
+  return true;
 }
 
 // ─── Attempt Answers ─────────────────────────────────────────────────────────
@@ -369,6 +510,9 @@ export async function getAttemptAnswers(
   supabase: SupabaseClient,
   attemptId: string,
 ): Promise<AttemptAnswer[]> {
+  const local = await getLocalAttempt(attemptId);
+  if (local) return localToAnswers(local);
+  if (!isOnline()) return [];
   const { data, error } = await supabase
     .from("attempt_answers")
     .select("*")
@@ -463,20 +607,44 @@ async function fetchAllPages(
 export async function getAnswerRowsForAttempts(supabase: SupabaseClient, attemptIds: string[]): Promise<AnswerLite[]> {
   const ids = Array.from(new Set(attemptIds)).slice(0, 5);
   if (ids.length === 0) return [];
+  const out: AnswerLite[] = [];
+  const remoteIds: string[] = [];
+  for (const id of ids) {
+    const local = await getLocalAttempt(id);
+    if (local) out.push(...localToLite(local));
+    else remoteIds.push(id);
+  }
+  if (remoteIds.length === 0 || !isOnline()) return out;
   try {
     const { data, error } = await supabase
       .from("attempt_answers")
       .select("attempt_id, selected_option, is_correct, subject_name:question_data->>subject_name")
-      .in("attempt_id", ids)
+      .in("attempt_id", remoteIds)
       .limit(1000);
-    if (error || !data) return [];
-    return (data as AnyRow[]).map(toAnswerLite);
+    if (error || !data) return out;
+    return [...out, ...(data as AnyRow[]).map(toAnswerLite)];
   } catch {
-    return [];
+    return out;
   }
 }
 
 export async function getAnswerRows(supabase: SupabaseClient, userId: string): Promise<AnswerLite[]> {
+  const local = await listLocalAttempts(userId);
+  const localIds = new Set(local.map((a) => a.id));
+  const deleted = await deletedAttemptIds(userId);
+  const mine = local.flatMap(localToLite);
+  if (!isOnline()) return mine;
+  let remote: AnswerLite[] = [];
+  try {
+    remote = await getRemoteAnswerRows(supabase, userId);
+  } catch {
+    remote = [];
+  }
+  // Attempts that exist both here and in the cloud are counted once (the device copy)
+  return [...remote.filter((r) => !localIds.has(r.attempt_id) && !deleted.has(r.attempt_id)), ...mine];
+}
+
+async function getRemoteAnswerRows(supabase: SupabaseClient, userId: string): Promise<AnswerLite[]> {
   const fast = await fetchAllPages(
     (from, to) =>
       supabase
@@ -569,14 +737,11 @@ export async function getScoreHistory(
   userId: string,
   limit = 10,
 ): Promise<Array<{ score: number; question_count: number; submitted_at: string }>> {
-  const { data } = await supabase
-    .from("exam_attempts")
-    .select("score, question_count, submitted_at")
-    .eq("user_id", userId)
-    .eq("status", "submitted")
-    .order("submitted_at", { ascending: false })
-    .limit(limit);
-  return (data ?? []).reverse();
+  const attempts = await getUserAttempts(supabase, userId, limit);
+  return attempts
+    .filter((a) => a.submitted_at)
+    .map((a) => ({ score: a.score, question_count: a.question_count, submitted_at: a.submitted_at as string }))
+    .reverse();
 }
 
 /**
@@ -587,6 +752,22 @@ export async function getWrongAnswers(
   userId: string,
   limit = 60,
 ): Promise<AttemptAnswer[]> {
+  const local = await listLocalAttempts(userId);
+  const localIds = new Set(local.map((a) => a.id));
+  const deleted = await deletedAttemptIds(userId);
+  const mine = local.flatMap((a) => localToAnswers(a).filter((r) => r.is_correct === false));
+  if (!isOnline()) return mine.slice(0, limit);
+
+  let remote: AttemptAnswer[] = [];
+  try {
+    remote = await getRemoteWrongAnswers(supabase, userId, limit + mine.length);
+  } catch {
+    remote = [];
+  }
+  return [...mine, ...remote.filter((r) => !localIds.has(r.attempt_id) && !deleted.has(r.attempt_id))].slice(0, limit);
+}
+
+async function getRemoteWrongAnswers(supabase: SupabaseClient, userId: string, limit: number): Promise<AttemptAnswer[]> {
   const { data: attemptIds, error: idsError } = await supabase
     .from("exam_attempts")
     .select("id")
@@ -963,6 +1144,26 @@ function lagosDate(d: Date | string): string {
     month: "2-digit",
     day: "2-digit",
   }).format(typeof d === "string" ? new Date(d) : d);
+}
+
+/**
+ * Current streak (consecutive Lagos days with at least one submitted attempt, ending today or yesterday).
+ * Computed from attempt dates, so it is right even for attempts that only exist on this device.
+ */
+export function currentStreakFromDates(dates: string[], now: Date = new Date()): number {
+  const days = new Set(dates.filter(Boolean).map((d) => lagosDate(d)));
+  if (days.size === 0) return 0;
+  let cursor = now;
+  if (!days.has(lagosDate(cursor))) {
+    cursor = new Date(cursor.getTime() - 86400000);
+    if (!days.has(lagosDate(cursor))) return 0; // a day was missed
+  }
+  let streak = 0;
+  while (days.has(lagosDate(cursor))) {
+    streak += 1;
+    cursor = new Date(cursor.getTime() - 86400000);
+  }
+  return streak;
 }
 
 /**

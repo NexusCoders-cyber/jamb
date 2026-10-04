@@ -39,6 +39,7 @@ import {
   Zap,
   Crown,
   Users,
+  Bookmark,
 } from "lucide-react";
 
 // ─── Navigation data ──────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Syllabus",        href: "/knowledge-hub",       icon: Library },
       { label: "Novels",          href: "/novels",              icon: BookOpen },
       { label: "Mistakes",        href: "/mistakes",            icon: Target },
+      { label: "Bookmarks",       href: "/bookmarks",           icon: Bookmark },
     ],
   },
   {    label: "Social",

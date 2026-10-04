@@ -8,6 +8,7 @@ import { Flame, Inbox, Trophy, Target, ChartLine, Users } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthGate from "@/components/AuthGate";
 import Logo from "@/components/Logo";
+import { syncToCloud } from "@/lib/sync";
 
 type View = "intro" | "login" | "forgot" | "forgot-sent";
 
@@ -134,6 +135,19 @@ export default function Home() {
       const params = new URLSearchParams(window.location.search);
       const next = params.get("next");
       const destination = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+
+      // Signing in is an explicit moment to back up: attempts and bookmarks made on this device (even
+      // while signed out of the cloud) are uploaded, and bookmarks from other devices come down.
+      // Runs in the background — never delays or blocks the sign-in.
+      void (async () => {
+        try {
+          const supabase = createSupabaseBrowserClient();
+          const { data: sessionData } = await supabase.auth.getUser();
+          if (sessionData.user) await syncToCloud(supabase, sessionData.user.id);
+        } catch {
+          /* offline or not ready: the Back up button in Settings does the same thing later */
+        }
+      })();
       router.push(destination);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to sign in.");

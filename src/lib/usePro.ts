@@ -43,7 +43,7 @@ export function usePro(): ProStatus {
       const supabase = createSupabaseBrowserClient();
 
       // Fetch premium_until AND trial_used_at directly from profiles
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from("profiles")
         .select("premium_until, trial_used_at")
         .eq("id", userId)
@@ -51,8 +51,20 @@ export function usePro(): ProStatus {
 
       if (!mountedRef.current) return;
 
-      const until = (profile?.premium_until as string | null) ?? null;
-      const usedAt = (profile?.trial_used_at as string | null) ?? null;
+      // Offline-first: with no connection the last known status keeps a paying student's exams working.
+      // It still expires on its own date, so it can never extend access.
+      const key = `qubit_pro:${userId}`;
+      let until = (profile?.premium_until as string | null) ?? null;
+      let usedAt = (profile?.trial_used_at as string | null) ?? null;
+      if (error) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(key) ?? "null") as { until?: string | null; usedAt?: string | null } | null;
+          until = saved?.until ?? null;
+          usedAt = saved?.usedAt ?? null;
+        } catch { /* no saved status */ }
+      } else {
+        try { localStorage.setItem(key, JSON.stringify({ until, usedAt })); } catch { /* storage unavailable */ }
+      }
       const active = until !== null && new Date(until) > new Date();
 
       // A user is "on trial" when premium_until was set at the same time as
@@ -70,9 +82,18 @@ export function usePro(): ProStatus {
       setPremiumUntil(until);
     } catch (_e) {
       if (mountedRef.current) {
-        setIsPro(false);
-        setIsTrial(false);
-        setTrialUsed(false);
+        let until: string | null = null;
+        let usedAt: string | null = null;
+        try {
+          const saved = JSON.parse(localStorage.getItem(`qubit_pro:${userId}`) ?? "null") as { until?: string | null; usedAt?: string | null } | null;
+          until = saved?.until ?? null;
+          usedAt = saved?.usedAt ?? null;
+        } catch { /* no saved status */ }
+        const active = until !== null && new Date(until) > new Date();
+        setIsPro(active);
+        setIsTrial(active && usedAt !== null);
+        setTrialUsed(usedAt !== null);
+        setPremiumUntil(until);
       }
     } finally {
       if (mountedRef.current) setLoading(false);

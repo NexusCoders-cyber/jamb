@@ -2,14 +2,24 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { startTransition, Suspense, useEffect, useRef, useState } from "react";
+import { startTransition, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import ScoreSummary from "@/components/ScoreSummary";
 import { usePro } from "@/lib/usePro";
 import { getCachedQuestions, setCachedQuestions, cacheKey as idbCacheKey } from "@/lib/questionCache";
-import { createAttempt, storeAttempt, updateStreak } from "@/lib/queries";
+import {
+  clearLocalSession,
+  getLocalSession,
+  newId,
+  saveLocalAttempt,
+  saveLocalSession,
+  type LocalAnswerRow,
+} from "@/lib/localDb";
+import { useSyncStatus } from "@/lib/useSync";
+import BookmarkButton from "@/components/BookmarkButton";
+import type { QuestionSnapshot } from "@/lib/queries";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
@@ -269,6 +279,33 @@ function locateInSubject(tabs: SubjectTab[], index: number, total: number) {
   return { tabIdx, start, end, number: index - start + 1, count: end - start };
 }
 
+/** The saved copy of a question (used for attempts, bookmarks and Review). */
+function toSnapshot(question: ExamQuestion, place: { index: number; number: number }, fallbackSubject: string): QuestionSnapshot {
+  return {
+    id: question.id,
+    prompt: question.prompt,
+    prompt_segments: question.promptSegments ?? undefined,
+    options: question.options,
+    option_segments: question.optionSegments ?? undefined,
+    section: question.section ?? undefined,
+    section_kind: question.sectionKind ?? undefined,
+    image: question.image ?? undefined,
+    images: question.images?.length ? question.images : undefined,
+    option_images: question.optionImages ?? undefined,
+    section_images: question.sectionImages ?? undefined,
+    explanation_images: question.explanationImages ?? undefined,
+    novel: question.novel ?? undefined,
+    correct_option: question.answer,
+    explanation: question.explanation,
+    difficulty: "medium",
+    subject_name: question.subject ?? fallbackSubject,
+    position: place.index,
+    subject_number: place.number,
+    passage_id: question.passageId ?? undefined,
+    year: question.year ?? undefined,
+  };
+}
+
 function InlineReview({
   entries,
   score,
@@ -281,6 +318,7 @@ function InlineReview({
   onRetrySave,
   retryingSave = false,
   timeUsedSeconds = null,
+  backup,
 }: {
   entries: ReviewEntry[];
   score: number;
@@ -297,6 +335,15 @@ function InlineReview({
   retryingSave?: boolean;
   /** Seconds the student spent on the session (shown on the score card) */
   timeUsedSeconds?: number | null;
+  /** Explicit cloud backup of what is stored on this device */
+  backup?: {
+    pending: number;
+    online: boolean;
+    syncing: boolean;
+    persistent: boolean;
+    message: string | null;
+    onBackup: () => void;
+  };
 }) {
   const [filter, setFilter] = useState<"all" | "wrong" | "unanswered" | "correct">("all");
   // Which subject card is open (multi-subject mock). Single-subject sessions always show their corrections.
@@ -382,14 +429,11 @@ function InlineReview({
           onReview={openCorrections}
         />
 
-        {saveProblem && (
+        {saveProblem ? (
           <div role="alert" className="mb-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200">
             <p className="font-semibold">
-              We could not save this attempt to your history, so it may be missing from Analytics. Your answers and corrections are still shown below.
+              This device could not store the attempt, so it may be missing from History. Your answers and corrections are still shown below.
             </p>
-            {/failed to fetch|networkerror|network request|load failed|offline/i.test(saveProblem) && (
-              <p className="mt-1">It looks like your internet connection dropped. Reconnect and try again.</p>
-            )}
             {onRetrySave && (
               <button
                 type="button"
@@ -404,6 +448,32 @@ function InlineReview({
               <summary className="cursor-pointer font-bold">Technical details</summary>
               <p className="mt-1 break-words font-mono">{saveProblem}</p>
             </details>
+          </div>
+        ) : (
+          <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900 ring-1 ring-emerald-200">
+            <div className="min-w-0 flex-1">
+              <p className="font-bold">Saved on this device</p>
+              <p className="mt-0.5 text-xs text-emerald-800">
+                {backup?.persistent === false
+                  ? "Your browser is not keeping data between visits, so back this up before closing the app."
+                  : backup && backup.pending > 0
+                    ? backup.online
+                      ? "Back it up to your account to keep it if you change phone or clear your browser."
+                      : "You're offline. It will be safe here until you back up with a connection."
+                    : "Backed up to your account."}
+              </p>
+              {backup?.message && <p className="mt-1 text-xs font-semibold text-emerald-900">{backup.message}</p>}
+            </div>
+            {backup && backup.pending > 0 && (
+              <button
+                type="button"
+                onClick={backup.onBackup}
+                disabled={backup.syncing || !backup.online}
+                className="touch-manipulation rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+              >
+                {backup.syncing ? "Backing up…" : "Back up now"}
+              </button>
+            )}
           </div>
         )}
         {!saveProblem && saveNote && (
@@ -510,7 +580,8 @@ function InlineReview({
                         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
                           Q{locateInSubject(tabs, questionIdx, total).number} · {isCorrect ? "Correct" : isSkipped ? "Unanswered" : "Wrong"}
                         </span>
-                        <div className="flex gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <BookmarkButton snapshot={toSnapshot(q, { index: questionIdx, number: locateInSubject(tabs, questionIdx, total).number }, subject)} subject={q.subject ?? subject} className="!px-2.5 !py-1 !text-xs" />
                           {q.subject && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">{q.subject}</span>}
                           {q.year && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
                         </div>
@@ -597,6 +668,25 @@ function InlineReview({
 
 type SubjectPlan = { name: string; count: number };
 
+/** Everything needed to continue an unfinished session (stored on the device only). */
+type SavedExamState = {
+  questions: ExamQuestion[];
+  subjectTabs: { name: string; start: number }[];
+  questionTotal: number;
+  sessionLabel: string;
+  answers: Record<string, number>;
+  marked: number[];
+  skipped: number[];
+  revealed: number[];
+  currentQuestion: number;
+  /** Seconds left (null = untimed). The clock is paused while the app is closed. */
+  timeLeft: number | null;
+  startedAtMs: number;
+  attemptId: string;
+};
+
+const SESSION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+
 function ExamPageContent() {
   const searchParams = useSearchParams();
   const { user, loading: authLoading } = useUser();
@@ -657,13 +747,14 @@ function ExamPageContent() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [passageHidden, setPassageHidden] = useState<Record<string, boolean>>({});
   const attemptIdRef = useRef<string | null>(null);
+  const submittedRef = useRef(false);
+  const sync = useSyncStatus(user?.id);
 
   const [reviewEntries, setReviewEntries] = useState<ReviewEntry[] | null>(null);
   const [reviewScore, setReviewScore] = useState(0);
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const [saveNote, setSaveNote] = useState<string | null>(null);
   const [retryingSave, setRetryingSave] = useState(false);
-  const streakDoneRef = useRef(false);
   const startedAtMsRef = useRef<number | null>(null);
   const [reviewSeconds, setReviewSeconds] = useState<number | null>(null);
 
@@ -899,13 +990,98 @@ function ExamPageContent() {
     }
   }
 
+  // ── Offline-first: the attempt id is created on the device, nothing is sent to the cloud while exam is running ──
   useEffect(() => {
-    if (!user || !started || questions.length === 0 || attemptIdRef.current) return;
-    try {
-      const supabase = createSupabaseBrowserClient();
-      createAttempt(supabase, user.id, null, questionTotal).then((a) => { if (a) attemptIdRef.current = a.id; });
-    } catch {  }
-  }, [user, started, questions, questionTotal]);
+    if (started && !attemptIdRef.current) attemptIdRef.current = newId();
+  }, [started]);
+
+  // Unfinished session saved on this device (one per mode) → offer to resume it
+  const [resumable, setResumable] = useState<SavedExamState | null>(null);
+  useEffect(() => {
+    if (!user || started || reviewEntries) return;
+    let cancelled = false;
+    void getLocalSession(user.id, mode).then(async (row) => {
+      if (cancelled) return;
+      const state = row?.state as SavedExamState | undefined;
+      const fresh = row && Date.now() - new Date(row.savedAt).getTime() < SESSION_MAX_AGE_MS;
+      if (state && fresh && Array.isArray(state.questions) && state.questions.length > 0) setResumable(state);
+      else {
+        setResumable(null);
+        if (row) await clearLocalSession(user.id, mode);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, mode, started, reviewEntries]);
+
+  function resumeSession(state: SavedExamState) {
+    attemptIdRef.current = state.attemptId || newId();
+    submittedRef.current = false;
+    startTransition(() => {
+      setQuestions(state.questions);
+      setSubjectTabs(state.subjectTabs);
+      setQuestionTotal(state.questionTotal);
+      setSessionLabel(state.sessionLabel);
+      setAnswers(Object.fromEntries(Object.entries(state.answers).map(([k, v]) => [Number(k), v])));
+      setMarked(new Set(state.marked));
+      setSkipped(new Set(state.skipped));
+      setRevealedInStudy(new Set(state.revealed));
+      setCurrentQuestion(Math.min(state.currentQuestion, Math.max(0, state.questions.length - 1)));
+      setTimeLeft(state.timeLeft);
+      startedAtMsRef.current = state.startedAtMs;
+      setResumable(null);
+      setStarted(true);
+    });
+  }
+
+  async function discardSession() {
+    if (user) await clearLocalSession(user.id, mode);
+    setResumable(null);
+  }
+
+  // Autosave the running session on this device (debounced; the clock is captured by a slower timer)
+  const timeLeftRef = useRef<number | null>(null);
+  timeLeftRef.current = timeLeft;
+  const saveSessionNow = useCallback(() => {
+    if (!user || !started || submittedRef.current || questions.length === 0) return;
+    const state: SavedExamState = {
+      questions,
+      subjectTabs,
+      questionTotal,
+      sessionLabel,
+      answers,
+      marked: Array.from(marked),
+      skipped: Array.from(skipped),
+      revealed: Array.from(revealedInStudy),
+      currentQuestion,
+      timeLeft: timeLeftRef.current,
+      startedAtMs: startedAtMsRef.current ?? Date.now(),
+      attemptId: attemptIdRef.current ?? "",
+    };
+    void saveLocalSession(user.id, mode, state);
+  }, [user, started, questions, subjectTabs, questionTotal, sessionLabel, answers, marked, skipped, revealedInStudy, currentQuestion, mode]);
+
+  useEffect(() => {
+    if (!started) return;
+    const t = window.setTimeout(saveSessionNow, 700);
+    return () => window.clearTimeout(t);
+  }, [started, saveSessionNow]);
+
+  useEffect(() => {
+    if (!started) return;
+    const id = window.setInterval(saveSessionNow, 5000);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") saveSessionNow();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", saveSessionNow);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", saveSessionNow);
+    };
+  }, [started, saveSessionNow]);
 
   useEffect(() => {
     if (timeLeft === null || timeLeft <= 0) return;
@@ -955,6 +1131,24 @@ function ExamPageContent() {
                 : "Answer at your own pace — the correct answer and explanation appear right after each question."}
             </p>
           </div>
+
+          {resumable && (
+            <div className="mb-5 rounded-[24px] bg-amber-50 p-5 ring-1 ring-amber-200" role="region" aria-label="Unfinished session">
+              <h2 className="text-base font-black text-amber-900">You have an unfinished session</h2>
+              <p className="mt-1 text-sm text-amber-800">
+                {resumable.sessionLabel} · {Object.keys(resumable.answers).length} of {resumable.questionTotal} answered
+                {resumable.timeLeft !== null && ` · ${Math.floor(resumable.timeLeft / 60)} min left`}. Saved on this device.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => resumeSession(resumable)} className="h-11 touch-manipulation rounded-2xl bg-amber-600 px-5 text-sm font-black text-white hover:bg-amber-700">
+                  Resume
+                </button>
+                <button type="button" onClick={() => void discardSession()} className="h-11 touch-manipulation rounded-2xl border border-amber-300 bg-white px-5 text-sm font-bold text-amber-800">
+                  Discard
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isExamMode && !showFullSetup ? (
             <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
@@ -1090,15 +1284,13 @@ function ExamPageContent() {
   }
 
   /**
-   * Store the attempt: every question (blank ones too, in paper order), then the score.
-   * The score is recorded even if the answers could not be stored, so the attempt still counts in
-   * History and the JAMB estimate. Safe to call again: it only re-sends the same rows.
+   * Store the attempt on THIS device: every question (blank ones too, in paper order) and the score.
+   * Nothing is sent to the cloud here — that happens on an explicit backup. Safe to call again
+   * (same attempt id, so it simply overwrites).
    */
   async function persistAttempt(list: ReviewEntry[], correct: number): Promise<{ problem: string | null; note: string | null }> {
     if (!user) return { problem: null, note: null }; // guests have no history to save to
-    const supabase = createSupabaseBrowserClient();
     let problem: string | null = null;
-    let note: string | null = null;
     const attemptRows = (() => {
       return list.map((e) => {
         const place = locateInSubject(subjectTabs, e.questionIdx, questionTotal);
@@ -1107,63 +1299,33 @@ function ExamPageContent() {
           selected_option: e.selectedIdx,
           is_correct: e.selectedIdx === null ? null : e.question.answer === e.selectedIdx,
           marked_for_review: marked.has(e.questionIdx),
-          question: {
-            id: e.question.id,
-            prompt: e.question.prompt,
-            prompt_segments: e.question.promptSegments ?? undefined,
-            options: e.question.options,
-            option_segments: e.question.optionSegments ?? undefined,
-            section: e.question.section ?? undefined,
-            section_kind: e.question.sectionKind ?? undefined,
-            image: e.question.image ?? undefined,
-            images: e.question.images?.length ? e.question.images : undefined,
-            option_images: e.question.optionImages ?? undefined,
-            section_images: e.question.sectionImages ?? undefined,
-            explanation_images: e.question.explanationImages ?? undefined,
-            novel: e.question.novel ?? undefined,
-            correct_option: e.question.answer,
-            explanation: e.question.explanation,
-            difficulty: "medium",
-            subject_name: e.question.subject ?? sessionLabel,
-            position: e.questionIdx,
-            subject_number: place.number,
-            passage_id: e.question.passageId ?? undefined,
-            year: e.question.year ?? undefined,
-          },
+          question: toSnapshot(e.question, { index: e.questionIdx, number: place.number }, sessionLabel),
         };
       });
     })();
 
-    const result = await storeAttempt(supabase, {
-      userId: user.id,
-      attemptId: attemptIdRef.current,
-      questionCount: questionTotal,
-      rows: attemptRows,
-      score: correct,
-    });
-    if (result.attemptId) attemptIdRef.current = result.attemptId;
-    problem = result.problem;
-    note = result.note;
-
-    // Streak and achievements run once, and only after the attempt is really submitted
-    if (result.submitted && !streakDoneRef.current) {
-      streakDoneRef.current = true;
-      try {
-        await updateStreak(supabase, user.id);
-      } catch {
-        /* streaks are optional — never block submission */
-      }
-      try {
-        const { data: session } = await supabase.auth.getSession();
-        await fetch("/api/achievements/evaluate", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.session?.access_token ?? ""}` },
-        });
-      } catch {
-        /* achievements are optional — never block submission */
-      }
+    // Saved on this device first — works with no connection. The cloud copy is made on "Back up now".
+    const attemptId = attemptIdRef.current ?? newId();
+    attemptIdRef.current = attemptId;
+    const startedMs = startedAtMsRef.current ?? Date.now();
+    try {
+      await saveLocalAttempt({
+        id: attemptId,
+        userId: user.id,
+        questionCount: questionTotal,
+        score: correct,
+        startedAt: new Date(startedMs).toISOString(),
+        submittedAt: new Date().toISOString(),
+        label: sessionLabel,
+        mode,
+        answers: attemptRows as LocalAnswerRow[],
+        syncedAt: null,
+      });
+      await clearLocalSession(user.id, mode);
+    } catch (err) {
+      problem = err instanceof Error ? err.message : "This device could not store the attempt.";
     }
-    return { problem, note };
+    return { problem, note: null };
   }
 
   async function retrySave() {
@@ -1176,7 +1338,8 @@ function ExamPageContent() {
   }
 
   async function doSubmit() {
-    if (submitting) return;
+    if (submitting || submittedRef.current) return;
+    submittedRef.current = true; // stops the autosave from re-creating the session after we clear it
     setConfirmOpen(false);
     setSubmitting(true);
 
@@ -1209,7 +1372,6 @@ function ExamPageContent() {
     setReviewEntries(null);
     setSaveProblem(null);
     setSaveNote(null);
-    streakDoneRef.current = false;
     startedAtMsRef.current = Date.now();
     setReviewSeconds(null);
     setAnswers({});
@@ -1220,6 +1382,7 @@ function ExamPageContent() {
     setSubmitting(false);
     setCalcManuallySet(false);
     attemptIdRef.current = null;
+    submittedRef.current = false;
     setStarted(false);
   }
 
@@ -1255,6 +1418,14 @@ function ExamPageContent() {
         onRetrySave={retrySave}
         retryingSave={retryingSave}
         timeUsedSeconds={reviewSeconds}
+        backup={{
+          pending: sync.pending.total,
+          online: sync.online,
+          syncing: sync.syncing,
+          persistent: sync.persistent,
+          message: sync.result ? (sync.result.ok ? (sync.result.attempts > 0 ? "Backed up." : null) : sync.result.message) : null,
+          onBackup: () => void sync.sync(),
+        }}
       />
     );
   }
@@ -1398,6 +1569,7 @@ function ExamPageContent() {
             <div className="sticky bottom-0 z-30 -mx-4 -mb-4 mt-5 flex items-center justify-between gap-2 rounded-b-[28px] border-t border-slate-100 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 xl:static xl:z-auto xl:mx-0 xl:mb-0 xl:mt-6 xl:flex-wrap xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none">
               {/* Left: tools (mark for review, jump to the question list on phones) */}
               <div className="flex shrink-0 gap-2 sm:gap-3">
+                {q && <BookmarkButton snapshot={toSnapshot(q, { index: currentQuestion, number: pos.number }, sessionLabel)} subject={q.subject ?? sessionLabel} />}
                 {!isStudyMode && (
                   <button type="button" onClick={toggleMark}
                     aria-label={marked.has(currentQuestion) ? "Unmark question" : "Mark question for review"}
@@ -1498,7 +1670,7 @@ function ExamPageContent() {
               {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
             </button>
             <Link href={setupHref}
-              onClick={(e) => { if (answeredCount > 0 && !window.confirm("Leave this session? Your progress will be lost.")) e.preventDefault(); }}
+              onClick={(e) => { if (answeredCount > 0 && !window.confirm("Leave this session? Your progress is saved on this device, and you can resume it from the start screen.")) e.preventDefault(); }}
               className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
           </aside>

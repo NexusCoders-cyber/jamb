@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import CloudBackupCard from "@/components/CloudBackupCard";
 import { getProfile, updateProfile } from "@/lib/queries";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme, type ThemePref } from "@/lib/theme";
@@ -140,6 +141,9 @@ export default function SettingsPage() {
                 </label>
               </div>
             </div>
+
+            {/* Offline-first: explicit cloud backup */}
+            {user && <CloudBackupCard userId={user.id} />}
 
             {/* Appearance — applies instantly and is remembered on this device */}
             <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">

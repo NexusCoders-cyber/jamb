@@ -8,7 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
 import AuthGuard from "@/components/AuthGuard";
-import { getChannels, getProfile, getUserAttempts } from "@/lib/queries";
+import { currentStreakFromDates, getChannels, getProfile, getUserAttempts } from "@/lib/queries";
 
 type AchievementDef = {
   id: string;
@@ -58,7 +58,7 @@ export default function AchievementsPage() {
           getProfile(supabase, user.id),
           getUserAttempts(supabase, user.id, 200),
         ]);
-        const streak = profile?.streak_days ?? 0;
+        const streak = Math.max(profile?.streak_days ?? 0, currentStreakFromDates(attempts.map((a) => a.submitted_at ?? a.started_at)));
         const exams = attempts.length;
         const questions = attempts.reduce((s, a) => s + a.question_count, 0);
         const rules: Array<[string, string, number, boolean]> = [
