@@ -2,7 +2,7 @@
    GENERATED FILE — do not edit by hand.
    Source: scripts/gen-dark-css.mjs   (runs automatically before `dev` and `build`)
    Dark-mode colour overrides for every Tailwind colour class used in src/.
-   180 rules.
+   183 rules.
    ────────────────────────────────────────────────────────────────────────────── */
 .dark .bg-\[\#e6f5ef\] { background-color: color-mix(in srgb, #e6f5ef 16%, #141327); }
 .dark .bg-\[\#e8eef8\] { background-color: color-mix(in srgb, #e8eef8 16%, #141327); }
@@ -58,6 +58,7 @@
 .dark .bg-white { background-color: #1b1a31; }
 .dark .bg-white\/60 { background-color: color-mix(in srgb, #1b1a31 60%, transparent); }
 .dark .bg-white\/80 { background-color: color-mix(in srgb, #1b1a31 80%, transparent); }
+.dark .bg-white\/85 { background-color: color-mix(in srgb, #1b1a31 85%, transparent); }
 .dark .bg-white\/90 { background-color: color-mix(in srgb, #1b1a31 90%, transparent); }
 .dark .bg-white\/95 { background-color: color-mix(in srgb, #1b1a31 95%, transparent); }
 .dark .border-amber-200 { border-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 32%, #141327); }
@@ -74,6 +75,7 @@
 .dark .border-slate-200\/80 { border-color: color-mix(in srgb, #2e2d4e 80%, transparent); }
 .dark .border-slate-300 { border-color: #3d3c62; }
 .dark .border-violet-200 { border-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 32%, #141327); }
+.dark .border-violet-300 { border-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 40%, #141327); }
 .dark .border-white { border-color: #1b1a31; }
 .dark .divide-slate-100 > :not(:last-child) { border-color: #24233f; }
 .dark .fill-violet-600 { fill: var(--color-violet-400, #a78bfa); }
@@ -85,6 +87,7 @@
 .dark .ring-blue-100 { --tw-ring-color: color-mix(in srgb, var(--color-blue-500, #3b82f6) 26%, #141327); }
 .dark .ring-emerald-100 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 26%, #141327); }
 .dark .ring-emerald-200 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
+.dark .ring-emerald-300 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 40%, #141327); }
 .dark .ring-orange-200 { --tw-ring-color: color-mix(in srgb, var(--color-orange-500, #f97316) 32%, #141327); }
 .dark .ring-rose-100 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 26%, #141327); }
 .dark .ring-rose-200 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 32%, #141327); }
