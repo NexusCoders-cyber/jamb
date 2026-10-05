@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRight, BarChart3, BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Flame, Library,
-  Menu, Monitor, Smartphone, Swords, Target, Timer, Trophy, WifiOff, Users, CalendarCheck, Moon,
+  ArrowRight, BarChart3, BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Flame, GraduationCap,
+  ImageIcon, Library, Menu, Monitor, Smartphone, Swords, Target, Trophy, WifiOff, Users, CalendarCheck, Moon,
 } from "lucide-react";
 import Logo from "@/components/Logo";
 
@@ -15,8 +16,17 @@ export const metadata: Metadata = {
     `Pass JAMB with confidence. ${BRAND} gives you 10,000+ past questions, full mock CBT exams, study mode with instant explanations, live quiz duels and personal analytics — all in one app. Available now on Android and desktop. iOS coming soon.`,
   alternates: { canonical: "/landing" },
   openGraph: {
+    siteName: BRAND,
+    type: "website",
     title: `${BRAND} — Smart JAMB & UTME Preparation App`,
     description: "10,000+ UTME past questions, mock CBT, study mode and live quiz duels. The smartest way to prepare for JAMB.",
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: `${BRAND} — JAMB & UTME practice app` }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${BRAND} — Smart JAMB & UTME Preparation App`,
+    description: "Past questions, full mock CBT, study mode and live quiz duels for JAMB.",
+    images: ["/og-image.png"],
   },
 };
 
@@ -32,22 +42,23 @@ const faqs = [
   { q: `Is ${BRAND} affiliated with JAMB?`, a: `No. ${BRAND} is an independent practice platform built to help candidates prepare for the UTME.` },
 ];
 
+const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://orbitprep.app").replace(/\/$/, "");
+
 const schemaOrg = {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "WebApplication",
-      "@id": "https://orbitprep.app/#app",
+      "@id": `${siteUrl}/#app`,
       "name": BRAND,
-      "url": "https://orbitprep.app",
+      "url": siteUrl,
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Android, Web Browser",
       "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NGN", "description": "Free basic access. Pro subscription from ₦200/week." },
       "description": "Smart JAMB/UTME preparation app with 10,000+ past questions, mock CBT exams, study mode, live quiz duels and analytics.",
-      "screenshot": "https://orbitprep.app/og-image.png",
-      "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "ratingCount": "1200" },
+      "screenshot": `${siteUrl}/screenshots/mock-question.webp`,
     },
-    { "@type": "Organization", "@id": "https://orbitprep.app/#org", "name": BRAND, "url": "https://orbitprep.app", "logo": "https://orbitprep.app/icons/icon-512.png" },
+    { "@type": "Organization", "@id": `${siteUrl}/#org`, "name": BRAND, "url": siteUrl, "logo": `${siteUrl}/logo-512.png` },
     {
       "@type": "FAQPage",
       "mainEntity": faqs.map(({ q, a }) => ({ "@type": "Question", "name": q, "acceptedAnswer": { "@type": "Answer", "text": a } })),
@@ -79,7 +90,7 @@ const extras = [
   { icon: Trophy, label: "Leaderboards & achievements" },
   { icon: Users, label: "Student community" },
   { icon: WifiOff, label: "Works offline" },
-  { icon: Timer, label: "Speed training" },
+  { icon: ImageIcon, label: "Diagram questions with zoom" },
   { icon: Moon, label: "Light & dark mode" },
 ];
 
@@ -87,7 +98,7 @@ const stats = [
   { value: "10,000+", label: "Past questions" },
   { value: "17", label: "UTME subjects" },
   { value: "40", label: "Years covered" },
-  { value: "10s", label: "Arena turn time" },
+  { value: "180", label: "Mock exam questions" },
 ];
 
 const subjects = [
@@ -117,47 +128,17 @@ const proPerks = [
 
 const btnPrimary = "inline-flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-7 py-3.5 text-base font-black text-white shadow-lg shadow-violet-400/30 transition hover:bg-violet-700";
 
-// ── Phone mock (pure CSS — mirrors the in-app CBT screen) ────────────────────
-function PhoneMock() {
-  const opts = ["Nitrogen", "Neon", "Chlorine", "Oxygen"];
+// ── Real app screenshots ──────────────────────────────────────────────────────
+const screens = [
+  { src: "/screenshots/learn.webp", alt: "Qubit Learn screen with Topics, Past questions, Study mode, Mock CBT and Syllabus revision", title: "Everything in one place", desc: "Topics, past questions, study mode, mock CBT, syllabus revision and JAMB set texts." },
+  { src: "/screenshots/mock-setup.webp", alt: "Qubit mock exam setup with English plus three subjects, 180 questions and 120 minutes", title: "A mock built to JAMB standard", desc: "English plus three subjects, 180 questions and 120 minutes — the real exam pace." },
+  { src: "/screenshots/english-passage.webp", alt: "Qubit English mock question with a comprehension passage", title: "Passages the way JAMB sets them", desc: "Read the comprehension passage, then answer the questions that follow." },
+];
+
+function Phone({ src, alt, className = "", priority = false }: { src: string; alt: string; className?: string; priority?: boolean }) {
   return (
-    <div className="relative mx-auto w-[272px]" aria-hidden>
-      <div className="absolute -left-10 top-16 z-10 hidden items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-800 shadow-xl ring-1 ring-slate-100 sm:flex">
-        <Flame className="h-4 w-4 text-amber-500" /> 7-day streak
-      </div>
-      <div className="absolute -right-8 bottom-24 z-10 hidden items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-800 shadow-xl ring-1 ring-slate-100 sm:flex">
-        <Trophy className="h-4 w-4 text-violet-600" /> Score 312/400
-      </div>
-      <div className="rounded-[40px] bg-slate-900 p-2.5 shadow-2xl shadow-violet-500/30">
-        <div className="overflow-hidden rounded-[32px] bg-white">
-          <div className="bg-gradient-to-br from-[#41348f] to-[#6557d9] px-4 pb-4 pt-5 text-white">
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-violet-200">
-              <span>Mock exam · Chemistry</span>
-              <span className="rounded-full bg-white/15 px-2 py-0.5 text-white">01:42:18</span>
-            </div>
-            <div className="mt-3 h-1.5 rounded-full bg-white/20"><div className="h-full w-[30%] rounded-full bg-amber-300" /></div>
-          </div>
-          <div className="space-y-2.5 p-4">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Question 12 of 40</p>
-            <p className="text-sm font-bold leading-5 text-slate-900">Which of the following is a noble gas?</p>
-            {opts.map((o, i) => (
-              <div key={o} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 text-xs font-semibold ${i === 1 ? "border-violet-500 bg-violet-50 text-violet-800" : "border-slate-200 text-slate-700"}`}>
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${i === 1 ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-500"}`}>{"ABCD"[i]}</span>
-                {o}
-              </div>
-            ))}
-            <div className="grid grid-cols-8 gap-1 pt-1">
-              {Array.from({ length: 16 }, (_, i) => (
-                <span key={i} className={`flex h-5 items-center justify-center rounded text-[8px] font-bold ${i < 11 ? "bg-violet-600 text-white" : i === 11 ? "ring-2 ring-violet-500 text-violet-700" : "bg-slate-100 text-slate-400"}`}>{i + 1}</span>
-              ))}
-            </div>
-            <div className="flex gap-2 pt-1">
-              <span className="flex-1 rounded-xl bg-slate-100 py-2 text-center text-xs font-black text-slate-500">Previous</span>
-              <span className="flex-1 rounded-xl bg-violet-600 py-2 text-center text-xs font-black text-white">Next</span>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div className={`rounded-[2.4rem] bg-[#0f0e1e] p-2 shadow-2xl shadow-violet-900/30 ring-1 ring-white/10 ${className}`}>
+      <Image src={src} alt={alt} width={600} height={1500} priority={priority} sizes="(min-width: 768px) 280px, 260px" className="h-auto w-full rounded-[1.9rem]" />
     </div>
   );
 }
@@ -206,7 +187,7 @@ export default function LandingPage() {
           <div className="relative mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-2">
             <div className="text-center lg:text-left">
               <span className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-4 py-1.5 text-xs font-bold text-violet-700">
-                🎓 Built for JAMB UTME candidates
+                <GraduationCap className="h-4 w-4" /> Built for JAMB UTME candidates
               </span>
               <h1 className="mt-2 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
                 The smarter way to
@@ -219,7 +200,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                 <Link href="/signup" className={btnPrimary}>Start free <ArrowRight className="h-4 w-4" /></Link>
-                <Link href="/" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:border-violet-300">Sign in</Link>
+                <a href="#screens" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:border-violet-300">See the app</a>
               </div>
               <ul className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-semibold text-slate-500 lg:justify-start">
                 {["No card required", "17 UTME subjects", "Real CBT feel"].map((t) => (
@@ -227,7 +208,10 @@ export default function LandingPage() {
                 ))}
               </ul>
             </div>
-            <PhoneMock />
+            <div className="relative mx-auto h-[640px] w-[260px] sm:w-[440px]">
+              <Phone src="/screenshots/mock-question.webp" alt="Qubit mock exam question showing a physics diagram with options A to D" priority className="absolute left-0 top-0 w-[250px] sm:-rotate-3" />
+              <Phone src="/screenshots/mock-setup.webp" alt="Qubit mock exam setup screen" className="absolute right-0 top-16 hidden w-[200px] rotate-6 sm:block" />
+            </div>
           </div>
         </section>
 
@@ -240,6 +224,25 @@ export default function LandingPage() {
                 <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* ── Screenshots ──────────────────────────────────────────────── */}
+        <section id="screens" className="scroll-mt-16 overflow-hidden bg-gradient-to-b from-[#f5f4ff] to-white px-4 py-16 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-5xl">
+            <h2 className="text-center text-3xl font-black text-slate-900">See {BRAND} in action</h2>
+            <p className="mx-auto mb-10 mt-3 max-w-xl text-center text-sm text-slate-500">A clean CBT experience that feels like the real exam — in light or dark mode.</p>
+            <div className="-mx-4 flex snap-x snap-mandatory gap-6 overflow-x-auto px-4 pb-4 md:mx-0 md:grid md:grid-cols-3 md:gap-8 md:overflow-visible md:px-0">
+              {screens.map((sc) => (
+                <figure key={sc.src} className="w-[240px] shrink-0 snap-center text-center md:w-auto">
+                  <Phone src={sc.src} alt={sc.alt} className="mx-auto md:max-w-[270px]" />
+                  <figcaption className="mt-5">
+                    <p className="text-base font-black text-slate-900">{sc.title}</p>
+                    <p className="mx-auto mt-1 max-w-[260px] text-sm leading-6 text-slate-500">{sc.desc}</p>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
           </div>
         </section>
 
@@ -314,7 +317,7 @@ export default function LandingPage() {
                 <a href="/signup" className="mt-4 flex h-10 items-center justify-center rounded-full bg-white text-sm font-black text-violet-700">Install now →</a>
               </div>
               <div className="rounded-[24px] bg-slate-100 p-6 ring-1 ring-slate-200">
-                <div className="mb-3 text-3xl">🍎</div>
+                <Smartphone className="mb-3 h-8 w-8 text-slate-500" />
                 <h3 className="text-lg font-black text-slate-800">iOS</h3>
                 <p className="mt-1 text-xs text-slate-500">Coming soon to the App Store. For now, open in Safari → Share → &quot;Add to Home Screen&quot;</p>
                 <span className="mt-4 flex h-10 items-center justify-center rounded-full bg-slate-200 text-sm font-black text-slate-500">Coming soon</span>
@@ -373,7 +376,7 @@ export default function LandingPage() {
         <section className="bg-gradient-to-br from-[#41348f] to-[#6557d9] px-4 py-16 text-center text-white sm:px-6 lg:px-8">
           <div className="mx-auto max-w-xl">
             <h2 className="text-3xl font-black">Ready to pass JAMB?</h2>
-            <p className="mt-3 text-sm text-violet-200">Join thousands of students already preparing smarter with {BRAND}.</p>
+            <p className="mt-3 text-sm text-violet-200">Start practising with real past questions today — free to begin.</p>
             <Link href="/signup" className="mt-6 inline-flex h-14 items-center rounded-2xl bg-white px-8 text-base font-black text-violet-700 shadow-lg hover:bg-violet-50">
               Start free — no card needed →
             </Link>
