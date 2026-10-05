@@ -1,4 +1,4 @@
-import { errorResponse, requireUser, getAdminClient, HttpError, notify, sendDuelDM, duelJoinUrl, updateMatch } from "@/lib/quiz-server";
+import { errorResponse, requireUser, getAdminClient, HttpError, notify, sendDuelDM, duelJoinUrl, updateMatch, activationUpdates } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -76,13 +76,7 @@ export async function POST(req: Request) {
       const accept = await updateMatch(
         supabase,
         inv.match_id,
-        {
-          guest_id: user.id,
-          status: "active",
-          current_turn: "host",
-          turn_ends_at: new Date(Date.now() + 45_000).toISOString(),
-          guest_seen_at: new Date().toISOString(),
-        },
+        activationUpdates(user.id),
         { status: "waiting" },
       );
       if (!accept.ok) throw new HttpError(400, accept.error ?? "Could not join the duel");

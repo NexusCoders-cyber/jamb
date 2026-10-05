@@ -12,6 +12,7 @@ import { getSupabaseAdminEnv, getAlocApiKey } from "@/lib/env";
 import { fetchAlocMany, ALOC_SUBJECTS } from "@/lib/aloc";
 import { LEKKI_QUESTIONS, sampleLekkiQuestions } from "@/lib/lekki-questions";
 import { evaluateAchievements } from "@/lib/achievements-server";
+import { armDeadline } from "@/lib/duel";
 
 export type QuizPlayer = "host" | "guest";
 
@@ -227,6 +228,14 @@ export async function finalizeDuel(
   const hostScore = match.host_score as number;
   const guestScore = match.guest_score as number;
   const subject = match.subject as string;
+  // Per-question picks (-1 = unanswered). Only present once duel_upgrades.sql
+  // has run; without them everyone is assumed to have played.
+  const hostPicks = Array.isArray(match.host_picks) ? (match.host_picks as number[]) : null;
+  const guestPicks = Array.isArray(match.guest_picks) ? (match.guest_picks as number[]) : null;
+  const playedAny = (pid: string) => {
+    const picks = pid === hostId ? hostPicks : guestPicks;
+    return picks ? picks.some((x) => x >= 0) : true;
+  };
 
   const winnerId =
     forcedWinner !== undefined
@@ -267,7 +276,9 @@ export async function finalizeDuel(
       awarded.push({ userId: pid, total: 0 });
       continue;
     }
-    let total = POINTS.participation;
+    // Showing up but never answering earns no participation points
+    // (stops two idle accounts farming QPoints).
+    let total = playedAny(pid) ? POINTS.participation : 0;
     if (isWinner) total += POINTS.winBonus;
     total += POINTS.correct * (pid === hostId ? hostScore : guestScore);
     const applied = await awardPoints(supabase, pid, total, isWinner ? "duel_win" : "duel_participation", id,
@@ -333,6 +344,104 @@ export async function updateMatch(
   delete fallback.guest_seen_at;
   const { data, error } = await build(fallback);
   return error ? { ok: false, error: error.message, updated: 0 } : { ok: true, error: null, updated: data?.length ?? 0 };
+}
+
+/**
+ * Compare-and-swap update for live matches. Applies `updates` only if the row
+ * is still in the state the caller read (status + both indexes — every game
+ * state change bumps an index, so this is a complete version key). Returns
+ * the new row, or null when someone else got there first (caller re-reads).
+ *
+ * Tolerates databases where supabase/duel_upgrades.sql hasn't added the
+ * host_picks / guest_picks columns yet: the picks are dropped and the duel
+ * carries on without the per-question review.
+ */
+let picksColumnsState: "unknown" | "yes" | "no" = "unknown";
+
+export async function casMatch(
+  supabase: SupabaseClient,
+  read: { id: string; status: string; host_index: number; guest_index: number },
+  updates: Record<string, unknown>,
+): Promise<Record<string, unknown> | null> {
+  const run = (u: Record<string, unknown>) =>
+    supabase
+      .from("quiz_matches")
+      .update(u)
+      .eq("id", read.id)
+      .eq("status", read.status)
+      .eq("host_index", read.host_index)
+      .eq("guest_index", read.guest_index)
+      .select()
+      .maybeSingle();
+
+  const withoutPicks = (u: Record<string, unknown>) => {
+    const c = { ...u };
+    delete c.host_picks;
+    delete c.guest_picks;
+    return c;
+  };
+
+  if (picksColumnsState !== "no") {
+    const { data, error } = await run(updates);
+    if (!error) {
+      picksColumnsState = "yes";
+      return (data as Record<string, unknown> | null) ?? null;
+    }
+    if (!/host_picks|guest_picks/i.test(error.message)) throw new Error(error.message);
+    picksColumnsState = "no";
+  }
+  const { data, error } = await run(withoutPicks(updates));
+  if (error) throw new Error(error.message);
+  return (data as Record<string, unknown> | null) ?? null;
+}
+
+/** Column updates that start a duel the moment the second player is in. */
+export function activationUpdates(guestId: string): Record<string, unknown> {
+  return {
+    guest_id: guestId,
+    status: "active",
+    current_turn: null,
+    // "Get ready" countdown, then the first 25s question
+    turn_ends_at: armDeadline(Date.now(), "first"),
+    guest_seen_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Settle a match whose every question has been resolved. Duels pay out via
+ * finalizeDuel; solo runs award per-correct points exactly once.
+ */
+export async function completeMatch(supabase: SupabaseClient, row: Record<string, unknown>): Promise<void> {
+  if (row.guest_id) {
+    await finalizeDuel(supabase, row);
+    return;
+  }
+  const { data: settled } = await supabase
+    .from("quiz_matches")
+    .update({ status: "completed", completed_at: new Date().toISOString(), points_awarded: true })
+    .eq("id", row.id as string)
+    .eq("points_awarded", false)
+    .select("id");
+  if (!settled || settled.length === 0) return;
+  const total = Array.isArray(row.questions) ? row.questions.length : 0;
+  await awardPoints(
+    supabase,
+    row.host_id as string,
+    POINTS.soloPerCorrect * (row.host_score as number),
+    "solo_game",
+    row.id as string,
+    `Solo ${row.subject}: ${row.host_score}/${total}`,
+  );
+}
+
+/** Retire an open duel nobody joined; pending invites die with it. */
+export async function expireWaitingMatch(supabase: SupabaseClient, matchId: string): Promise<void> {
+  await supabase
+    .from("quiz_matches")
+    .update({ status: "expired", completed_at: new Date().toISOString() })
+    .eq("id", matchId)
+    .eq("status", "waiting");
+  await supabase.from("quiz_invites").update({ status: "cancelled" }).eq("match_id", matchId).eq("status", "pending");
 }
 
 /** Current weekly period start from admin_settings (defaults to last Sunday UTC). */

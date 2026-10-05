@@ -9,40 +9,19 @@ import LeaderboardPreview from "@/components/LeaderboardPreview";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
 import OnlineDot, { useOnlineUsers } from "@/components/OnlineDot";
-import ExplanationView from "@/components/ExplanationView";
 import FriendButton from "@/components/FriendButton";
+import RoundPanel from "@/components/arena/RoundPanel";
+import ResultScreen from "@/components/arena/ResultScreen";
+import type { MatchState } from "@/components/arena/types";
+import { DUEL } from "@/lib/duel";
 import { getMyFriendships, getProfile, type Friendship } from "@/lib/queries";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import {
-  Award, Check, Copy, Crown, Link2, MessageCircle, Send, Swords, Timer, Trophy, Users, X, Zap,
+  Award, Check, Copy, Crown, Link2, MessageCircle, Send, Swords, Trophy, Users, X, Zap,
 } from "lucide-react";
 
-const TURN_SECONDS = 10;
-/** Must stay ≥ the server's CLAIM_GRACE_MS (25s) + a small clock-skew buffer. */
-const CLAIM_GRACE_SECONDS = 27;
-
-type MatchState = {
-  matchId: string;
-  subject: string;
-  status: "waiting" | "active" | "completed" | "declined" | "expired";
-  yourSide: "host" | "guest";
-  yourIndex: number;
-  yourScore: number;
-  yourFinished: boolean;
-  oppScore: number;
-  oppIndex: number;
-  oppFinished: boolean;
-  isDuel: boolean;
-  currentTurn: "host" | "guest" | null;
-  turnEndsAt: string | null;
-  winnerId: string | null;
-  oppId: string | null;
-  oppName: string | null;
-  oppSeenAt: string | null;
-  question: { id: string; prompt: string; options: string[]; subject?: string | null } | null;
-  total: number;
-  answerKey: Array<{ id: string; answer: number; explanation: string | null }> | null;
-};
+/** Server grace period + a small clock-skew buffer before the win is claimed. */
+const CLAIM_GRACE_SECONDS = DUEL.CLAIM_GRACE_SECONDS + 2;
 
 type ArenaSubject = { name: string };
 
@@ -79,8 +58,14 @@ export default function ArenaPage() {
   // Live match
   const [match, setMatch] = useState<MatchState | null>(null);
   const [busy, setBusy] = useState(false);
-  const [lastResult, setLastResult] = useState<"correct" | "wrong" | "timeout" | null>(null);
+  // The option tapped this round (shown instantly, before the server confirms)
+  const [localPick, setLocalPick] = useState<{ round: number; choice: number } | null>(null);
+  const [actionError, setActionError] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Phone clock minus server clock — keeps the 25s timer identical on both screens
+  const clockOffsetRef = useRef(0);
+  const refreshingRef = useRef(false);
+  const deadlineRefreshRef = useRef<string | null>(null);
 
   // Invites + online players
   const [invites, setInvites] = useState<InviteRow[]>([]);
@@ -92,7 +77,8 @@ export default function ArenaPage() {
   const onlineUsers = useOnlineUsers();
 
   // Duel presence + chat
-  const [oppOnline, setOppOnline] = useState<boolean | null>(null);
+  const [presentIds, setPresentIds] = useState<Set<string>>(new Set());
+  const [presenceReady, setPresenceReady] = useState(false);
   const [claimIn, setClaimIn] = useState<number | null>(null);
   const claimFiredRef = useRef(false);
   const claimCooldownUntilRef = useRef(0);
@@ -145,13 +131,16 @@ export default function ArenaPage() {
       const supabase = createSupabaseBrowserClient();
       const { data } = await supabase
         .from("quiz_matches")
-        .select("id")
+        .select("id, host_id, status")
         .or(`host_id.eq.${user.id},guest_id.eq.${user.id}`)
         .in("status", ["waiting", "active"])
         .gte("created_at", new Date(Date.now() - 2 * 3600 * 1000).toISOString())
         .order("created_at", { ascending: false })
-        .limit(1);
-      const id = (data?.[0] as { id: string } | undefined)?.id;
+        .limit(5);
+      // Resume a live game, or an open duel I'm hosting. A duel that's merely
+      // waiting for ME to accept belongs in the invites list, not on a board.
+      const rows = (data ?? []) as Array<{ id: string; host_id: string; status: string }>;
+      const id = rows.find((r) => r.status === "active" || r.host_id === user.id)?.id;
       if (!id || cancelled) return;
       const res = await fetch(`/api/quiz/match/${id}`, { headers: await authHeaders(), cache: "no-store" });
       if (!cancelled && res.ok) setMatch((await res.json()) as MatchState);
@@ -205,12 +194,14 @@ export default function ArenaPage() {
     setCanNativeShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
   }, []);
 
-  // Countdown ticker
+  // Countdown ticker — only while a game is on screen (250ms keeps the clock bar smooth)
   const [, setTick] = useState(0);
+  const inMatch = Boolean(match);
   useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 500);
+    if (!inMatch) return;
+    const t = setInterval(() => setTick((v) => v + 1), 250);
     return () => clearInterval(t);
-  }, []);
+  }, [inMatch]);
 
   const matchIdRef = useRef<string | null>(null);
   useEffect(() => { matchIdRef.current = match?.matchId ?? null; }, [match?.matchId]);
@@ -221,30 +212,56 @@ export default function ArenaPage() {
   const [connLost, setConnLost] = useState(false);
   const refresh = useCallback(async () => {
     const id = matchIdRef.current;
-    if (!id) return;
+    if (!id || refreshingRef.current) return;
+    refreshingRef.current = true;
     try {
       const res = await fetch(`/api/quiz/match/${id}`, { headers: await authHeaders(), cache: "no-store" });
       if (!res.ok) { setConnLost(true); return; }
       const next = (await res.json()) as MatchState;
+      // Ignore a reply that belongs to a game we've since left
+      if (matchIdRef.current !== id) return;
+      clockOffsetRef.current = Date.now() - next.serverNow;
       setConnLost(false);
       setMatch(next);
-      if (next.status === "completed") stopPolling();
+      if (next.status !== "waiting" && next.status !== "active") stopPolling();
     } catch {
       setConnLost(true);
+    } finally {
+      refreshingRef.current = false;
     }
   }, [authHeaders]);
+
+  /** "Now" on the server's clock. */
+  const serverNow = () => Date.now() - clockOffsetRef.current;
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }
 
-  // Poll the match while it's live
+  // Poll the match while it's live. The opponent's moves also arrive instantly
+  // over the realtime channel (see "sync" below); polling is the safety net
+  // and the clock keeper that skips a silent player when time runs out.
   useEffect(() => {
-    if (!match || match.status === "completed") return;
+    if (!match || (match.status !== "waiting" && match.status !== "active")) return;
     stopPolling();
-    pollRef.current = setInterval(refresh, 3000);
+    pollRef.current = setInterval(refresh, match.status === "active" ? 2000 : 3000);
     return stopPolling;
   }, [match?.matchId, match?.status, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the question clock hits zero, ask the server right away so the next
+  // question appears immediately instead of waiting for the next poll.
+  useEffect(() => {
+    if (!match || match.status !== "active" || !match.turnEndsAt) return;
+    const wait = Date.parse(match.turnEndsAt) - serverNow() + DUEL.ANSWER_GRACE_MS + 150;
+    if (wait > 60_000) return;
+    const t = setTimeout(() => {
+      if (deadlineRefreshRef.current === match.turnEndsAt) return;
+      deadlineRefreshRef.current = match.turnEndsAt;
+      void refresh();
+    }, Math.max(150, wait));
+    return () => clearTimeout(t);
+  }, [match?.matchId, match?.status, match?.turnEndsAt, refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // ── Join via share link (/arena?join=<matchId>) ──────────────────────────
   const joinHandledRef = useRef(false);
@@ -271,35 +288,50 @@ export default function ArenaPage() {
     })();
   }, [user, authHeaders]);
 
-  // ── Duel presence + chat channel (per match, while not completed) ────────
+  // ── Duel presence + chat + instant-sync channel (per match, while open) ───
+  const channelOn = Boolean(match && match.isDuel && (match.status === "waiting" || match.status === "active"));
   useEffect(() => {
-    if (!user || !match || !match.isDuel || match.status === "completed") return;
+    if (!user || !match || !channelOn) return;
     const supabase = createSupabaseBrowserClient();
     const channel = supabase.channel(`duel-${match.matchId}`, { config: { presence: { key: user.id } } });
     chatChannelRef.current = channel;
-    const oppId = match.oppId;
     channel
       .on("presence", { event: "sync" }, () => {
-        const ids = new Set(Object.keys(channel.presenceState()));
-        setOppOnline(oppId ? ids.has(oppId) : null);
+        setPresentIds(new Set(Object.keys(channel.presenceState())));
+        setPresenceReady(true);
       })
       .on("broadcast", { event: "chat" }, ({ payload }) => {
         const msg = payload as ChatMsg;
         setChatMsgs((prev) => [...prev.slice(-99), msg]);
         if (!chatOpenRef.current && msg.user_id !== user.id) setChatUnread((n) => n + 1);
       })
+      // Opponent answered / joined: pull the new state now instead of waiting for the next poll
+      .on("broadcast", { event: "sync" }, () => { void refresh(); })
       .subscribe((status) => {
-        if (status === "SUBSCRIBED") void channel.track({ user_id: user.id });
+        if (status === "SUBSCRIBED") {
+          void channel.track({ user_id: user.id });
+          // Tell the other side we're here — a joining guest wakes the host's waiting screen
+          void channel.send({ type: "broadcast", event: "sync", payload: {} });
+        }
       });
     return () => {
       chatChannelRef.current = null;
-      setOppOnline(null);
+      setPresentIds(new Set());
+      setPresenceReady(false);
       setClaimIn(null);
       claimFiredRef.current = false;
       void supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, match?.matchId, match?.isDuel, match?.status]);
+  }, [user?.id, match?.matchId, channelOn]);
+
+  // Opponent presence — unknown until the channel has reported once
+  const oppOnline: boolean | null = presenceReady && match?.oppId ? presentIds.has(match.oppId) : null;
+
+  /** Nudge the opponent's screen to refresh right now. */
+  const pingOpponent = useCallback(() => {
+    void chatChannelRef.current?.send({ type: "broadcast", event: "sync", payload: {} });
+  }, []);
 
   useEffect(() => { oppSeenRef.current = match?.oppSeenAt ?? null; }, [match?.oppSeenAt]);
   useEffect(() => {
@@ -375,13 +407,15 @@ export default function ArenaPage() {
     } catch { /* user dismissed */ }
   }
 
-  async function createMatch() {
-    if (!subject) { setError("Pick a subject first."); return; }
+  async function createMatch(subjectOverride?: string, guestOverride?: string | null) {
+    const chosenSubject = subjectOverride ?? subject;
+    const chosenGuest = guestOverride !== undefined ? guestOverride : guestId;
+    if (!chosenSubject) { setError("Pick a subject first."); return; }
     setCreating(true); setError("");
     const res = await fetch("/api/quiz/match", {
       method: "POST",
       headers: await authHeaders(),
-      body: JSON.stringify({ subject, mode: "duel", guestId }),
+      body: JSON.stringify({ subject: chosenSubject, mode: "duel", guestId: chosenGuest }),
     });
     const json = (await res.json()) as { matchId?: string; error?: string };
     setCreating(false);
@@ -393,30 +427,56 @@ export default function ArenaPage() {
   }
 
   async function answer(choice: number) {
-    if (!match || busy || match.currentTurn !== match.yourSide) return;
+    if (!match || busy || match.status !== "active" || match.answered || localPick?.round === match.round) return;
     setBusy(true);
-    const res = await fetch(`/api/quiz/match/${match.matchId}`, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({ choice }),
-    });
-    const json = (await res.json()) as { correct?: boolean; skipped?: boolean };
-    setLastResult(json.correct ? "correct" : "wrong");
-    setTimeout(() => setLastResult(null), 1200);
+    setActionError("");
+    setLocalPick({ round: match.round, choice }); // lock it in on screen immediately
+    try {
+      const res = await fetch(`/api/quiz/match/${match.matchId}`, {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ choice }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        // Rejected (time ran out, double tap…) — drop the optimistic pick and show why
+        setLocalPick(null);
+        setActionError(json.error ?? "Could not send your answer — tap it again.");
+      } else {
+        pingOpponent();
+      }
+    } catch {
+      setLocalPick(null);
+      setActionError("Connection problem — tap your answer again.");
+    }
     await refresh();
     setBusy(false);
   }
 
   async function skip() {
-    if (!match || busy) return;
+    if (!match || busy || match.status !== "active" || match.answered || localPick?.round === match.round) return;
     setBusy(true);
-    await fetch(`/api/quiz/match/${match.matchId}`, {
-      method: "POST",
-      headers: await authHeaders(),
-      body: JSON.stringify({ action: "skip" }),
-    });
+    setActionError("");
+    setLocalPick({ round: match.round, choice: -1 });
+    try {
+      const res = await fetch(`/api/quiz/match/${match.matchId}`, {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ action: "skip" }),
+      });
+      if (!res.ok) setLocalPick(null); else pingOpponent();
+    } catch {
+      setLocalPick(null);
+    }
     await refresh();
     setBusy(false);
+  }
+
+  async function rematch() {
+    if (!match?.oppId) return;
+    const { subject: subj, oppId } = match;
+    setMatch(null);
+    await createMatch(subj, oppId);
   }
 
   async function resign() {
@@ -434,6 +494,7 @@ export default function ArenaPage() {
       headers: await authHeaders(),
       body: JSON.stringify({ action: "resign" }),
     });
+    pingOpponent();
     setMatch(null);
   }
 
@@ -492,8 +553,11 @@ export default function ArenaPage() {
 
   // ── Live match screen (focus mode — no navigation, just the game) ────────
   if (match) {
-    const myTurn = match.currentTurn === match.yourSide && match.status === "active" && !match.yourFinished;
-    const secondsLeft = match.turnEndsAt ? Math.max(0, Math.ceil((new Date(match.turnEndsAt).getTime() - Date.now()) / 1000)) : null;
+    const live = match.status === "active";
+    const ended = match.status === "declined" || match.status === "expired";
+    const nowMs = serverNow();
+    const myPick = localPick && localPick.round === match.round ? localPick.choice : null;
+    const oppFirst = match.oppName ? match.oppName.split(" ")[0] : "Opponent";
     const invitable = people.filter((p) => !sentInvites.has(p.id)).slice(0, 8);
 
     return (
@@ -503,16 +567,9 @@ export default function ArenaPage() {
           <div className="mb-3 flex items-center justify-between gap-2">
             <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700">{match.subject}</span>
             <div className="flex items-center gap-2">
-              {secondsLeft !== null && match.status === "active" && (
-                <span className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-black tabular-nums ${
-                  secondsLeft <= 10 ? "bg-rose-100 text-rose-700" : "bg-emerald-50 text-emerald-700"
-                }`}>
-                  <Timer className="h-4 w-4" aria-hidden /> {secondsLeft}s
-                </span>
-              )}
               <button type="button" onClick={resign}
                 className="rounded-full bg-rose-50 px-3.5 py-1.5 text-xs font-black text-rose-600 ring-1 ring-rose-200 hover:bg-rose-100">
-                {match.isDuel && match.status === "active" ? "Leave" : match.isDuel ? "Cancel" : "End"}
+                {ended ? "Close" : match.isDuel && live ? "Leave" : match.isDuel && match.status === "waiting" ? "Cancel" : "End"}
               </button>
             </div>
           </div>
@@ -524,16 +581,19 @@ export default function ArenaPage() {
             </div>
           )}
 
-          {/* Scoreboard */}
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <ScoreCard label="You" score={match.yourScore} progress={`${match.yourIndex}/${match.total}`} highlight={myTurn} />
-            <ScoreCard
-              label={match.isDuel ? (match.oppName ? match.oppName.split(" ")[0] : "Opponent") : "Target"}
-              score={match.oppScore}
-              progress={match.isDuel ? `${match.oppIndex}/${match.total}` : `${match.total} questions`}
-              highlight={!myTurn && match.status === "active"}
-            />
-          </div>
+          {/* Scoreboard — live status shows who has locked in this question */}
+          {!ended && (
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <ScoreCard label="You" score={match.yourScore} progress={`${Math.min(match.yourIndex, match.total)}/${match.total} answered`}
+                status={live ? (match.answered || myPick !== null ? "Locked in ✓" : "Thinking…") : null} highlight={live && (match.answered || myPick !== null)} />
+              <ScoreCard
+                label={match.isDuel ? oppFirst : "Target"}
+                score={match.oppScore}
+                progress={match.isDuel ? `${Math.min(match.oppIndex, match.total)}/${match.total} answered` : `${match.total} questions`}
+                status={live && match.isDuel ? (match.oppAnswered ? "Locked in ✓" : oppOnline === false ? "Away…" : "Thinking…") : null}
+                highlight={live && match.isDuel && match.oppAnswered} />
+            </div>
+          )}
 
           {/* Opponent left — countdown to the win */}
           {claimIn !== null && match.status === "active" && (
@@ -595,72 +655,40 @@ export default function ArenaPage() {
             </div>
           )}
 
-          {match.status === "completed" ? (
-            <ResultScreen match={match} myId={user?.id ?? ""} onExit={() => setMatch(null)} />
-          ) : (
+          {/* Declined / expired duels get a clear end state, not a dead board */}
+          {ended && (
+            <div className="rounded-[28px] bg-white p-6 text-center ring-1 ring-slate-200">
+              <p className="text-lg font-black text-slate-900">
+                {match.status === "declined" ? `${oppFirst} declined this duel` : "This duel expired"}
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                {match.status === "declined" ? "No points were played for. Challenge someone else?" : "Nobody joined in time. Start a fresh duel any time."}
+              </p>
+              <button type="button" onClick={() => setMatch(null)}
+                className="mt-4 inline-flex h-11 items-center rounded-full bg-violet-600 px-6 text-sm font-black text-white hover:bg-violet-700">
+                Back to Arena
+              </button>
+            </div>
+          )}
+
+          {match.status === "completed" && (
+            <ResultScreen match={match} myId={user?.id ?? ""} onExit={() => setMatch(null)}
+              onRematch={match.isDuel && match.oppId ? () => void rematch() : undefined} />
+          )}
+
+          {live && (
             <>
-              {/* Question */}
-              {match.question && (
-                <div className="rounded-[28px] bg-white p-5 ring-1 ring-slate-200 sm:p-6">
-                  <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                    Question {match.yourIndex + 1} of {match.total}
-                  </p>
-                  <p className="text-lg font-semibold leading-7 text-slate-800">{match.question.prompt}</p>
-
-                  <div className="mt-4 grid gap-2.5">
-                    {match.question.options.map((opt, idx) => {
-                      const reveal = match.answerKey?.find((a) => a.id === match.question!.id);
-                      const isCorrect = reveal && reveal.answer === idx;
-                      return (
-                        <button key={idx} type="button"
-                          onClick={() => answer(idx)}
-                          disabled={!myTurn || busy}
-                          className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left text-sm font-semibold transition
-                            ${isCorrect && match.status === "completed"
-                              ? "border-emerald-400 bg-emerald-50 text-emerald-900"
-                              : !myTurn || busy
-                                ? "border-slate-200 bg-white text-slate-400"
-                                : "border-slate-200 bg-white text-slate-700 hover:border-violet-300 hover:bg-violet-50"}`}>
-                          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black
-                            ${isCorrect && match.status === "completed" ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-600"}`}>
-                            {String.fromCharCode(65 + idx)}
-                          </span>
-                          <span className="min-w-0 flex-1 break-words">{opt}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Explanation after completion */}
-                  {match.answerKey && match.answerKey.find((a) => a.id === match.question?.id)?.explanation && (
-                    <div className="mt-4 rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-200">
-                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Explanation</p>
-                      <ExplanationView text={match.answerKey.find((a) => a.id === match.question?.id)?.explanation ?? ""} subject={match.subject} className="mt-2" />
-                    </div>
-                  )}
-
-                  {myTurn && (
-                    <button type="button" onClick={skip} disabled={busy}
-                      className="mt-4 text-xs font-bold text-slate-400 hover:text-slate-600">
-                      Skip this question →
-                    </button>
-                  )}
-                  {!myTurn && match.status === "active" && !match.yourFinished && (
-                    <p className="mt-4 text-sm font-semibold text-slate-400">Opponent&apos;s turn — the board updates live.</p>
-                  )}
-                </div>
-              )}
-
-              {lastResult && (
-                <div className={`mt-3 rounded-2xl p-3 text-center text-sm font-black ${lastResult === "correct" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
-                  {lastResult === "correct" ? "✓ Correct! +points coming at the end" : "✗ Wrong"}
+              <RoundPanel match={match} nowMs={nowMs} localPick={myPick} busy={busy} onAnswer={(c) => void answer(c)} onSkip={() => void skip()} />
+              {actionError && (
+                <div className="mt-3 rounded-2xl bg-rose-50 p-3 text-center text-sm font-bold text-rose-700 ring-1 ring-rose-200">
+                  {actionError}
                 </div>
               )}
             </>
           )}
 
           {/* Chat — floating button + panel (duels only) */}
-          {match.isDuel && match.status !== "completed" && (
+          {match.isDuel && (match.status === "waiting" || match.status === "active") && (
             <>
               {!chatOpen && (
                 <button type="button" onClick={() => setChatOpen(true)}
@@ -794,10 +822,10 @@ export default function ArenaPage() {
           {/* Mode switch — DUEL only, solo removed */}
           <div className="mb-5 rounded-[24px] bg-gradient-to-r from-violet-600 to-violet-500 p-5 text-white">
             <p className="flex items-center gap-2 text-sm font-black">
-              <Users className="h-5 w-5" aria-hidden /> Duel mode — 10 questions, 10s per turn
+              <Users className="h-5 w-5" aria-hidden /> Duel mode — 10 questions, {DUEL.ROUND_SECONDS}s each
             </p>
             <p className="mt-1 text-xs text-violet-200">
-              Challenge a friend or share an open link. First to finish with the most correct answers wins.
+              Challenge a friend or share an open link. You both get the same question at the same time — {DUEL.ROUND_SECONDS} seconds to answer. Most correct answers wins.
             </p>
             <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-violet-100">
               <span className="rounded-full bg-white/15 px-2.5 py-1">Win bonus: +25 QPoints</span>
@@ -902,6 +930,7 @@ export default function ArenaPage() {
           <div className="mt-6 rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
             <p className="text-sm font-black text-slate-900">How QPoints work</p>
             <ul className="mt-2 space-y-1 text-xs text-slate-600">
+              <li>• Both players see each question together and have {DUEL.ROUND_SECONDS} seconds — unanswered questions score 0</li>
               <li>• Duel win: 25 bonus + 5 participation + 10 per correct answer</li>
               <li>• Both players keep 5 + 10 per correct answer even when you lose</li>
               <li>• Leave or forfeit a live duel: you earn 0 — your opponent takes the win</li>
@@ -915,64 +944,15 @@ export default function ArenaPage() {
   );
 }
 
-function ScoreCard({ label, score, progress, highlight }: { label: string; score: number; progress: string; highlight: boolean }) {
+function ScoreCard({ label, score, progress, highlight, status }: { label: string; score: number; progress: string; highlight: boolean; status: string | null }) {
   return (
     <div className={`rounded-[24px] p-4 ring-1 transition ${highlight ? "bg-violet-600 text-white ring-violet-600 shadow-lg shadow-violet-200" : "bg-white ring-slate-200"}`}>
-      <p className={`text-[10px] font-black uppercase tracking-[0.18em] ${highlight ? "text-violet-200" : "text-slate-400"}`}>{label}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className={`truncate text-[10px] font-black uppercase tracking-[0.18em] ${highlight ? "text-violet-200" : "text-slate-400"}`}>{label}</p>
+        {status && <p className={`shrink-0 text-[10px] font-black ${highlight ? "text-violet-100" : "text-slate-400"}`}>{status}</p>}
+      </div>
       <p className="mt-1 text-3xl font-black tabular-nums">{score}</p>
       <p className={`text-xs font-semibold ${highlight ? "text-violet-200" : "text-slate-400"}`}>{progress}</p>
-    </div>
-  );
-}
-
-function ResultScreen({ match, myId, onExit }: { match: MatchState; myId: string; onExit: () => void }) {
-  const won = match.winnerId === myId;
-  const tie = match.winnerId === null;
-  const oppLabel = (match.oppName ?? "Opponent").split(" ")[0];
-  return (
-    <div className={`rounded-[28px] p-6 text-center text-white ${won ? "bg-gradient-to-br from-emerald-700 to-emerald-500" : tie ? "bg-gradient-to-br from-slate-700 to-slate-500" : "bg-gradient-to-br from-rose-700 to-rose-500"}`}>
-      <Trophy className="mx-auto h-10 w-10" aria-hidden />
-      <h2 className="mt-3 text-3xl font-black">
-        {match.isDuel ? (won ? "You win! 🏆" : tie ? "It's a draw" : "So close!") : "Drill complete!"}
-      </h2>
-
-      {/* Scoreboard */}
-      <div className="mx-auto mt-4 grid max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2" aria-label={`Final score ${match.yourScore} to ${match.oppScore}`}>
-        <div className={`rounded-2xl px-2 py-3 ring-1 ${won ? "bg-white/25 ring-white/50" : "bg-black/15 ring-white/15"}`}>
-          <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-white/80">You</p>
-          <p className="text-4xl font-black tabular-nums leading-none">{match.yourScore}</p>
-          {match.total > 0 && <p className="mt-1 text-[11px] font-semibold text-white/75">of {match.total}</p>}
-        </div>
-        <span className="text-sm font-black text-white/70">{match.isDuel ? "vs" : ""}</span>
-        {match.isDuel ? (
-          <div className={`rounded-2xl px-2 py-3 ring-1 ${!won && !tie ? "bg-white/25 ring-white/50" : "bg-black/15 ring-white/15"}`}>
-            <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-white/80">{oppLabel}</p>
-            <p className="text-4xl font-black tabular-nums leading-none">{match.oppScore}</p>
-            {match.total > 0 && <p className="mt-1 text-[11px] font-semibold text-white/75">of {match.total}</p>}
-          </div>
-        ) : <span />}
-      </div>
-
-      <p className="mt-3 text-sm opacity-90">
-        Final score {match.yourScore} – {match.oppScore} · {match.subject}
-      </p>
-      <p className="mt-3 text-xs opacity-80">
-        {match.isDuel && !tie
-          ? won
-            ? "Win bonus + points added — check the leaderboard."
-            : "QPoints settled by the result — win next time for the 25-point bonus."
-          : "QPoints have been added to your ledger — check the leaderboard."}
-      </p>
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <button type="button" onClick={onExit}
-          style={{ backgroundColor: "#ffffff", color: "#1e293b" }}
-          className="flex min-h-12 touch-manipulation items-center justify-center rounded-full px-5 text-sm font-bold active:scale-[0.98]">
-          Play again
-        </button>
-        <Link href="/leaderboard" className="flex min-h-12 touch-manipulation items-center justify-center rounded-full border border-white/30 px-5 text-sm font-bold text-white hover:bg-white/10 active:bg-white/10">
-          Leaderboard
-        </Link>
-      </div>
     </div>
   );
 }

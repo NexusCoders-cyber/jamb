@@ -1,8 +1,9 @@
 import {
-  errorResponse, requireUser, getAdminClient, redactQuestion,
-  finalizeDuel, awardPoints, POINTS, HttpError,
+  errorResponse, requireUser, getAdminClient, redactQuestion, finalizeDuel, awardPoints,
+  casMatch, completeMatch, expireWaitingMatch, POINTS, HttpError,
 } from "@/lib/quiz-server";
 import type { StoredQuestion } from "@/lib/quiz-server";
+import { DUEL, currentRound, planAnswer, planTimeout, roundStartMs, type Side } from "@/lib/duel";
 
 export const dynamic = "force-dynamic";
 
@@ -26,125 +27,80 @@ type MatchRow = {
   turn_ends_at: string | null;
   winner_id: string | null;
   points_awarded: boolean;
+  created_at: string;
   host_seen_at: string | null;
   guest_seen_at: string | null;
+  host_picks?: number[] | null;
+  guest_picks?: number[] | null;
 };
 
-/** Grace period before an absent opponent forfeits the duel. */
-const CLAIM_GRACE_MS = 25_000;
+/** How often a player's presence heartbeat is written (GET polls are more frequent). */
+const HEARTBEAT_MS = 5_000;
 
-const TURN_SECONDS = 10;
-
-function sideOf(match: MatchRow, userId: string): "host" | "guest" {
+function sideOf(match: MatchRow, userId: string): Side {
   if (match.host_id === userId) return "host";
   if (match.guest_id === userId) return "guest";
   throw new HttpError(403, "You are not a participant in this match");
 }
 
-/** Persist pointer/turn updates, then finalize when everyone is out of questions. */
-async function advance(
-  supabase: ReturnType<typeof getAdminClient>,
-  m: MatchRow,
-  side: "host" | "guest",
-  correct: boolean,
-): Promise<Response> {
-  const questions = (m.questions ?? []) as StoredQuestion[];
-  const idx = side === "host" ? m.host_index : m.guest_index;
-  const nextIdx = idx + 1;
-  const done = nextIdx >= questions.length;
-
-  const updates: Record<string, unknown> = {};
-  if (side === "host") {
-    updates.host_index = nextIdx;
-    if (correct) updates.host_score = m.host_score + 1;
-    updates.host_finished = done;
-  } else {
-    updates.guest_index = nextIdx;
-    if (correct) updates.guest_score = m.guest_score + 1;
-    updates.guest_finished = done;
-  }
-
-  // Turn passes to the opponent unless they're finished — then it stays here
-  const oppSide = side === "host" ? "guest" : "host";
-  const oppDone = oppSide === "host" ? m.host_finished : m.guest_finished;
-  updates.current_turn = oppDone ? side : oppSide;
-  updates.turn_ends_at = new Date(Date.now() + TURN_SECONDS * 1000).toISOString();
-
-  const { data: updated } = await supabase
-    .from("quiz_matches")
-    .update(updates)
-    .eq("id", m.id)
-    .select()
-    .single();
-  const nm = (updated ?? m) as unknown as MatchRow;
-
-  // Everyone out of questions → settle the match
-  const hostDone = nm.host_index >= questions.length || nm.host_finished;
-  const guestDone = !nm.guest_id || nm.guest_index >= questions.length || nm.guest_finished;
-
-  if (nm.guest_id && hostDone && guestDone) {
-    await finalizeDuel(supabase, nm as unknown as Record<string, unknown>);
-  } else if (!nm.guest_id && hostDone) {
-    // Solo: score is QPoints at soloPerCorrect per correct answer
-    await supabase.from("quiz_matches")
-      .update({ status: "completed", completed_at: new Date().toISOString(), points_awarded: true })
-      .eq("id", nm.id);
-    await awardPoints(supabase, nm.host_id, POINTS.soloPerCorrect * nm.host_score, "solo_game", nm.id,
-      `Solo ${nm.subject}: ${nm.host_score}/${questions.length}`);
-  }
-
-  return Response.json({ ok: true, correct });
+async function loadMatch(supabase: ReturnType<typeof getAdminClient>, matchId: string): Promise<MatchRow> {
+  const { data } = await supabase.from("quiz_matches").select("*").eq("id", matchId).maybeSingle();
+  if (!data) throw new HttpError(404, "Match not found");
+  return data as unknown as MatchRow;
 }
 
-/** GET /api/quiz/match/[matchId] — live match state (redacted questions). */
+/**
+ * GET /api/quiz/match/[matchId] — live match state.
+ *
+ * Doubles as the presence heartbeat and as the "clock keeper": whoever polls
+ * first after a round's deadline skips the players who didn't answer, so a
+ * silent or disconnected player can never freeze the duel.
+ */
 export async function GET(req: Request, ctx: Ctx) {
   try {
     const user = await requireUser(req);
     const { matchId } = await ctx.params;
     const supabase = getAdminClient();
 
-    const { data: match } = await supabase
-      .from("quiz_matches")
-      .select("*")
-      .eq("id", matchId)
-      .maybeSingle();
-    if (!match) throw new HttpError(404, "Match not found");
-    let m = match as unknown as MatchRow;
+    let m = await loadMatch(supabase, matchId);
     const side = sideOf(m, user.id);
 
-    // Match-screen heartbeat: the client polls this endpoint every ~3s while
-    // the game is on screen. A stale timestamp = the player left the game.
-    await supabase
-      .from("quiz_matches")
-      .update(side === "host"
-        ? { host_seen_at: new Date().toISOString() }
-        : { guest_seen_at: new Date().toISOString() })
-      .eq("id", m.id);
+    // An open duel nobody joined doesn't wait forever.
+    if (m.status === "waiting" && Date.now() - Date.parse(m.created_at) > DUEL.WAITING_EXPIRY_MS) {
+      await expireWaitingMatch(supabase, m.id);
+      m = await loadMatch(supabase, matchId);
+    }
 
-    // A stalled turn must never freeze the duel. If the turn clock ran out
-    // (with a small skew buffer) while the clock-owner went quiet, the server
-    // passes the turn on for them — both boards keep moving and stay in sync.
-    // The guarded update makes exactly one poller win the race when both
-    // clients poll at the same instant.
-    if (m.status === "active" && m.guest_id && m.current_turn && m.turn_ends_at
-        && Date.now() - new Date(m.turn_ends_at).getTime() > 1000) {
-      const flip = await supabase
-        .from("quiz_matches")
-        .update({ turn_ends_at: new Date().toISOString() })
-        .eq("id", m.id)
-        .eq("current_turn", m.current_turn)
-        .eq("turn_ends_at", m.turn_ends_at)
-        .select("id");
-      if (flip.data && flip.data.length > 0) {
-        await advance(supabase, m, m.current_turn, false);
+    // Presence heartbeat (throttled — the board polls every ~2s).
+    if (m.status === "waiting" || m.status === "active") {
+      const seenKey = side === "host" ? "host_seen_at" : "guest_seen_at";
+      const last = m[seenKey];
+      if (!last || Date.now() - Date.parse(last) > HEARTBEAT_MS) {
+        const stamp = new Date().toISOString();
+        await supabase.from("quiz_matches").update({ [seenKey]: stamp }).eq("id", m.id);
+        m = { ...m, [seenKey]: stamp };
       }
-      // Re-read the row so the response reflects the skipped turn either way.
-      const { data: fresh } = await supabase
-        .from("quiz_matches")
-        .select("*")
-        .eq("id", matchId)
-        .maybeSingle();
-      if (fresh) m = fresh as unknown as MatchRow;
+    }
+
+    // Clock keeper: skip whoever ran out of time. A compare-and-swap makes
+    // exactly one poller win when both clients ask in the same instant.
+    for (let i = 0; i < 3 && m.status === "active"; i++) {
+      const plan = planTimeout(m, Date.now());
+      if (!plan) break;
+      if (Object.keys(plan.updates).length === 0) {
+        // Every question is resolved but the match was never settled — finish it.
+        await completeMatch(supabase, m as unknown as Record<string, unknown>);
+        m = await loadMatch(supabase, matchId);
+        break;
+      }
+      const next = await casMatch(supabase, m, plan.updates);
+      if (!next) { m = await loadMatch(supabase, matchId); continue; }
+      m = next as unknown as MatchRow;
+      if (plan.done) {
+        await completeMatch(supabase, next);
+        m = await loadMatch(supabase, matchId);
+      }
+      break;
     }
 
     const oppId = side === "host" ? m.guest_id : m.host_id;
@@ -155,41 +111,88 @@ export async function GET(req: Request, ctx: Ctx) {
       oppName = (opp?.full_name as string | undefined) ?? null;
     }
 
-    const idx = side === "host" ? m.host_index : m.guest_index;
-    const finished = side === "host" ? m.host_finished : m.guest_finished;
-    const revealed = m.status === "completed";
     const questions = (m.questions ?? []) as StoredQuestion[];
+    const total = questions.length;
+    const yourIndex = side === "host" ? m.host_index : m.guest_index;
+    const oppIndex = side === "host" ? m.guest_index : m.host_index;
+    const yourPicks = (side === "host" ? m.host_picks : m.guest_picks) ?? null;
+    const oppPicks = (side === "host" ? m.guest_picks : m.host_picks) ?? null;
+    const isDuel = Boolean(m.guest_id) || m.status === "waiting";
+    const live = m.status === "active";
+    const completed = m.status === "completed";
+
+    const round = live ? Math.min(currentRound(m), total - 1) : total;
+    const answered = live && yourIndex > round;
+    const oppAnswered = live && Boolean(m.guest_id) && oppIndex > round;
+    const startMs = roundStartMs(m);
+    const nowMs = Date.now();
+    const canAnswerNow = live && !answered && !(yourIndex >= total) && (Number.isNaN(startMs) || nowMs >= startMs);
+
+    // The question that just finished — safe to reveal, both players have been through it.
+    const prev = live && round > 0 ? questions[round - 1] : null;
+    const lastRound = prev
+      ? {
+          index: round - 1,
+          prompt: prev.prompt,
+          options: prev.options,
+          answer: prev.answer,
+          you: yourPicks ? (yourPicks[round - 1] ?? null) : null,
+          opp: oppPicks ? (oppPicks[round - 1] ?? null) : null,
+        }
+      : null;
 
     return Response.json({
       matchId: m.id,
       subject: m.subject,
       status: m.status,
       yourSide: side,
-      yourIndex: idx,
+      yourIndex,
       yourScore: side === "host" ? m.host_score : m.guest_score,
-      yourFinished: finished,
+      yourFinished: side === "host" ? m.host_finished : m.guest_finished,
       oppScore: side === "host" ? m.guest_score : m.host_score,
-      oppIndex: side === "host" ? m.guest_index : m.host_index,
+      oppIndex,
       oppFinished: side === "host" ? m.guest_finished : m.host_finished,
       // A waiting open duel (guest_id null) is still a duel — not a solo run.
-      isDuel: Boolean(m.guest_id) || m.status === "waiting",
-      currentTurn: m.current_turn,
+      isDuel,
+      // Kept for older cached clients: "your turn" == "you can answer right now".
+      currentTurn: live ? (canAnswerNow ? side : side === "host" ? "guest" : "host") : null,
+      // ── Simultaneous-round clock ───────────────────────────────────────
+      serverNow: nowMs, // clients correct for their own clock with this
       turnEndsAt: m.turn_ends_at,
+      roundStartsAt: Number.isNaN(startMs) ? null : new Date(startMs).toISOString(),
+      roundSeconds: DUEL.ROUND_SECONDS,
+      round,
+      answered,
+      oppAnswered,
+      yourPick: live && answered && yourPicks ? (yourPicks[round] ?? null) : null,
+      lastRound,
       winnerId: m.winner_id,
       oppId,
       oppName,
       oppSeenAt,
-      question: idx < questions.length ? redactQuestion(questions[idx]) : null,
-      total: questions.length,
-      // Correct answers + explanations are only revealed once the duel ends
-      answerKey: revealed ? questions.map((q) => ({ id: q.id, answer: q.answer, explanation: q.explanation })) : null,
+      // Only the question in play — never before the duel is live.
+      question: live && round < total ? redactQuestion(questions[round]) : null,
+      total,
+      // Full review (answers, explanations, both players' picks) once it's over.
+      answerKey: completed ? questions.map((q) => ({ id: q.id, answer: q.answer, explanation: q.explanation })) : null,
+      review: completed
+        ? questions.map((q, i) => ({
+            id: q.id,
+            prompt: q.prompt,
+            options: q.options,
+            answer: q.answer,
+            explanation: q.explanation,
+            you: yourPicks ? (yourPicks[i] ?? null) : null,
+            opp: oppPicks ? (oppPicks[i] ?? null) : null,
+          }))
+        : null,
     });
   } catch (e) {
     return errorResponse(e);
   }
 }
 
-/** POST /api/quiz/match/[matchId] — answer the current question, or skip/resign. */
+/** POST /api/quiz/match/[matchId] — answer the live question, or skip / resign / claim-win. */
 export async function POST(req: Request, ctx: Ctx) {
   try {
     const user = await requireUser(req);
@@ -200,36 +203,31 @@ export async function POST(req: Request, ctx: Ctx) {
     };
     const supabase = getAdminClient();
 
-    const { data: match } = await supabase
-      .from("quiz_matches")
-      .select("*")
-      .eq("id", matchId)
-      .maybeSingle();
-    if (!match) throw new HttpError(404, "Match not found");
-    const m = match as unknown as MatchRow;
+    let m = await loadMatch(supabase, matchId);
     const side = sideOf(m, user.id);
 
     if (body.action === "resign") {
       const oppId = side === "host" ? m.guest_id : m.host_id;
       if (!m.guest_id) {
         if (m.status === "waiting") {
-          // Host cancelled an open duel before anyone joined — just retire it
-          // and cancel any pending invites so nobody walks into a dead link.
-          await supabase.from("quiz_matches")
-            .update({ status: "expired", completed_at: new Date().toISOString() })
-            .eq("id", m.id);
-          await supabase.from("quiz_invites")
-            .update({ status: "cancelled" })
-            .eq("match_id", m.id)
-            .eq("status", "pending");
+          // Host cancelled an open duel before anyone joined — retire it and
+          // cancel pending invites so nobody walks into a dead link.
+          await expireWaitingMatch(supabase, m.id);
           return Response.json({ ok: true, resigned: true });
         }
         // Leaving a solo game just completes it (points for what you earned)
         await supabase.from("quiz_matches")
           .update({ status: "completed", completed_at: new Date().toISOString(), points_awarded: true })
-          .eq("id", m.id);
+          .eq("id", m.id)
+          .eq("points_awarded", false);
         await awardPoints(supabase, m.host_id, POINTS.soloPerCorrect * m.host_score, "solo_game", m.id,
           `Solo ${m.subject}: ${m.host_score}/${((m.questions ?? []) as StoredQuestion[]).length}`);
+        return Response.json({ ok: true, resigned: true });
+      }
+      if (m.status === "completed") return Response.json({ ok: true, already: true });
+      if (m.status === "waiting") {
+        // Leaving before the duel started — nothing was played, nothing pays.
+        await expireWaitingMatch(supabase, m.id);
         return Response.json({ ok: true, resigned: true });
       }
       await finalizeDuel(supabase, { ...m, status: "completed" } as unknown as Record<string, unknown>, oppId);
@@ -249,27 +247,30 @@ export async function POST(req: Request, ctx: Ctx) {
       }
       const oppSeen = side === "host" ? m.guest_seen_at : m.host_seen_at;
       const ageMs = oppSeen ? Date.now() - new Date(oppSeen).getTime() : Number.POSITIVE_INFINITY;
-      if (ageMs < CLAIM_GRACE_MS) throw new HttpError(409, "Opponent is still connected");
+      if (ageMs < DUEL.CLAIM_GRACE_SECONDS * 1000) throw new HttpError(409, "Opponent is still connected");
       await finalizeDuel(supabase, { ...m, status: "completed" } as unknown as Record<string, unknown>, user.id);
       return Response.json({ ok: true, claimed: true });
     }
 
-    if (m.status !== "active") throw new HttpError(400, "Match is not active");
-    if (m.current_turn !== side) throw new HttpError(400, "Not your turn");
+    // ── Answer / skip ──────────────────────────────────────────────────────
+    const isSkip = body.action === "skip";
+    const pick = isSkip ? -1 : typeof body.choice === "number" ? body.choice : Number.NaN;
+    if (!isSkip && !Number.isInteger(pick)) throw new HttpError(400, "choice is required");
 
-    const questions = (m.questions ?? []) as StoredQuestion[];
-    const idx = side === "host" ? m.host_index : m.guest_index;
-    if (idx >= questions.length) throw new HttpError(400, "No question left to answer");
-
-    // Expired turn or explicit skip → advance without scoring
-    const expired = m.turn_ends_at && new Date(m.turn_ends_at).getTime() < Date.now();
-    if (expired || body.action === "skip") {
-      return await advance(supabase, m, side, false);
+    // Compare-and-swap with retry: if both players answer in the same instant
+    // one write loses, re-reads the fresh row and re-plans — nothing is lost
+    // and the player who completes the round is the one who re-arms the clock.
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const plan = planAnswer(m, side, pick, Date.now());
+      if (!plan.ok) throw new HttpError(plan.status, plan.error);
+      const next = await casMatch(supabase, m, plan.updates);
+      if (next) {
+        if (plan.done) await completeMatch(supabase, next);
+        return Response.json({ ok: true, done: plan.done });
+      }
+      m = await loadMatch(supabase, matchId);
     }
-
-    const q = questions[idx];
-    const correct = body.choice === q.answer;
-    return await advance(supabase, m, side, correct);
+    throw new HttpError(409, "The duel was busy — tap your answer again");
   } catch (e) {
     return errorResponse(e);
   }

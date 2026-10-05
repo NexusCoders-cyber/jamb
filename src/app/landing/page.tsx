@@ -78,7 +78,7 @@ const features = [
   { icon: Target, title: "Past Questions", desc: "10,000+ real UTME questions sorted by subject and year — from 1985 to 2024." },
   { icon: ClipboardCheck, title: "Mock CBT Exams", desc: "Full 180-question timed simulations that mirror the real JAMB CBT experience." },
   { icon: BookOpen, title: "Study Mode", desc: "See the correct answer and a detailed explanation immediately after each question." },
-  { icon: Swords, title: "Arena Duels", desc: "Challenge friends or anyone online to a 10-question quiz battle. 10s per turn." },
+  { icon: Swords, title: "Arena Duels", desc: "Challenge friends or anyone online to a head-to-head 10-question battle — same questions, 25 seconds each." },
   { icon: BarChart3, title: "Analytics", desc: "Track accuracy per subject, score history and weak areas — know exactly where to focus." },
   { icon: Library, title: "Novel Questions", desc: "The Lekki Headmaster and other JAMB set texts — 120+ novel-specific past questions." },
 ];

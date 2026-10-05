@@ -9,10 +9,11 @@
  *     → prints the ghost's view of the match (one poll).
  *
  *   MODE=answer MATCH_ID=<uuid> [CHOICE=0]
- *     → answers the current question if it's the ghost's turn.
+ *     → answers the live question (duels are head-to-head: both players answer
+ *       the same question at the same time, 25s per question).
  *
  *   MODE=answer-loop MATCH_ID=<uuid> [ROUNDS=2]
- *     → polls until it's the ghost's turn, answers, repeats ROUNDS times.
+ *     → polls until the next question opens, answers it, repeats ROUNDS times.
  */
 import { createClient } from "@supabase/supabase-js";
 
@@ -67,7 +68,7 @@ if (mode === "create-direct") {
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
-    if (!turned) console.log(`[ghost-play] round ${i + 1}: never got the turn (45s)`);
+    if (!turned) console.log(`[ghost-play] round ${i + 1}: never saw the next question (45s)`);
   }
   console.log("[ghost-play] done");
 } else {

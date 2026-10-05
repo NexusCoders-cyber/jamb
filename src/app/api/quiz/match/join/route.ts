@@ -1,4 +1,4 @@
-import { errorResponse, requireUser, getAdminClient, HttpError, notify, updateMatch } from "@/lib/quiz-server";
+import { errorResponse, requireUser, getAdminClient, HttpError, notify, updateMatch, activationUpdates } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +24,27 @@ export async function POST(req: Request) {
     if (!match) throw new HttpError(404, "This duel link is not valid");
     const m = match as { id: string; host_id: string; guest_id: string | null; status: string; subject: string };
 
-    // Host reopening their own link, or the guest reopening theirs — just open it.
-    if (m.host_id === user.id || m.guest_id === user.id) {
+    // Host reopening their own link — just open it.
+    if (m.host_id === user.id) {
+      return Response.json({ ok: true, already: true, matchId: m.id });
+    }
+
+    // The player this duel was reserved for (direct invite) opens the link:
+    // that IS accepting — start the duel instead of leaving them on a dead
+    // "waiting" screen.
+    if (m.guest_id === user.id) {
+      if (m.status === "waiting") {
+        const start = await updateMatch(supabase, m.id, activationUpdates(user.id), { status: "waiting", guest_id: user.id });
+        if (start.ok && start.updated > 0) {
+          await supabase
+            .from("quiz_invites")
+            .update({ status: "accepted" })
+            .eq("match_id", m.id)
+            .eq("to_id", user.id)
+            .eq("status", "pending");
+          await notify(supabase, m.host_id, "⚔️ Opponent joined!", `${user.name} accepted your ${m.subject} duel — good luck!`);
+        }
+      }
       return Response.json({ ok: true, already: true, matchId: m.id });
     }
 
@@ -34,13 +53,7 @@ export async function POST(req: Request) {
       const claim = await updateMatch(
         supabase,
         m.id,
-        {
-          guest_id: user.id,
-          status: "active",
-          current_turn: "host",
-          turn_ends_at: new Date(Date.now() + 45_000).toISOString(),
-          guest_seen_at: new Date().toISOString(),
-        },
+        activationUpdates(user.id),
         { status: "waiting", guest_id: null },
       );
       if (!claim.ok || claim.updated === 0) throw new HttpError(409, "Someone just joined this duel — start a new one");

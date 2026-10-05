@@ -1,4 +1,5 @@
 import { errorResponse, requireUser, getAdminClient, buildQuestionSet, sendDuelDM, duelJoinUrl } from "@/lib/quiz-server";
+import { armDeadline } from "@/lib/duel";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +32,8 @@ export async function POST(req: Request) {
         question_count: questions.length,
         status: mode === "solo" ? "active" : "waiting",
         questions,
-        current_turn: mode === "solo" ? "host" : null,
-        turn_ends_at: mode === "solo" ? new Date(Date.now() + 10_000).toISOString() : null,
+        current_turn: null,
+        turn_ends_at: mode === "solo" ? armDeadline(Date.now(), "first") : null,
       })
       .select()
       .single();
