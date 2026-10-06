@@ -1015,6 +1015,13 @@ function ExamPageContent() {
     });
   }
 
+  // Arriving from "Re-drill my mistakes": the drill was saved as the practice session — start it straight away
+  const autoResume = searchParams.get("resume") === "1";
+  useEffect(() => {
+    if (autoResume && resumable && !started) resumeSession(resumable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResume, resumable, started]);
+
   async function discardSession() {
     if (user) await clearLocalSession(user.id, mode);
     setResumable(null);
