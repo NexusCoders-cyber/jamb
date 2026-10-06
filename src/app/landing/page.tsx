@@ -392,6 +392,8 @@ export default function LandingPage() {
             <Link href="/" className="hover:text-violet-600">Sign in</Link>
             <Link href="/upgrade" className="hover:text-violet-600">Pricing</Link>
             <Link href="/community" className="hover:text-violet-600">Community</Link>
+            <Link href="/privacy" className="hover:text-violet-600">Privacy</Link>
+            <Link href="/terms" className="hover:text-violet-600">Terms</Link>
             <Link href="/arena" className="hover:text-violet-600">Arena</Link>
             <Link href="/blog" className="hover:text-violet-600">Blog</Link>
             <Link href="/novels" className="hover:text-violet-600">Novels</Link>
