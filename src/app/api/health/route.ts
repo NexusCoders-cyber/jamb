@@ -30,6 +30,7 @@ export function GET(request: NextRequest) {
     paystack: Boolean(process.env.PAYSTACK_SECRET_KEY),
     resend: Boolean(process.env.RESEND_API_KEY && process.env.RESEND_FROM_EMAIL),
     aloc: Boolean(process.env.ALOC_API_KEY),
+    alocV1: Boolean(process.env.ALOC_V1_API_KEY),
   };
 
   return NextResponse.json({

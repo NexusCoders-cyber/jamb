@@ -6,6 +6,10 @@
  *
  * ALOC questions now go through src/lib/aloc.ts which hardcodes the real base URL.
  * ALOC_API_KEY is still needed; ALOC_API_URL is no longer used.
+ *
+ * ALOC Station v1 (src/lib/aloc-v1.ts) is optional and OFF by default. It is read straight from
+ * the environment at call time: ALOC_V1_API_KEY, ALOC_PROVIDER=auto, ALOC_V1_BASE_URL,
+ * ALOC_V1_RATE_PER_MIN. See .env.example.
  */
 
 function required(name: string): string {

@@ -9,12 +9,19 @@ import {
 } from "@/lib/aloc";
 import { getAlocApiKey } from "@/lib/env";
 import { assembleEnglishPaper } from "@/lib/englishPaper";
+import { tryV1Questions, runV1Diagnostics } from "@/lib/aloc-v1";
+import type { NormalizedQuestion } from "@/lib/aloc";
 
 // Question sets are topped up over several ALOC calls, which can take longer than a single page
 export const maxDuration = 30;
 
 function getApiKey(): string {
   return getAlocApiKey();
+}
+
+/** True when the request names ONE exam year ("random" / "All years" / empty mean a random mix). */
+function isYearSpecific(year: string | undefined): boolean {
+  return Boolean(year) && !/^(random|all(\s*years)?)$/i.test((year as string).trim());
 }
 
 /** Parse an optional positive integer query value (null when absent / invalid). */
@@ -67,6 +74,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
   }
 
+  // ── v1 diagnostics — admins only, spends ~12 ALOC credits, needs &confirm=1 ─
+  if (endpoint === "v1-check") {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    if (profile?.role !== "admin") {
+      return NextResponse.json({ ok: false, error: "Admins only" }, { status: 403 });
+    }
+    if (searchParams.get("confirm") !== "1") {
+      return NextResponse.json({ ok: false, error: "This test spends about 12 ALOC credits. Add &confirm=1 to run it." }, { status: 400 });
+    }
+    return NextResponse.json(await runV1Diagnostics(subject || "mathematics"));
+  }
+
   // ── Questions — bulk (default) ─────────────────────────────────────────────
   if (endpoint === "questions") {
     if (!subject) {
@@ -82,16 +101,26 @@ export async function GET(request: Request) {
       // set is topped up server-side so the client gets a full pool in one round trip.
       // spread=1 (client's "Random mix — all years"): draw from several random years instead of one page
       const spread = searchParams.get("spread") === "1" && !year;
-      const questions = spread
-        ? await fetchAlocSpread(apiKey, subject, requested ?? 80, { type })
-        : await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
+      // ALOC v1 (opt-in via ALOC_PROVIDER=auto) serves balanced, option-shuffled sets for a random mix.
+      // Anything it can't or won't do (named year, English, outage, rate limit) falls through to v2.
+      let source = "aloc";
+      let questions: NormalizedQuestion[] | null = null;
+      if (!isYearSpecific(year)) {
+        questions = await tryV1Questions(subject, requested ?? 40);
+        if (questions) source = "aloc-v1";
+      }
+      if (!questions) {
+        questions = spread
+          ? await fetchAlocSpread(apiKey, subject, requested ?? 80, { type })
+          : await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
+      }
       if (questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }
       return NextResponse.json({
         ok: true,
         provider: "ALOC",
-        source: "aloc",
+        source,
         data: questions,
         meta: { requested: requested ?? 40, returned: questions.length, short: Math.max(0, (requested ?? 0) - questions.length) },
       });
@@ -129,14 +158,20 @@ export async function GET(request: Request) {
     }
 
     try {
-      const questions = await fetchAlocQuestionCount(apiKey, subject, count, { year, type });
+      let source = "aloc";
+      let questions: NormalizedQuestion[] | null = null;
+      if (!isYearSpecific(year)) {
+        questions = await tryV1Questions(subject, count);
+        if (questions) source = "aloc-v1";
+      }
+      if (!questions) questions = await fetchAlocQuestionCount(apiKey, subject, count, { year, type });
       if (questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No questions returned" }, { status: 404 });
       }
       return NextResponse.json({
         ok: true,
         provider: "ALOC",
-        source: "aloc",
+        source,
         data: questions,
         meta: { requested: count, returned: questions.length, short: Math.max(0, count - questions.length) },
       });
