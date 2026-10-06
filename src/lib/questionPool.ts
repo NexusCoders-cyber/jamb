@@ -55,6 +55,14 @@ function mergeUnique<T extends WithId>(...lists: T[][]): T[] {
   return out;
 }
 
+/** Add a downloaded batch to the pool kept on the device (used by "Download for offline"). Returns the pool size. */
+export async function addToPool<T extends WithId>(cacheKey: string, batch: T[]): Promise<number> {
+  const current = (await getCachedQuestions<T>(cacheKey, { allowStale: true })) ?? [];
+  const merged = mergeUnique(batch, current).slice(0, MAX_POOL);
+  await setCachedQuestions(cacheKey, merged);
+  return merged.length;
+}
+
 export async function loadSeen(subject: string): Promise<Record<string, number>> {
   return (await getMeta<Record<string, number>>(seenKey(subject))) ?? {};
 }

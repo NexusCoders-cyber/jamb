@@ -9,6 +9,7 @@ import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import AccountSecurity from "@/components/AccountSecurity";
 import CloudBackupCard from "@/components/CloudBackupCard";
+import OfflinePacksCard from "@/components/OfflinePacksCard";
 import { getProfile, updateProfile } from "@/lib/queries";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme, type ThemePref } from "@/lib/theme";
@@ -223,6 +224,8 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+
+            <OfflinePacksCard />
 
             {/* Account, privacy & legal */}
             {user && <AccountSecurity userId={user.id} />}
