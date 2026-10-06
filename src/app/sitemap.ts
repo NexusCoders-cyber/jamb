@@ -11,6 +11,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // excluded (noindex value) except the blog + novel readers which are public.
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${siteUrl}/`, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${siteUrl}/privacy`, changeFrequency: "yearly", priority: 0.3 },
+    { url: `${siteUrl}/terms`, changeFrequency: "yearly", priority: 0.3 },
     { url: `${siteUrl}/blog`, changeFrequency: "daily", priority: 0.9 },
     { url: `${siteUrl}/novels`, changeFrequency: "weekly", priority: 0.7 },
     { url: `${siteUrl}/novels/the-lekki-headmaster`, changeFrequency: "weekly", priority: 0.7 },

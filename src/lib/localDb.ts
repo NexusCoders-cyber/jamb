@@ -380,3 +380,13 @@ export async function getPendingSummary(userId: string): Promise<PendingSummary>
   const d = deleted?.length ?? 0;
   return { attempts: a, bookmarks: b, deletions: d, total: a + b + d };
 }
+
+// ─── Wipe (account deletion) ─────────────────────────────────────────────────
+
+/** Remove everything this device holds for one student: results, unfinished exams, bookmarks and sync markers. */
+export async function clearUserLocalData(userId: string): Promise<void> {
+  for (const a of await getAll<LocalAttempt>("attempts")) if (a.userId === userId) await deleteOne("attempts", a.id);
+  for (const s of await getAll<LocalSession>("sessions")) if (s.userId === userId) await deleteOne("sessions", s.id);
+  for (const b of await getAll<LocalBookmark>("bookmarks")) if (b.userId === userId) await deleteOne("bookmarks", b.key);
+  for (const m of await getAll<{ key: string }>("meta")) if (m.key.includes(userId)) await deleteOne("meta", m.key);
+}

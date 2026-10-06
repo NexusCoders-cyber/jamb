@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
@@ -48,20 +48,37 @@ export default function MistakesPage() {
   const [totalMistakes, setTotalMistakes] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AttemptAnswer | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (authLoading) return;
+  const load = useCallback(() => {
     if (!user) { setLoading(false); return; }
-
-    const supabase = createSupabaseBrowserClient();
-    getWrongAnswers(supabase, user.id, 60)
+    setLoading(true);
+    setLoadError(false);
+    getWrongAnswers(createSupabaseBrowserClient(), user.id, 60)
       .then((answers) => {
         setTotalMistakes(answers.length);
         setGroups(groupBySubject(answers));
         setSelected(answers[0] ?? null);
       })
+      // An error must not look like "no mistakes" — that would tell a struggling student they are perfect
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
-  }, [user, authLoading]);
+  }, [user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [authLoading, load]);
+
+  /** On a phone the detail sits under the list — bring it into view when a mistake is tapped. */
+  function pick(answer: AttemptAnswer) {
+    setSelected(answer);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches) {
+      window.setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+  }
 
   const q = selected?.question;
 
@@ -79,6 +96,12 @@ export default function MistakesPage() {
               <div key={n} className="animate-pulse rounded-[28px] bg-slate-100 p-5 h-48" />
             ))}
           </div>
+        ) : loadError ? (
+          <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
+            <p className="text-lg font-black text-slate-900">Couldn&apos;t load your mistakes</p>
+            <p className="mt-2 text-sm text-slate-500">Check your connection and try again.</p>
+            <button type="button" onClick={load} className="mt-5 h-11 rounded-xl bg-violet-600 px-5 text-sm font-bold text-white">Try again</button>
+          </div>
         ) : totalMistakes === 0 ? (
           <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
             <p className="inline-flex items-center gap-2 text-2xl font-black text-slate-900">
@@ -90,7 +113,7 @@ export default function MistakesPage() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
             {/* Grouped list */}
-            <div className="space-y-6 overflow-y-auto" style={{ maxHeight: "640px" }}>
+            <div className="space-y-6 lg:max-h-[640px] lg:overflow-y-auto">
               <p className="text-sm text-slate-500">{totalMistakes} mistake{totalMistakes !== 1 ? "s" : ""} across your exams</p>
               {groups.map((section) => (
                 <div key={section.subject} className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
@@ -100,7 +123,7 @@ export default function MistakesPage() {
                       <button
                         key={topic.name}
                         type="button"
-                        onClick={() => setSelected(topic.answers[0])}
+                        onClick={() => pick(topic.answers[0])}
                         className={`flex w-full items-center justify-between rounded-2xl p-3 ring-1 text-left transition ${selected?.id === topic.answers[0]?.id ? "ring-violet-400 bg-violet-50" : "bg-white ring-slate-200 hover:ring-violet-200"}`}
                       >
                         <div>
@@ -118,7 +141,7 @@ export default function MistakesPage() {
             </div>
 
             {/* Question detail */}
-            <div className="rounded-[28px] bg-slate-50 p-6 ring-1 ring-slate-200">
+            <div ref={detailRef} className="scroll-mt-20 rounded-[28px] bg-slate-50 p-6 ring-1 ring-slate-200">
               {selected && q ? (
                 <>
                   <div className="mb-4 flex items-center justify-between">

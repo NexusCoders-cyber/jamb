@@ -7,6 +7,7 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import AccountSecurity from "@/components/AccountSecurity";
 import CloudBackupCard from "@/components/CloudBackupCard";
 import { getProfile, updateProfile } from "@/lib/queries";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
@@ -223,15 +224,8 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Privacy */}
-            <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
-              <h2 className="mb-4 text-xl font-black text-slate-900">Privacy</h2>
-              <div className="space-y-2">
-                {["Profile visibility", "Community preferences"].map((item) => (
-                  <div key={item} className="rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">{item}</div>
-                ))}
-              </div>
-            </div>
+            {/* Account, privacy & legal */}
+            {user && <AccountSecurity userId={user.id} />}
 
             {/* Help */}
             <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">

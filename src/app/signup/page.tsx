@@ -274,6 +274,10 @@ export default function SignUpPage() {
                 className="flex h-12 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-700 to-emerald-600 text-base font-bold text-white shadow-lg shadow-emerald-500/20 transition hover:-translate-y-[1px] disabled:cursor-not-allowed disabled:opacity-70">
                 {isSubmitting ? "Creating account…" : "Create account"}
               </button>
+              <p className="text-center text-xs text-slate-500">
+                By creating an account you agree to our <Link href="/terms" className="font-bold text-emerald-700 underline">Terms</Link> and{" "}
+                <Link href="/privacy" className="font-bold text-emerald-700 underline">Privacy Policy</Link>.
+              </p>
             </form>
           </section>
         </div>
