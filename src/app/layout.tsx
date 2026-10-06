@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { OnlineProvider } from "@/components/OnlineDot";
+import OfflineBanner from "@/components/OfflineBanner";
 import PwaInstall from "@/components/PwaInstall";
 import ThemeSync from "@/components/ThemeSync";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-init";
@@ -18,6 +19,8 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  // When the keyboard opens, shrink the layout (like a native app) instead of covering the answer field
+  interactiveWidget: "resizes-content",
   themeColor: "#6557d9",
 };
 
@@ -26,33 +29,33 @@ const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://orbitprep.app";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "Orbit Prep | JAMB & UTME Smart Preparation",
-    template: "%s | Orbit Prep",
+    default: "Qubit | JAMB & UTME Smart Preparation",
+    template: "%s | Qubit",
   },
   description:
     "Smart JAMB/UTME preparation platform — 10,000+ past questions, mock CBT exams, study mode with instant explanations, live quiz duels and detailed analytics. Available on Android, desktop and iOS.",
-  applicationName: "Orbit Prep",
+  applicationName: "Qubit",
   keywords: ["JAMB", "UTME", "past questions", "CBT", "JAMB preparation", "Nigeria exam", "UTME practice"],
-  authors: [{ name: "Orbit Prep" }],
+  authors: [{ name: "Qubit" }],
   manifest: "/manifest.json",
   openGraph: {
-    siteName: "Orbit Prep",
+    siteName: "Qubit",
     type: "website",
     url: siteUrl,
-    title: "Orbit Prep | JAMB & UTME Smart Preparation",
+    title: "Qubit | JAMB & UTME Smart Preparation",
     description: "10,000+ past questions, mock CBT, live duels, study mode with instant explanations. The smartest way to prepare for JAMB.",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Orbit Prep" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Qubit" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Orbit Prep | JAMB Preparation",
+    title: "Qubit | JAMB Preparation",
     description: "Smart JAMB/UTME preparation — past questions, mock CBT, study mode and live duels.",
     images: ["/og-image.png"],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Orbit Prep",
+    title: "Qubit",
   },
   other: {
     "mobile-web-app-capable": "yes",
@@ -68,6 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Runs before first paint so a dark-mode student never sees a white flash */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/icons/icon-96.png" type="image/png" sizes="96x96" />
         <link rel="apple-touch-icon" href="/icons/icon-180.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -77,6 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <OnlineProvider>
           {children}
           <PwaInstall />
+          <OfflineBanner />
         </OnlineProvider>
       </body>
     </html>

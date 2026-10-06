@@ -101,6 +101,6 @@ export const config = {
      * - favicon.ico and static asset extensions
      * - /api/* routes (API routes never need auth proxy)
      */
-    "/((?!_next/static|_next/image|favicon\\.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$).*)",
+    "/((?!_next/static|_next/image|favicon\\.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|json|webmanifest|html|txt|xml)$).*)",
   ],
 };

@@ -1,5 +1,5 @@
 /**
- * Orbit Prep — Service Worker
+ * Qubit — Service Worker
  *
  * Strategy:
  *   • App shell (HTML, JS, CSS) → Network-first with cache fallback
@@ -8,7 +8,7 @@
  *   • Offline fallback → /offline.html
  */
 
-const CACHE = "orbitprep-v3";
+const CACHE = "qubit-v4";
 const OFFLINE_URL = "/offline.html";
 
 const PRECACHE = [
@@ -16,6 +16,7 @@ const PRECACHE = [
   "/dashboard",
   "/offline.html",
   "/manifest.json",
+  "/icons/icon-192.png",
 ];
 
 // Install — precache app shell

@@ -1,27 +1,34 @@
 {
-  "name": "Orbit Prep — JAMB & UTME",
-  "short_name": "Orbit Prep",
-  "description": "Smart JAMB/UTME preparation: past questions, mock CBT, study mode, live duels and analytics — all in one app.",
-  "start_url": "/dashboard",
+  "id": "/dashboard",
+  "name": "Qubit — JAMB & UTME Prep",
+  "short_name": "Qubit",
+  "description": "JAMB/UTME past questions, mock CBT exams, study mode, duels and analytics — works offline.",
+  "start_url": "/dashboard?source=pwa",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
   "background_color": "#f5f4ff",
   "theme_color": "#6557d9",
-  "orientation": "portrait-primary",
   "categories": ["education"],
   "lang": "en",
-  "scope": "/",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/icon-180.png", "sizes": "180x180", "type": "image/png" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "screenshots": [
-    { "src": "/icons/screenshot-mobile.png", "sizes": "390x844", "type": "image/png", "form_factor": "narrow" },
-    { "src": "/icons/screenshot-desktop.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide" }
+    { "src": "/screenshots/pwa-mock-question.webp", "sizes": "681x1500", "type": "image/webp", "form_factor": "narrow", "label": "Mock exam question with a diagram" },
+    { "src": "/screenshots/pwa-mock-setup.webp", "sizes": "681x1500", "type": "image/webp", "form_factor": "narrow", "label": "Set up a JAMB-standard mock exam" },
+    { "src": "/screenshots/pwa-learn.webp", "sizes": "681x1500", "type": "image/webp", "form_factor": "narrow", "label": "Topics, past questions and study mode" },
+    { "src": "/screenshots/pwa-english-passage.webp", "sizes": "681x1500", "type": "image/webp", "form_factor": "narrow", "label": "English comprehension passages" }
   ],
   "shortcuts": [
-    { "name": "Practice", "url": "/practice", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
-    { "name": "Mock Exam", "url": "/exam", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
-    { "name": "Arena", "url": "/arena", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
+    { "name": "Practice", "short_name": "Practice", "url": "/practice", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Mock Exam", "short_name": "Mock", "url": "/exam", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Bookmarks", "short_name": "Saved", "url": "/bookmarks", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png" }] }
   ]
 }
