@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
+import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 
 const PLAN_DAYS: Record<string, number> = {
   weekly: 7,
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { reference?: string };
+    const body = (await req.json().catch(() => ({}))) as { reference?: string; deviceId?: string; label?: string };
     const reference = body.reference?.trim();
     if (!reference) {
       return NextResponse.json({ error: "Reference is required." }, { status: 400 });
@@ -168,6 +169,11 @@ export async function POST(req: Request) {
           () => { /* RPC not deployed yet */ },
         );
       } catch (_e) { /* silently skip */ }
+    }
+
+    // The phone that just paid now holds the Pro licence (another phone on the same account goes back to free)
+    if (typeof body.deviceId === "string" && DEVICE_ID_RE.test(body.deviceId)) {
+      await claimDevice(admin, user.id, body.deviceId, cleanLabel(body.label), "force");
     }
 
     // Pro notification

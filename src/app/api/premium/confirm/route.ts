@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyPaystackTransaction } from "@/lib/services";
 import { getAdminClient, requireUser, HttpError, errorResponse, notify } from "@/lib/quiz-server";
+import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ type PaymentRow = {
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
-    const body = (await req.json().catch(() => ({}))) as { reference?: string };
+    const body = (await req.json().catch(() => ({}))) as { reference?: string; deviceId?: string; label?: string };
     const reference = (body.reference ?? "").trim();
     if (!reference) throw new HttpError(400, "Payment reference is required");
 
@@ -69,6 +70,10 @@ export async function POST(req: Request) {
       const from = current && new Date(current).getTime() > Date.now() ? new Date(current) : new Date();
       const until = new Date(from.getTime() + 30 * 24 * 3600 * 1000);
       await supabase.from("profiles").update({ premium_until: until.toISOString() }).eq("id", user.id);
+    }
+
+    if (typeof body.deviceId === "string" && DEVICE_ID_RE.test(body.deviceId)) {
+      await claimDevice(supabase, user.id, body.deviceId, cleanLabel(body.label), "force");
     }
 
     // Record discount usage (one per student per code — DB unique constraint)

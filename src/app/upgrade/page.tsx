@@ -1,5 +1,6 @@
 "use client";
 
+import { deviceLabel, getDeviceId } from "@/lib/device";
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -170,7 +171,7 @@ function UpgradePageContent() {
       const res = await fetch("/api/payments/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: ref }),
+        body: JSON.stringify({ reference: ref, deviceId: await getDeviceId(), label: deviceLabel() }),
       });
       const data = (await res.json()) as { ok?: boolean; plan?: string; premiumUntil?: string; error?: string };
       if (res.ok && data.ok) {
