@@ -1,12 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
 import { getWrongAnswers } from "@/lib/queries";
+import { getLocalSession } from "@/lib/localDb";
+import { pickMistakeQuestions, startMistakeRedrill } from "@/lib/redrill";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
@@ -49,6 +52,9 @@ export default function MistakesPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<AttemptAnswer | null>(null);
   const [loadError, setLoadError] = useState(false);
+  const [allAnswers, setAllAnswers] = useState<AttemptAnswer[]>([]);
+  const [drilling, setDrilling] = useState(false);
+  const router = useRouter();
   const detailRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -57,6 +63,7 @@ export default function MistakesPage() {
     setLoadError(false);
     getWrongAnswers(createSupabaseBrowserClient(), user.id, 60)
       .then((answers) => {
+        setAllAnswers(answers);
         setTotalMistakes(answers.length);
         setGroups(groupBySubject(answers));
         setSelected(answers[0] ?? null);
@@ -71,6 +78,21 @@ export default function MistakesPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [authLoading, load]);
+
+  async function redrill(subject?: string) {
+    if (!user || drilling) return;
+    const picked = pickMistakeQuestions(allAnswers, subject);
+    if (picked.length === 0) return;
+    setDrilling(true);
+    try {
+      const existing = await getLocalSession(user.id, "practice");
+      if (existing && !window.confirm("You have an unfinished practice session. Starting this drill will replace it. Continue?")) return;
+      await startMistakeRedrill(user.id, picked);
+      router.push("/exam?mode=practice&resume=1");
+    } finally {
+      setDrilling(false);
+    }
+  }
 
   /** On a phone the detail sits under the list — bring it into view when a mistake is tapped. */
   function pick(answer: AttemptAnswer) {
@@ -115,9 +137,19 @@ export default function MistakesPage() {
             {/* Grouped list */}
             <div className="space-y-6 lg:max-h-[640px] lg:overflow-y-auto">
               <p className="text-sm text-slate-500">{totalMistakes} mistake{totalMistakes !== 1 ? "s" : ""} across your exams</p>
+              <button type="button" onClick={() => void redrill()} disabled={drilling}
+                className="h-12 w-full touch-manipulation rounded-2xl bg-violet-600 text-sm font-bold text-white shadow-lg shadow-violet-300/20 disabled:opacity-60">
+                {drilling ? "Preparing…" : `Re-drill my mistakes (${pickMistakeQuestions(allAnswers).length})`}
+              </button>
               {groups.map((section) => (
                 <div key={section.subject} className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
-                  <h2 className="mb-4 text-2xl font-black text-slate-900">{section.subject}</h2>
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <h2 className="text-2xl font-black text-slate-900">{section.subject}</h2>
+                    <button type="button" onClick={() => void redrill(section.subject)} disabled={drilling}
+                      className="h-10 shrink-0 touch-manipulation rounded-full bg-violet-100 px-4 text-xs font-bold text-violet-700 disabled:opacity-60">
+                      Drill
+                    </button>
+                  </div>
                   <div className="space-y-3">
                     {section.topics.map((topic) => (
                       <button
