@@ -13,6 +13,7 @@ import { weightedJambEstimate, targetStatus } from "@/lib/scoring";
 import { attemptLabel, attemptSubjects, accuracyToJamb, WEAK_BELOW, MIN_ANSWERED } from "@/lib/analytics";
 import type { AttemptSubject } from "@/lib/analytics";
 import AppShell from "@/components/AppShell";
+import ExamCountdown from "@/components/ExamCountdown";
 
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
   { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: FileText },
@@ -327,6 +328,8 @@ export default function DashboardPage() {
         </section>
 
         {/* Stats row */}
+        <ExamCountdown />
+
         <section className="mb-5 grid grid-cols-4 gap-2">
           {[
             { label: "Exams", value: attempts.length },
