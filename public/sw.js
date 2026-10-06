@@ -8,8 +8,12 @@
  *   • Offline fallback → /offline.html
  */
 
-const CACHE = "qubit-v4";
+const CACHE = "qubit-v5";
 const OFFLINE_URL = "/offline.html";
+// Question pictures fetched through our own /api/image-proxy are kept for offline use ("Download for offline").
+// A separate cache so the app-shell cleanup below never throws them away.
+const IMAGE_CACHE = "qubit-images-v1";
+const IMAGE_CACHE_MAX = 800;
 
 const PRECACHE = [
   "/",
@@ -35,7 +39,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE && k !== IMAGE_CACHE).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -53,6 +57,25 @@ self.addEventListener("fetch", (event) => {
   // etc.) must go straight from the browser to the host: the site's security policy blocks the service
   // worker from fetching them, which used to make every question image fail to display.
   if (url.origin !== self.location.origin) return;
+
+  // Question pictures via our proxy: cache-first (the picture behind a URL never changes). Works offline once a
+  // subject has been downloaded. Everything else under /api/ stays network-only.
+  if (url.pathname === "/api/image-proxy") {
+    event.respondWith(
+      caches.open(IMAGE_CACHE).then(async (cache) => {
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        const res = await fetch(request);
+        if (res.ok) {
+          await cache.put(request, res.clone());
+          const keys = await cache.keys();
+          if (keys.length > IMAGE_CACHE_MAX) await Promise.all(keys.slice(0, keys.length - IMAGE_CACHE_MAX).map((k) => cache.delete(k)));
+        }
+        return res;
+      }),
+    );
+    return;
+  }
 
   // API calls — always network, never cache
   if (url.pathname.startsWith("/api/")) return;
