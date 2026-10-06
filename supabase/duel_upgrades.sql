@@ -23,9 +23,11 @@ alter table public.quiz_matches add column if not exists guest_seen_at timestamp
 alter table public.quiz_matches add column if not exists host_picks jsonb not null default '[]'::jsonb;
 alter table public.quiz_matches add column if not exists guest_picks jsonb not null default '[]'::jsonb;
 
--- Lock question count to exactly 10 (applies to new rows; existing rows unchanged).
+-- Lock question count to exactly 10 for NEW matches. NOT VALID skips the check on
+-- rows that already exist (old test games may have fewer questions) but still
+-- enforces it on every insert/update.
 alter table public.quiz_matches drop constraint if exists quiz_matches_question_count_check;
-alter table public.quiz_matches add constraint quiz_matches_question_count_check check (question_count = 10);
+alter table public.quiz_matches add constraint quiz_matches_question_count_check check (question_count = 10) not valid;
 
 create index if not exists quiz_matches_status_idx on public.quiz_matches (status);
 
