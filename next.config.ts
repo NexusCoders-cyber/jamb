@@ -11,6 +11,15 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  async rewrites() {
+    return [
+      // One manifest: keep the legacy URL alive for the layout and phones that already installed the app
+      { source: "/manifest.json", destination: "/manifest.webmanifest" },
+      // Android "Digital Asset Links" (full-screen Play Store app) — see src/app/api/assetlinks/route.ts
+      { source: "/.well-known/assetlinks.json", destination: "/api/assetlinks" },
+    ];
+  },
+
   async headers() {
     return [
       {
