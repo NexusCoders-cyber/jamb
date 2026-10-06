@@ -20,6 +20,7 @@
 
 import Link from "next/link";
 import { usePro } from "@/lib/usePro";
+import { Smartphone } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 
 // ─── Feature metadata ─────────────────────────────────────────────────────────
@@ -73,12 +74,25 @@ const PRO_PERKS = [
 ];
 
 // ─── Paywall wall UI ──────────────────────────────────────────────────────────
-function PaywallWall({ feature }: { feature: string }) {
+function PaywallWall({ feature, deviceLocked = false, otherDevice = null }: { feature: string; deviceLocked?: boolean; otherDevice?: string | null }) {
   const meta = FEATURE_META[feature] ?? FEATURE_META.default;
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
+        {deviceLocked && (
+          <div className="mb-5 flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-left" role="status">
+            <Smartphone className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" aria-hidden />
+            <div>
+              <p className="text-sm font-black text-amber-900">Your Pro plan is active on another phone</p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                {otherDevice ? `It is licensed to ${otherDevice}. ` : ""}Pro works on the phone that paid. To use Pro on this phone, upgrade here —
+                this phone becomes your Pro phone and the other one returns to the free plan.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Icon + heading */}
         <div className="mb-6 text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-amber-50 text-4xl ring-4 ring-amber-100">
@@ -152,7 +166,7 @@ type PaywallGateProps = {
 
 export function PaywallGate({ feature = "default", children }: PaywallGateProps) {
   const { user, loading: authLoading } = useUser();
-  const { isPro, loading: proLoading } = usePro();
+  const { isPro, loading: proLoading, deviceLocked, otherDevice } = usePro();
 
   // While auth or pro status is resolving, render nothing (avoids flash of wall)
   if (authLoading || proLoading) {
@@ -181,7 +195,7 @@ export function PaywallGate({ feature = "default", children }: PaywallGateProps)
 
   // Free user — show the wall
   if (!isPro) {
-    return <PaywallWall feature={feature} />;
+    return <PaywallWall feature={feature} deviceLocked={deviceLocked} otherDevice={otherDevice} />;
   }
 
   // Pro user — render normally

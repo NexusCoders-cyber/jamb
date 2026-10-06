@@ -1,5 +1,6 @@
 "use client";
 
+import { deviceLabel, getDeviceId } from "@/lib/device";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -25,7 +26,7 @@ function SuccessInner() {
         const res = await fetch("/api/premium/confirm", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-          body: JSON.stringify({ reference }),
+          body: JSON.stringify({ reference, deviceId: await getDeviceId(), label: deviceLabel() }),
         });
         const json = (await res.json()) as { ok?: boolean; plan?: string; error?: string };
         if (!res.ok || !json.ok) throw new Error(json.error ?? "Confirmation failed");
