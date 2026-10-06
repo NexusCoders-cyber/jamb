@@ -50,7 +50,14 @@ export async function POST(req: Request) {
     const paidKobo = Number(result.data?.amount ?? 0);
     if (paidKobo < payment.amount_kobo) throw new HttpError(402, "Paid amount does not match the plan price");
 
-    await supabase.from("payments").update({ status: "paid", paid_at: new Date().toISOString() }).eq("id", payment.id);
+    // Claim atomically so a double tap / retry cannot grant premium twice
+    const { data: claimed } = await supabase
+      .from("payments")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", payment.id)
+      .neq("status", "paid")
+      .select("id");
+    if (!claimed || claimed.length === 0) return NextResponse.json({ ok: true, alreadyPaid: true, plan: payment.plan });
 
     // Grant premium
     const plan = payment.plan ?? "lifetime";

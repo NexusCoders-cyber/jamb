@@ -84,21 +84,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Payment was not successful." }, { status: 402 });
     }
 
-    // Security: ensure this transaction belongs to the logged-in user
-    const metaUserId = txn.metadata?.user_id;
-    if (metaUserId && metaUserId !== user.id) {
-      return NextResponse.json({ error: "Transaction does not belong to your account." }, { status: 403 });
-    }
-
-    // Look up the payment row (created by checkout)
+    // Look up the payment row that OUR checkout created for this student. The price and plan come from that row,
+    // never from Paystack metadata: a student can open Paystack's own checkout with the public key and set any
+    // amount/plan in the metadata, so trusting it would let ₦100 buy six months of Pro.
     const { data: paymentRow } = await admin
       .from("payments")
-      .select("id, status, plan, discount_code, metadata")
+      .select("id, user_id, status, plan, amount_kobo, discount_code, metadata")
       .eq("reference", reference)
       .maybeSingle();
 
+    if (!paymentRow || paymentRow.user_id !== user.id) {
+      return NextResponse.json({ error: "Transaction does not belong to your account." }, { status: 403 });
+    }
+
     // Idempotency — already paid
-    if (paymentRow?.status === "paid") {
+    if (paymentRow.status === "paid") {
       const { data: prof } = await admin
         .from("profiles")
         .select("premium_until")
@@ -112,7 +112,24 @@ export async function POST(req: Request) {
       });
     }
 
-    const plan = (paymentRow?.plan ?? txn.metadata?.plan ?? "monthly") as string;
+    // The amount actually charged must cover the price we quoted
+    if (Number(txn.amount) < Number(paymentRow.amount_kobo ?? 0)) {
+      return NextResponse.json({ error: "Paid amount does not match the plan price." }, { status: 402 });
+    }
+
+    // Claim the payment atomically, so two parallel verify calls (double tap / retry) cannot both grant Pro
+    const { data: claimed } = await admin
+      .from("payments")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", paymentRow.id)
+      .neq("status", "paid")
+      .select("id");
+    if (!claimed || claimed.length === 0) {
+      const { data: prof } = await admin.from("profiles").select("premium_until").eq("id", user.id).maybeSingle();
+      return NextResponse.json({ ok: true, already: true, plan: paymentRow.plan, premiumUntil: prof?.premium_until });
+    }
+
+    const plan = (paymentRow.plan ?? "monthly") as string;
     const days = PLAN_DAYS[plan] ?? 30;
 
     // Extend premium_until from now (or from current expiry if still active)
@@ -135,35 +152,15 @@ export async function POST(req: Request) {
       .update({ premium_until: premiumUntil, updated_at: new Date().toISOString() })
       .eq("id", user.id);
 
-    // Mark payment as paid
-    if (paymentRow?.id) {
-      await admin
-        .from("payments")
-        .update({ status: "paid", paid_at: new Date().toISOString() })
-        .eq("id", paymentRow.id);
-    } else {
-      // Fallback: insert if checkout didn't pre-create it
-      await admin.from("payments").insert({
-        user_id: user.id,
-        reference,
-        amount_kobo: txn.amount,
-        currency: "NGN",
-        status: "paid",
-        plan,
-        paid_at: new Date().toISOString(),
-        metadata: txn.metadata ?? {},
-      });
-    }
-
     // Record discount redemption
-    const codeId = paymentRow?.metadata?.code_id ?? txn.metadata?.code_id;
+    const codeId = paymentRow.metadata?.code_id ?? txn.metadata?.code_id;
     if (codeId) {
       try {
         await admin.from("discount_redemptions").insert({
           code_id: codeId,
           user_id: user.id,
-          payment_id: paymentRow?.id ?? null,
-          amount_off_kobo: paymentRow?.metadata?.discount_kobo ?? txn.metadata?.discount_kobo ?? 0,
+          payment_id: paymentRow.id,
+          amount_off_kobo: paymentRow.metadata?.discount_kobo ?? txn.metadata?.discount_kobo ?? 0,
         });
         // Increment used_count — RPC may not exist on older DBs, ignore failure
         await admin.rpc("increment_discount_used", { p_code_id: codeId }).then(

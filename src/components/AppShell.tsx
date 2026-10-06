@@ -252,8 +252,9 @@ function Sidebar({ pathname, inviteCount }: { pathname: string; inviteCount: num
 function BottomNav({ pathname, unread, inviteCount }: { pathname: string; unread: number; inviteCount: number }) {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t border-slate-200/80 bg-white/95 backdrop-blur-md lg:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-slate-200/80 bg-white/95 backdrop-blur-md lg:hidden"
+      // 4rem of tappable tabs PLUS the home-indicator / gesture bar, so icons are never squeezed
+      style={{ height: "calc(4rem + env(safe-area-inset-bottom))", paddingBottom: "env(safe-area-inset-bottom)" }}
       aria-label="Bottom navigation"
     >
       {TABS.map((tab) => {
@@ -261,7 +262,8 @@ function BottomNav({ pathname, unread, inviteCount }: { pathname: string; unread
         const Icon = tab.icon;
         return (
           <Link key={tab.href} href={tab.href}
-            className="relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 transition-colors">
+            aria-current={active ? "page" : undefined}
+            className="relative flex min-h-12 flex-1 touch-manipulation flex-col items-center justify-center gap-0.5 py-2 transition-colors active:bg-violet-50">
             {active && (
               <span className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-violet-600" />
             )}
@@ -296,9 +298,12 @@ function BottomNav({ pathname, unread, inviteCount }: { pathname: string; unread
 
 function TopBar({ title, back, unread }: { title?: string; back?: string; unread: number }) {
   return (
-    <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 backdrop-blur-md lg:hidden">
+    <header
+      className="sticky top-0 z-40 flex items-center gap-3 border-b border-slate-200/60 bg-white/90 px-4 backdrop-blur-md lg:hidden"
+      style={{ height: "calc(3.5rem + env(safe-area-inset-top))", paddingTop: "env(safe-area-inset-top)" }}
+    >
       {back && (
-        <Link href={back} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200" aria-label="Go back">
+        <Link href={back} className="flex h-10 w-10 touch-manipulation items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 active:bg-slate-200" aria-label="Go back">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="h-4 w-4">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
@@ -360,7 +365,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
     // Android Chrome, where the browser bars make 100vh taller than the screen.
     // pt-safe keeps content clear of the notch / status bar when installed as a PWA.
     // (OnlineProvider lives in the root layout — survives client navigations.)
-    <div className={`bg-[#f5f4ff] lg:pl-64 ${hideBottomNav ? "min-h-dvh pt-safe" : "min-h-screen"}`}>
+    <div className={`bg-[#f5f4ff] lg:pl-64 min-h-dvh ${hideTopBar ? "pt-safe" : ""}`}>
       {/* Desktop sidebar */}
       <Sidebar pathname={pathname} inviteCount={inviteCount} />
 
@@ -368,7 +373,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
       {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
 
       {/* Page content — add bottom padding on mobile so content clears the tab bar */}
-      <main className={`${hideBottomNav ? "pb-0" : "min-h-screen pb-20"} lg:pb-0`}>
+      <main className={`${hideBottomNav ? "pb-0" : "min-h-dvh pb-[calc(5rem+env(safe-area-inset-bottom))]"} lg:pb-0`}>
         {children}
       </main>
 

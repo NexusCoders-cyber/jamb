@@ -1063,15 +1063,63 @@ function ExamPageContent() {
     };
   }, [started, saveSessionNow]);
 
+  // Clock — runs on the wall clock, not on "one tick = one second". Phones throttle timers when the screen is off
+  // or another app is in front, so counting ticks would silently give a student extra time (the real CBT never pauses).
+  const hasTimer = timeLeft !== null;
   useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0) return;
-    const id = window.setInterval(() => setTimeLeft((v) => (v === null ? null : v - 1)), 1000);
-    return () => clearInterval(id);
-  }, [timeLeft]);
+    if (!started || !hasTimer || reviewEntries) return;
+    const deadline = Date.now() + (timeLeftRef.current ?? 0) * 1000;
+    const tick = () => {
+      if (submittedRef.current) return;
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setTimeLeft((prev) => (prev === null || prev === left ? prev : left));
+    };
+    const id = window.setInterval(tick, 1000);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
+    };
+  }, [started, hasTimer, reviewEntries]);
 
   useEffect(() => {
-    if (timeLeft === 0 && !submitting) void doSubmit();
+    if (timeLeft === 0 && started && !submitting && !submittedRef.current) void doSubmit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
+
+  // Back button / swipe-back guard: a running exam is never thrown away by one accidental gesture.
+  // (Progress is autosaved on this device, so leaving is safe — but it should be a choice.)
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const guardActive = started && !reviewEntries;
+  useEffect(() => {
+    if (!guardActive) return;
+    window.history.pushState({ qubitExamGuard: true }, "");
+    const onPop = () => setLeaveOpen(true);
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (submittedRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [guardActive]);
+
+  function stayInExam() {
+    setLeaveOpen(false);
+    window.history.pushState({ qubitExamGuard: true }, "");
+  }
+
+  function leaveExam() {
+    saveSessionNow();
+    setLeaveOpen(false);
+    window.history.back();
+  }
 
   if (authLoading) {
     return (
@@ -1658,6 +1706,26 @@ function ExamPageContent() {
       </div>
       </main>
       {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
+
+      {leaveOpen && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="leave-title">
+          <div className="w-full max-w-md rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-6" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}>
+            <h2 id="leave-title" className="text-xl font-black text-slate-900">Leave this {isExamMode ? "exam" : "session"}?</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Your answers are saved on this device, so you can pick up where you stopped.
+              {timeLeft !== null && " The exam clock keeps its place while you are away."}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={stayInExam} className="h-12 touch-manipulation rounded-2xl bg-violet-600 text-sm font-bold text-white">
+                Stay
+              </button>
+              <button type="button" onClick={leaveExam} className="h-12 touch-manipulation rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {confirmOpen && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4"
