@@ -45,7 +45,7 @@ export default function PrivacyPage() {
         <ul>
           <li>Edit your name and goals in Settings.</li>
           <li>Back up or keep your data on-device only.</li>
-          <li>Delete your account in Settings → Account &amp; privacy. This removes your profile and study data from our servers and clears this device.</li>
+          <li>Delete your account in Settings → Account &amp; privacy (see also <a className="font-bold text-violet-700 underline" href="/delete-account">how to delete your account</a>). This removes your profile and study data from our servers and clears this device.</li>
         </ul>
       </section>
       <section>
