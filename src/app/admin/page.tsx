@@ -39,6 +39,7 @@ type StudentProgress = {
 export default function AdminDashboardPage() {
   const [kpis, setKpis] = useState<KPI[]>([
     { label: "Students", value: "—" },
+    { label: "Pro students", value: "—" },
     { label: "Exam attempts", value: "—" },
     { label: "Questions answered", value: "—" },
     { label: "Average accuracy", value: "—" },
@@ -53,6 +54,7 @@ export default function AdminDashboardPage() {
 
     Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).gt("premium_until", new Date().toISOString()),
       supabase
         .from("exam_attempts")
         .select("id, score, question_count", { count: "exact" })
@@ -71,7 +73,7 @@ export default function AdminDashboardPage() {
       ),
       fetch("/api/health").then((r) => r.json()).catch(() => undefined),
     ])
-      .then(async ([profilesRes, attemptsRes, recentRes, rpcProgress, health]) => {
+      .then(async ([profilesRes, proRes, attemptsRes, recentRes, rpcProgress, health]) => {
         const studentCount = profilesRes.count ?? 0;
         const attempts = (attemptsRes.data ?? []) as { score: number; question_count: number }[];
         const attemptCount = attemptsRes.count ?? 0;
@@ -81,6 +83,7 @@ export default function AdminDashboardPage() {
 
         setKpis([
           { label: "Students", value: studentCount.toLocaleString() },
+          { label: "Pro students", value: (proRes.count ?? 0).toLocaleString() },
           { label: "Exam attempts", value: attemptCount.toLocaleString() },
           { label: "Questions answered", value: totalAnswered.toLocaleString() },
           { label: "Average accuracy", value: totalAnswered > 0 ? `${avgAccuracy}%` : "—" },
@@ -151,7 +154,7 @@ export default function AdminDashboardPage() {
       </header>
 
       {/* KPIs */}
-      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {kpis.map((item) => (
           <div key={item.label} className="rounded-3xl bg-slate-900 p-5 ring-1 ring-slate-800">
             <p className="text-sm text-slate-400">{item.label}</p>
@@ -167,7 +170,7 @@ export default function AdminDashboardPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-black text-white">Target tracking</h2>
-            <p className="text-xs text-slate-500">JAMB-scale estimate vs each student's target score</p>
+            <p className="text-xs text-slate-500">JAMB-scale estimate vs each student&apos;s target score</p>
           </div>
           <div className="flex gap-2 text-[11px] font-bold">
             <span className="rounded-full bg-emerald-500/15 px-3 py-1.5 text-emerald-400">🏆 On track: {onTrackCount}</span>

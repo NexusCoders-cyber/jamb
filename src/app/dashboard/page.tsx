@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, startTransition } from "react";
-import { ArrowRight, Bell, BookOpen, FileText, MessagesSquare, PenLine, RotateCcw } from "lucide-react";
+import { ArrowRight, Bell, Bookmark, BookOpen, FileText, MessagesSquare, PenLine, RotateCcw, Target } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
@@ -19,6 +19,8 @@ const quickActions: { label: string; detail: string; href: string; tone: string;
   { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: FileText },
   { label: "Practice", detail: "Past questions, your pace", href: "/practice", tone: "bg-[#fff3d9] text-[#9a6814]", icon: PenLine },
   { label: "Study mode", detail: "See answers as you go", href: "/practice/study", tone: "bg-[#ede8fb] text-[#4f35c2]", icon: BookOpen },
+  { label: "Saved questions", detail: "Your bookmarks, offline", href: "/bookmarks", tone: "bg-[#e8f0fb] text-[#2b5c9a]", icon: Bookmark },
+  { label: "Mistakes", detail: "Re-drill what you missed", href: "/mistakes", tone: "bg-[#fde9ec] text-[#b4233b]", icon: Target },
   { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: MessagesSquare },
 ];
 

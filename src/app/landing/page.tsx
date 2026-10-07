@@ -5,9 +5,12 @@ import {
   ArrowRight, BarChart3, BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Flame, GraduationCap,
   ImageIcon, Library, Menu, Monitor, Smartphone, Swords, Target, Trophy, WifiOff, Users, CalendarCheck, Moon,
 } from "lucide-react";
+import InstallButton from "@/components/InstallButton";
 import Logo from "@/components/Logo";
 
 const BRAND = "Qubit";
+/** Set NEXT_PUBLIC_PLAY_STORE_URL in Vercel once the app is live on Google Play to show the store button. */
+const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || "";
 
 // ── SEO metadata ──────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
@@ -302,28 +305,34 @@ export default function LandingPage() {
         <section className="scroll-mt-16 px-4 pb-16 sm:px-6 lg:px-8" id="download">
           <div className="mx-auto max-w-3xl">
             <h2 className="mb-3 text-center text-3xl font-black text-slate-900">Get the app</h2>
-            <p className="mb-10 text-center text-sm text-slate-500">Works in any browser. Install it for an offline-capable, full-screen experience.</p>
+            <p className="mb-10 text-center text-sm text-slate-500">Works in any browser. Tap Install for a full-screen app that also works offline.</p>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-[24px] bg-gradient-to-br from-emerald-600 to-emerald-500 p-6 text-white shadow-lg shadow-emerald-400/20">
                 <Smartphone className="mb-3 h-8 w-8" />
                 <h3 className="text-lg font-black">Android</h3>
                 <p className="mt-1 text-xs text-emerald-100">Open in Chrome → tap the menu → &quot;Add to Home Screen&quot;</p>
-                <a href="/signup" className="mt-4 flex h-10 items-center justify-center rounded-full bg-white text-sm font-black text-emerald-700">Install now →</a>
+                <InstallButton tone="light" />
+                {PLAY_STORE_URL && (
+                  <a href={PLAY_STORE_URL} className="mt-2 flex h-11 items-center justify-center gap-2 rounded-full bg-black text-sm font-black text-white">
+                    Get it on Google Play
+                  </a>
+                )}
+                <Link href="/signup" className="mt-3 block text-center text-xs font-bold text-emerald-50 underline">Or just sign up and use it in the browser</Link>
               </div>
               <div className="rounded-[24px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-lg shadow-violet-400/20">
                 <Monitor className="mb-3 h-8 w-8" />
                 <h3 className="text-lg font-black">Desktop</h3>
                 <p className="mt-1 text-xs text-violet-100">Chrome / Edge → click the install icon in the address bar</p>
-                <a href="/signup" className="mt-4 flex h-10 items-center justify-center rounded-full bg-white text-sm font-black text-violet-700">Install now →</a>
+                <InstallButton tone="light" />
               </div>
               <div className="rounded-[24px] bg-slate-100 p-6 ring-1 ring-slate-200">
                 <Smartphone className="mb-3 h-8 w-8 text-slate-500" />
                 <h3 className="text-lg font-black text-slate-800">iOS</h3>
-                <p className="mt-1 text-xs text-slate-500">Coming soon to the App Store. For now, open in Safari → Share → &quot;Add to Home Screen&quot;</p>
-                <span className="mt-4 flex h-10 items-center justify-center rounded-full bg-slate-200 text-sm font-black text-slate-500">Coming soon</span>
+                <p className="mt-1 text-xs text-slate-500">Open in Safari → Share → &quot;Add to Home Screen&quot;. An App Store version is coming later.</p>
+                <InstallButton tone="dark" />
               </div>
             </div>
-            <p className="mt-6 text-center text-xs text-slate-400">No app store required for Android and desktop. The web app installs directly.</p>
+            <p className="mt-6 text-center text-xs text-slate-400">Installing adds Qubit to your home screen like any other app — no app store needed.</p>
           </div>
         </section>
 

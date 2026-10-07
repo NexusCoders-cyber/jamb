@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { isPasswordPwnedClient, PWNED_MESSAGE } from "@/lib/pwned";
 import { CheckCircle2, KeyRound, LinkIcon } from "lucide-react";
 
 type Stage = "loading" | "form" | "success" | "invalid";
@@ -50,6 +51,7 @@ export default function ResetPasswordPage() {
 
     setSaving(true);
     try {
+      if (await isPasswordPwnedClient(password)) throw new Error(PWNED_MESSAGE);
       const supabase = createSupabaseBrowserClient();
       const { error: sbErr } = await supabase.auth.updateUser({ password });
       if (sbErr) throw sbErr;

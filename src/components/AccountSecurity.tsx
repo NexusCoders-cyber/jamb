@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronRight, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearUserLocalData } from "@/lib/localDb";
+import { isPasswordPwnedClient, PWNED_MESSAGE } from "@/lib/pwned";
 
 /** Settings → Account: change password, privacy policy / terms, and permanent account deletion. */
 export default function AccountSecurity({ userId }: { userId: string }) {
@@ -30,6 +31,7 @@ export default function AccountSecurity({ userId }: { userId: string }) {
     if (password !== confirmPw) return setPwMsg({ ok: false, text: "The two passwords don't match." });
     setPwBusy(true);
     try {
+      if (await isPasswordPwnedClient(password)) throw new Error(PWNED_MESSAGE);
       const { error } = await createSupabaseBrowserClient().auth.updateUser({ password });
       if (error) throw error;
       setPassword("");
