@@ -5,7 +5,7 @@ import { ArrowRight, BookOpen, FileText, Library, ListChecks } from "lucide-reac
 
 import AppShell from "@/components/AppShell";
 
-type StudyMode = "topics" | "past-questions" | "study" | "mock-cbt" | "syllabus";
+type StudyMode = "topics" | "past-questions" | "study" | "mock-cbt" | "syllabus" | "bookmarks" | "mistakes";
 
 const modes: { id: StudyMode; label: string; detail: string; href: string }[] = [
   {
@@ -37,6 +37,18 @@ const modes: { id: StudyMode; label: string; detail: string; href: string }[] = 
     label: "Syllabus revision",
     detail: "Work through topics in the official JAMB syllabus.",
     href: "/knowledge-hub",
+  },
+  {
+    id: "bookmarks",
+    label: "Saved questions",
+    detail: "Questions you bookmarked. Review them or practise them again, even offline.",
+    href: "/bookmarks",
+  },
+  {
+    id: "mistakes",
+    label: "Mistakes",
+    detail: "Everything you got wrong, with a one-tap re-drill.",
+    href: "/mistakes",
   },
 ];
 

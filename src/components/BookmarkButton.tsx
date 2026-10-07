@@ -16,7 +16,7 @@ export default function BookmarkButton({
   snapshot: QuestionSnapshot;
   subject: string;
   className?: string;
-  /** Show the word next to the icon (hidden on very small screens either way) */
+  /** Show the word next to the icon  */
   label?: boolean;
 }) {
   const { user } = useUser();
@@ -53,7 +53,7 @@ export default function BookmarkButton({
       className={`inline-flex touch-manipulation items-center gap-1 rounded-2xl border px-3 py-2.5 text-sm font-semibold sm:px-4 sm:py-2 ${saved ? "border-violet-300 bg-violet-50 text-violet-800" : "border-slate-200 bg-white text-slate-700"} ${className}`}
     >
       <Bookmark className={`h-3.5 w-3.5 ${saved ? "fill-current" : ""}`} aria-hidden />
-      {label && <span className="hidden sm:inline">{saved ? "Saved" : "Save"}</span>}
+      {label && <span>{saved ? "Saved" : "Save"}</span>}
     </button>
   );
 }

@@ -1,68 +1,44 @@
 "use client";
 
 /**
- * PwaInstall — registers the service worker and shows a slim
- * "Add to home screen" banner when the browser fires beforeinstallprompt.
- *
- * On iOS Safari (which doesn't support the install prompt API) the banner
- * is never shown — the landing page's "Download" section guides those users.
+ * PwaInstall — registers the service worker and shows a slim "Install Qubit" banner when the browser says the
+ * app can be installed. The install prompt itself lives in lib/pwaInstall so the landing page can use it too.
+ * On iOS Safari (no install prompt API) the banner never shows — the landing page's Download section explains it.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getInstallState, getServerInstallState, initInstallCapture, promptInstall, subscribeInstall } from "@/lib/pwaInstall";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt(): Promise<void>;
-  readonly userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
+const DISMISS_KEY = "qubit_install_dismissed";
+const WEEK = 7 * 24 * 60 * 60 * 1000;
 
 export default function PwaInstall() {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [show, setShow] = useState(false);
-  const [installed, setInstalled] = useState(false);
+  const { canPrompt, installed } = useSyncExternalStore(subscribeInstall, getInstallState, getServerInstallState);
+  const [ready, setReady] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    // Register service worker
+    initInstallCapture();
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {
         // SW registration failure is non-fatal
       });
     }
-
-    // Capture install prompt
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      // Don't show immediately — wait 5s so it doesn't clash with page load. Respect a recent "dismiss" for a week.
-      let dismissedAt = 0;
-      try {
-        dismissedAt = Number(localStorage.getItem("qubit_install_dismissed") ?? 0);
-      } catch { /* storage blocked */ }
-      if (Date.now() - dismissedAt > 7 * 24 * 60 * 60 * 1000) setTimeout(() => setShow(true), 5000);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-
-    // Hide if already installed as PWA
-    const mq = window.matchMedia("(display-mode: standalone)");
-    if (mq.matches) setInstalled(true);
-    const mqHandler = (e: MediaQueryListEvent) => { if (e.matches) setInstalled(true); };
-    mq.addEventListener("change", mqHandler);
-
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
-      mq.removeEventListener("change", mqHandler);
-    };
   }, []);
 
-  async function install() {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === "accepted") setInstalled(true);
-    setShow(false);
-    setDeferredPrompt(null);
-  }
+  // Don't pop up immediately (it would clash with page load) and respect a recent "dismiss" for a week
+  useEffect(() => {
+    if (!canPrompt) return;
+    let dismissedAt = 0;
+    try {
+      dismissedAt = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
+    } catch { /* storage blocked */ }
+    if (Date.now() - dismissedAt <= WEEK) return;
+    const t = window.setTimeout(() => setReady(true), 5000);
+    return () => window.clearTimeout(t);
+  }, [canPrompt]);
 
-  if (!show || installed) return null;
+  if (!canPrompt || !ready || installed || hidden) return null;
 
   return (
     <div
@@ -79,7 +55,9 @@ export default function PwaInstall() {
         </div>
         <button
           type="button"
-          onClick={() => void install()}
+          onClick={() => {
+            void promptInstall().then(() => setHidden(true));
+          }}
           className="shrink-0 rounded-full bg-violet-600 px-4 py-2 text-xs font-black text-white hover:bg-violet-700"
         >
           Install
@@ -87,9 +65,9 @@ export default function PwaInstall() {
         <button
           type="button"
           onClick={() => {
-            setShow(false);
+            setHidden(true);
             try {
-              localStorage.setItem("qubit_install_dismissed", String(Date.now()));
+              localStorage.setItem(DISMISS_KEY, String(Date.now()));
             } catch { /* storage blocked */ }
           }}
           aria-label="Dismiss"

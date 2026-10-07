@@ -69,12 +69,12 @@ export function pickMistakeQuestions(answers: AttemptAnswer[], subject?: string,
 }
 
 /** Save the drill as the student's practice session on this device. Returns how many questions it holds. */
-export async function startMistakeRedrill(userId: string, snapshots: QuestionSnapshot[]): Promise<number> {
+export async function startMistakeRedrill(userId: string, snapshots: QuestionSnapshot[], label = "Mistake re-drill"): Promise<number> {
   if (snapshots.length === 0) return 0;
   // Keep each subject together (the exam screen shows one tab per subject)
   const bySubject = new Map<string, DrillQuestion[]>();
   for (const s of snapshots) {
-    const name = s.subject_name ?? "Mistakes";
+    const name = s.subject_name ?? "Saved";
     if (!bySubject.has(name)) bySubject.set(name, []);
     bySubject.get(name)!.push(toDrillQuestion(s));
   }
@@ -88,7 +88,7 @@ export async function startMistakeRedrill(userId: string, snapshots: QuestionSna
     questions,
     subjectTabs,
     questionTotal: questions.length,
-    sessionLabel: "Mistake re-drill",
+    sessionLabel: label,
     answers: {},
     marked: [],
     skipped: [],

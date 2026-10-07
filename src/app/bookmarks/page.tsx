@@ -1,12 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bookmark, Trash2 } from "lucide-react";
+import { Bookmark, PlayCircle, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import QuestionImage from "@/components/QuestionImage";
 import { useUser } from "@/lib/useUser";
-import { listLocalBookmarks, removeLocalBookmark, subscribeLocal, type LocalBookmark } from "@/lib/localDb";
+import { getLocalSession, listLocalBookmarks, removeLocalBookmark, subscribeLocal, type LocalBookmark } from "@/lib/localDb";
+import { startMistakeRedrill } from "@/lib/redrill";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
 
@@ -15,6 +17,8 @@ export default function BookmarksPage() {
   const [items, setItems] = useState<LocalBookmark[] | null>(null);
   const [subject, setSubject] = useState("All");
   const [openAnswer, setOpenAnswer] = useState<Set<string>>(new Set());
+  const [starting, setStarting] = useState(false);
+  const router = useRouter();
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -29,6 +33,19 @@ export default function BookmarksPage() {
 
   const subjects = useMemo(() => ["All", ...Array.from(new Set((items ?? []).map((b) => b.subject))).sort()], [items]);
   const visible = (items ?? []).filter((b) => subject === "All" || b.subject === subject);
+
+  async function practiseSaved() {
+    if (!user || starting || visible.length === 0) return;
+    setStarting(true);
+    try {
+      const existing = await getLocalSession(user.id, "practice");
+      if (existing && !window.confirm("You have an unfinished practice session. Starting this will replace it. Continue?")) return;
+      await startMistakeRedrill(user.id, visible.slice(0, 40).map((b) => b.question), "Saved questions");
+      router.push("/exam?mode=practice&resume=1");
+    } finally {
+      setStarting(false);
+    }
+  }
 
   return (
     <AppShell title="Bookmarks">
@@ -50,6 +67,14 @@ export default function BookmarksPage() {
             </div>
           ) : (
             <>
+              <button
+                type="button"
+                onClick={() => void practiseSaved()}
+                disabled={starting || visible.length === 0}
+                className="mb-3 inline-flex h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-2xl bg-violet-600 text-sm font-bold text-white shadow-lg shadow-violet-300/20 disabled:opacity-60"
+              >
+                <PlayCircle className="h-4 w-4" aria-hidden /> {starting ? "Preparing…" : `Practise these ${Math.min(visible.length, 40)} questions`}
+              </button>
               <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
                 {subjects.map((s) => (
                   <button

@@ -9,7 +9,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Avatar from "@/components/Avatar";
-import { Copy, Download, Loader2, Search, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import AdminUserPanel from "@/components/AdminUserPanel";
+import { Copy, Crown, Download, Loader2, Search, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
 
 type UserRow = {
   id: string;
@@ -19,7 +20,10 @@ type UserRow = {
   target_score: number;
   streak_days: number;
   created_at: string;
+  premium_until?: string | null;
 };
+
+const isPro = (u: { premium_until?: string | null }) => !!u.premium_until && new Date(u.premium_until).getTime() > Date.now();
 
 type SortKey = "created_at" | "full_name" | "streak_days";
 
@@ -30,13 +34,15 @@ export default function AdminUsersPage() {
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortAsc, setSortAsc] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "pro" | "admin">("all");
+  const [managing, setManaging] = useState<UserRow | null>(null);
   const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   const load = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
-    let q = supabase
+    const q = supabase
       .from("profiles")
-      .select("id, full_name, email, role, target_score, streak_days, created_at, user_code")
+      .select("id, full_name, email, role, target_score, streak_days, created_at, user_code, premium_until")
       .order("created_at", { ascending: false })
       .limit(1000);
     const { data } = await q;
@@ -49,12 +55,13 @@ export default function AdminUsersPage() {
   // Search by name OR email, then sort
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const pool = filter === "pro" ? users.filter(isPro) : filter === "admin" ? users.filter((u) => u.role === "admin") : users;
     const filtered = q
-      ? users.filter((u) =>
+      ? pool.filter((u) =>
           (u.full_name ?? "").toLowerCase().includes(q) ||
           (u.email ?? "").toLowerCase().includes(q) ||
           (u as unknown as { user_code?: string }).user_code?.toLowerCase().includes(q))
-      : users;
+      : pool;
     const sorted = [...filtered].sort((a, b) => {
       const va = a[sortKey] ?? "";
       const vb = b[sortKey] ?? "";
@@ -64,7 +71,7 @@ export default function AdminUsersPage() {
       return sortAsc ? cmp : -cmp;
     });
     return sorted;
-  }, [users, query, sortKey, sortAsc]);
+  }, [users, query, filter, sortKey, sortAsc]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortAsc((v) => !v);
@@ -79,12 +86,14 @@ export default function AdminUsersPage() {
   }
 
   function downloadCsv() {
-    const header = "full_name,email,user_code,role,target_score,streak_days,joined";
+    const header = "full_name,email,user_code,role,plan,pro_until,target_score,streak_days,joined";
     const rows = visible.map((u) => [
       `"${(u.full_name ?? "").replace(/"/g, '""')}"`,
       u.email ?? "",
       (u as unknown as { user_code?: string }).user_code ?? "",
       u.role,
+      isPro(u) ? "pro" : "free",
+      isPro(u) ? (u.premium_until ?? "").slice(0, 10) : "",
       String(u.target_score ?? ""),
       String(u.streak_days ?? 0),
       new Date(u.created_at).toISOString().slice(0, 10),
@@ -184,6 +193,12 @@ export default function AdminUsersPage() {
           className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-4 py-2.5 text-xs font-bold text-slate-200 ring-1 ring-slate-700 hover:text-white">
           <Download className="h-3.5 w-3.5" aria-hidden /> Download CSV
         </button>
+        {(["all", "pro", "admin"] as const).map((f) => (
+          <button key={f} type="button" onClick={() => setFilter(f)} aria-pressed={filter === f}
+            className={`rounded-full px-3 py-2 text-xs font-bold ring-1 ${filter === f ? "bg-violet-600 text-white ring-violet-500" : "bg-slate-900 text-slate-300 ring-slate-700 hover:text-white"}`}>
+            {f === "all" ? "All" : f === "pro" ? `Pro (${users.filter(isPro).length})` : "Admins"}
+          </button>
+        ))}
         <span className="rounded-full bg-slate-900 px-3 py-2 text-xs font-bold text-slate-400">{visible.length} users</span>
       </div>
 
@@ -200,12 +215,13 @@ export default function AdminUsersPage() {
         <>
           {/* Desktop table */}
           <div className="hidden overflow-x-auto rounded-3xl bg-slate-900 ring-1 ring-slate-800 lg:block">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="border-b border-slate-800">
                 <tr>
                   {th("Student", "full_name")}
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Email</th>
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Role</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Plan</th>
                   {th("Streak", "streak_days")}
                   <th className="px-4 py-3 text-left text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Target</th>
                   {th("Joined", "created_at")}
@@ -230,6 +246,11 @@ export default function AdminUsersPage() {
                         ? <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-black text-violet-300">ADMIN</span>
                         : <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-black text-slate-400">STUDENT</span>}
                     </td>
+                    <td className="px-4 py-3">
+                      {isPro(u)
+                        ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300"><Crown className="h-3 w-3" aria-hidden />PRO</span>
+                        : <span className="text-[10px] font-bold text-slate-600">Free</span>}
+                    </td>
                     <td className="px-4 py-3 text-slate-300">{u.streak_days}d</td>
                     <td className="px-4 py-3 text-slate-300">{u.target_score}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(u.created_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "2-digit" })}</td>
@@ -239,6 +260,10 @@ export default function AdminUsersPage() {
                           <Loader2 className="h-4 w-4 animate-spin text-slate-500" aria-hidden />
                         ) : (
                           <>
+                            <button type="button" onClick={() => setManaging(u)} aria-label={`Manage Pro and phones for ${u.full_name}`}
+                              className="rounded-full bg-amber-500/10 p-2 text-amber-300 ring-1 ring-amber-500/30 hover:bg-amber-500/20">
+                              <Crown className="h-3.5 w-3.5" aria-hidden />
+                            </button>
                             {u.role === "student" ? (
                               <button type="button" onClick={() => void setRole(u, "admin")} aria-label={`Make ${u.full_name} admin`}
                                 className="rounded-full bg-violet-600/20 p-2 text-violet-300 ring-1 ring-violet-500/30 hover:bg-violet-600/30">
@@ -273,6 +298,7 @@ export default function AdminUsersPage() {
                   <p className="flex items-center gap-2 truncate text-sm font-black text-white">
                     {u.full_name || "(no name)"}
                     {u.role === "admin" && <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-black text-violet-300">ADMIN</span>}
+                    {isPro(u) && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-black text-amber-300">PRO</span>}
                   </p>
                   <p className="truncate text-xs text-slate-500">{u.email ?? "—"}</p>
                   <p className="text-[11px] text-slate-600">
@@ -284,6 +310,10 @@ export default function AdminUsersPage() {
                     <Loader2 className="h-4 w-4 animate-spin text-slate-500" aria-hidden />
                   ) : (
                     <>
+                      <button type="button" onClick={() => setManaging(u)}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-bold text-amber-300 ring-1 ring-amber-500/30 hover:bg-amber-500/20">
+                        <Crown className="h-3.5 w-3.5" aria-hidden /> Pro &amp; phones
+                      </button>
                       {u.role === "student" ? (
                         <button type="button" onClick={() => void setRole(u, "admin")}
                           className="inline-flex items-center gap-1.5 rounded-full bg-violet-600/20 px-3 py-1.5 text-[11px] font-bold text-violet-300 ring-1 ring-violet-500/30 hover:bg-violet-600/30">
@@ -306,6 +336,13 @@ export default function AdminUsersPage() {
             ))}
           </div>
         </>
+      )}
+      {managing && (
+        <AdminUserPanel
+          user={managing}
+          onClose={() => setManaging(null)}
+          onProChange={(until) => setUsers((prev) => prev.map((x) => (x.id === managing.id ? { ...x, premium_until: until } : x)))}
+        />
       )}
     </div>
   );

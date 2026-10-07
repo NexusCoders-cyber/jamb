@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isPasswordPwnedServer, PWNED_MESSAGE } from "@/lib/pwned";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -12,6 +13,10 @@ export async function POST(request: Request) {
   }
   if (password.length < 8) {
     return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
+  }
+
+  if (await isPasswordPwnedServer(password)) {
+    return NextResponse.json({ error: PWNED_MESSAGE }, { status: 400 });
   }
 
   const supabase = await createSupabaseServerClient();

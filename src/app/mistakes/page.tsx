@@ -13,6 +13,7 @@ import { pickMistakeQuestions, startMistakeRedrill } from "@/lib/redrill";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
+import BookmarkButton from "@/components/BookmarkButton";
 import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -178,7 +179,10 @@ export default function MistakesPage() {
                 <>
                   <div className="mb-4 flex items-center justify-between">
                     <p className="text-sm font-bold text-rose-600">Wrong answer</p>
-                    <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-700">Mistake</span>
+                    <span className="flex items-center gap-2">
+                      <BookmarkButton snapshot={q} subject={q.subject_name ?? "Unknown"} />
+                      <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-700">Mistake</span>
+                    </span>
                   </div>
                   <div className="rounded-[20px] bg-white p-5 ring-1 ring-slate-200">
                     {q.section && (
