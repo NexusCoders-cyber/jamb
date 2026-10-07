@@ -11,7 +11,7 @@ export default function SmartCoachRedirect() {
   const router = useRouter();
   useEffect(() => { router.replace("/practice"); }, [router]);
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
+    <main className="flex min-h-dvh items-center justify-center bg-[#eef2ff]">
       <p className="text-sm font-semibold text-slate-400">Redirecting to Practice…</p>
     </main>
   );

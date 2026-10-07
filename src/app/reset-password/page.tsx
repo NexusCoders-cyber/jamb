@@ -65,7 +65,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#eef2ff] px-4">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-[#eef2ff] px-4">
       <div className="w-full max-w-md rounded-[32px] bg-white p-8 shadow-[0_20px_70px_rgba(93,74,228,0.12)] ring-1 ring-slate-200">
 
         {/* Loading */}

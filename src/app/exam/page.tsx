@@ -1130,7 +1130,7 @@ function ExamPageContent() {
 
   if (authLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
+      <div className="flex min-h-dvh items-center justify-center bg-[#eef2ff]">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
       </div>
     );
@@ -1802,7 +1802,7 @@ function ExamPageContent() {
 
 export default function ExamPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
+    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
       <ExamPageContent />
     </Suspense>
   );

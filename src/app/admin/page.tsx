@@ -36,7 +36,10 @@ type StudentProgress = {
   last_exam_at: string | null;
 };
 
+type BankInfo = { ready: boolean; total: number; subjects: { subject: string; total: number; withImages: number }[] };
+
 export default function AdminDashboardPage() {
+  const [bank, setBank] = useState<BankInfo | null>(null);
   const [kpis, setKpis] = useState<KPI[]>([
     { label: "Students", value: "—" },
     { label: "Pro students", value: "—" },
@@ -51,6 +54,15 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
+
+    // Question bank totals (admin API, service role)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) return;
+      fetch("/api/admin/question-bank", { headers: { Authorization: `Bearer ${session.access_token}` } })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (j) setBank(j as BankInfo); })
+        .catch(() => undefined);
+    });
 
     Promise.all([
       supabase.from("profiles").select("id", { count: "exact", head: true }),
@@ -163,6 +175,32 @@ export default function AdminDashboardPage() {
             </p>
           </div>
         ))}
+      </section>
+
+      {/* Question bank — every question the ALOC API returned, saved in our own database */}
+      <section className="mb-6 rounded-3xl bg-slate-900 p-6 ring-1 ring-slate-800">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-black text-white">Question bank</h2>
+            <p className="text-xs text-slate-500">Questions saved in your database as students use the app (also served if ALOC is down)</p>
+          </div>
+          {bank?.ready && <span className="rounded-full bg-violet-500/15 px-3 py-1.5 text-xs font-black text-violet-300">{bank.total.toLocaleString()} saved</span>}
+        </div>
+        {!bank ? (
+          <p className="text-sm text-slate-500">Loading…</p>
+        ) : !bank.ready ? (
+          <p className="rounded-2xl bg-amber-500/10 p-3 text-sm text-amber-300">The question bank isn&apos;t set up yet. Run <code className="font-mono">supabase/question_bank.sql</code> once in the Supabase SQL Editor.</p>
+        ) : bank.total === 0 ? (
+          <p className="text-sm text-slate-500">Empty so far — it fills automatically the next time a student starts practice.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {bank.subjects.map((s) => (
+              <span key={s.subject} className="rounded-full bg-slate-800 px-3 py-1.5 text-xs font-bold capitalize text-slate-300">
+                {s.subject} <span className="text-slate-500">· {s.total.toLocaleString()}{s.withImages ? ` (${s.withImages} with pictures)` : ""}</span>
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Target tracking — connected to student target scores */}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  ArrowRight, BarChart3, BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Flame, GraduationCap,
+  ArrowRight, BarChart3, BookOpen, Brain, Check, ChevronDown, ClipboardCheck, Download, Flame, GraduationCap,
   ImageIcon, Library, Menu, Monitor, Smartphone, Swords, Target, Trophy, WifiOff, Users, CalendarCheck, Moon,
 } from "lucide-react";
 import InstallButton from "@/components/InstallButton";
@@ -151,7 +151,7 @@ export default function LandingPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }} />
 
-      <main className="min-h-screen bg-[#f5f4ff] text-slate-900">
+      <main className="min-h-dvh bg-[#f5f4ff] text-slate-900">
 
         {/* ── Nav ──────────────────────────────────────────────────────── */}
         <nav className="sticky top-0 z-50 border-b border-white/60 bg-white/85 backdrop-blur-md">
@@ -193,8 +193,8 @@ export default function LandingPage() {
                 <GraduationCap className="h-4 w-4" /> Built for JAMB UTME candidates
               </span>
               <h1 className="mt-2 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-6xl">
-                The smarter way to
-                <span className="block text-violet-600">pass JAMB</span>
+                <span className="block">The smarter way</span>
+                <span className="block text-violet-600">to pass JAMB</span>
               </h1>
               <p className="mx-auto mt-5 max-w-xl text-base leading-7 text-slate-600 sm:text-lg lg:mx-0">
                 10,000+ past questions, full mock CBT exams, instant explanations,
@@ -203,7 +203,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-wrap items-center justify-center gap-3 lg:justify-start">
                 <Link href="/signup" className={btnPrimary}>Start free <ArrowRight className="h-4 w-4" /></Link>
-                <a href="#screens" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:border-violet-300">See the app</a>
+                <a href="#download" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-7 py-3.5 text-base font-semibold text-slate-700 transition hover:border-violet-300"><Download className="h-4 w-4" aria-hidden /> Download app</a>
               </div>
               <ul className="mt-7 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs font-semibold text-slate-500 lg:justify-start">
                 {["No card required", "17 UTME subjects", "Real CBT feel"].map((t) => (

@@ -66,6 +66,10 @@ input, textarea, select, [contenteditable="true"], .selectable, .selectable * {
 }
 img { -webkit-user-drag: none; }
 
+/* Older Android WebViews (before Chrome 108) don't know "dvh": give them the classic height first so the screen
+   still fills; newer browsers read the second line and track the visible area as the address bar hides. */
+.min-h-dvh { min-height: 100vh; min-height: 100dvh; }
+
 /* Never let the page scroll sideways — a sure giveaway that it is a web page */
 html, body { max-width: 100%; overflow-x: clip; }
 

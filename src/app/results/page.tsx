@@ -207,7 +207,7 @@ function ResultsPageContent() {
 
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
+    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center"><div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" /></div>}>
       <ResultsPageContent />
     </Suspense>
   );

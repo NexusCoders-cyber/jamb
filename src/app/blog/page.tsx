@@ -49,7 +49,7 @@ export default async function BlogIndexPage() {
   const posts = await getPosts();
 
   return (
-    <main className="min-h-screen bg-[#f5f4ff]">
+    <main className="min-h-dvh bg-[#f5f4ff]">
       <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
         <header className="mb-8">
           <div className="flex items-center gap-3">

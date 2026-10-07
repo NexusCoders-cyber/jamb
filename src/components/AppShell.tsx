@@ -373,7 +373,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
       {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}
 
       {/* Page content — add bottom padding on mobile so content clears the tab bar */}
-      <main className={`${hideBottomNav ? "pb-0" : "min-h-dvh pb-[calc(5rem+env(safe-area-inset-bottom))]"} lg:pb-0`}>
+      <main className={`mx-auto w-full lg:max-w-[1600px] ${hideBottomNav ? "pb-0" : "pb-[calc(5rem+env(safe-area-inset-bottom))]"} lg:pb-0`}>
         {children}
       </main>
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Download, Loader2 } from "lucide-react";
 import { downloadPack, getPackInfo, type PackInfo, type PackProgress } from "@/lib/offlinePack";
+import { getStorageStatus, isIosBrowserTab, requestPersistentStorage, type StorageStatus } from "@/lib/storagePersist";
 
 type Row = { name: string; info: PackInfo | null; busy: boolean; progress: PackProgress | null; error: string };
 
@@ -10,11 +11,16 @@ type Row = { name: string; info: PackInfo | null; busy: boolean; progress: PackP
 export default function OfflinePacksCard() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loadError, setLoadError] = useState(false);
+  const [storage, setStorage] = useState<StorageStatus | null>(null);
+  const [iosTab, setIosTab] = useState(false);
   const cancel = useRef({ cancelled: false });
 
   useEffect(() => {
     let alive = true;
     const flag = cancel.current;
+    void requestPersistentStorage()
+      .then(() => getStorageStatus())
+      .then((st) => { if (alive) { setStorage(st); setIosTab(isIosBrowserTab()); } });
     void (async () => {
       try {
         const res = (await fetch("/api/aloc?endpoint=subjects").then((r) => r.json())) as { data?: { name: string }[] };
@@ -55,6 +61,15 @@ export default function OfflinePacksCard() {
       <p className="mb-4 mt-1 text-sm text-slate-500">
         Download a subject while you have data or Wi-Fi, then practise with no connection. Keep this page open while it downloads.
       </p>
+      {storage && (
+        <p className={`mb-4 rounded-xl px-3 py-2 text-xs font-semibold ${storage.persisted ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>
+          {storage.persisted
+            ? `Saved on this device${storage.usedMB != null ? ` (${storage.usedMB} MB used)` : ""} and protected from automatic clean-up.`
+            : iosTab
+              ? "iPhone may clear saved questions after a week of not opening the app. Tap Share → Add to Home Screen to keep them safe."
+              : `Saved on this device${storage.usedMB != null ? ` (${storage.usedMB} MB used)` : ""}. Installing the app helps your phone keep it.`}
+        </p>
+      )}
       {loadError ? (
         <p className="text-sm font-semibold text-slate-500">Connect to the internet to see the subjects you can download.</p>
       ) : rows.length === 0 ? (
