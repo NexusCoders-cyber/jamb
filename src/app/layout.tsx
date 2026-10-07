@@ -4,6 +4,7 @@ import { OnlineProvider } from "@/components/OnlineDot";
 import OfflineBanner from "@/components/OfflineBanner";
 import PwaInstall from "@/components/PwaInstall";
 import ThemeSync from "@/components/ThemeSync";
+import StorageGuard from "@/components/StorageGuard";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-init";
 import "./globals.css";
 
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="h-full font-[family-name:var(--font-inter)] text-slate-900">
         <ThemeSync />
+        <StorageGuard />
         <OnlineProvider>
           {children}
           <PwaInstall />

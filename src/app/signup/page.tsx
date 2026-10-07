@@ -126,7 +126,7 @@ export default function SignUpPage() {
 
   return (
     <AuthGate>
-    <main className="min-h-screen bg-[#eef6f1] px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-dvh bg-[#eef6f1] px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl overflow-hidden rounded-[32px] border border-emerald-100 bg-white shadow-[0_20px_70px_rgba(14,33,33,0.08)]">
         <div className="grid min-h-[780px] lg:grid-cols-[1.1fr_0.9fr]">
 

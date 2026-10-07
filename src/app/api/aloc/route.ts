@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { productCatalog } from "@/lib/catalog";
 import {
@@ -11,6 +11,7 @@ import { getAlocApiKey } from "@/lib/env";
 import { assembleEnglishPaper } from "@/lib/englishPaper";
 import { tryV1Questions, runV1Diagnostics } from "@/lib/aloc-v1";
 import type { NormalizedQuestion } from "@/lib/aloc";
+import { saveToBank, sampleFromBank } from "@/lib/question-bank";
 
 // Question sets are topped up over several ALOC calls, which can take longer than a single page
 export const maxDuration = 30;
@@ -29,6 +30,25 @@ function parseCount(value: string | null): number | null {
   if (value === null || value.trim() === "") return null;
   const n = Math.floor(Number(value));
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Keep a copy of what ALOC just returned (after the response is sent, so students never wait for it). */
+function keepCopy(subject: string, questions: NormalizedQuestion[], source: string) {
+  if (source !== "aloc" && source !== "aloc-v1") return;
+  after(() => saveToBank(subject, questions));
+}
+
+/** When ALOC can't answer, serve the questions we saved earlier. null = the bank has nothing for this request. */
+async function bankFallback(subject: string, year: string | undefined, want: number, reason: string) {
+  const list = await sampleFromBank(subject, isYearSpecific(year) ? (year as string) : null, Math.min(200, want));
+  if (list.length === 0) return null;
+  return NextResponse.json({
+    ok: true,
+    provider: "ALOC",
+    source: "bank",
+    data: list,
+    meta: { requested: want, returned: list.length, short: Math.max(0, want - list.length), note: reason },
+  });
 }
 
 // ─── GET /api/aloc?endpoint=...  ──────────────────────────────────────────────
@@ -93,6 +113,8 @@ export async function GET(request: Request) {
     }
 
     if (!apiKey) {
+      const saved = await bankFallback(subject, year, requested ?? 40, "no-api-key");
+      if (saved) return saved;
       return NextResponse.json({ ok: false, error: "ALOC_API_KEY not configured" }, { status: 503 });
     }
 
@@ -115,8 +137,11 @@ export async function GET(request: Request) {
           : await fetchAlocQuestions(apiKey, subject, { year, type, count: requested ?? undefined });
       }
       if (questions.length === 0) {
+        const saved = await bankFallback(subject, year, requested ?? 40, "aloc-empty");
+        if (saved) return saved;
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }
+      keepCopy(subject, questions, source);
       return NextResponse.json({
         ok: true,
         provider: "ALOC",
@@ -125,6 +150,8 @@ export async function GET(request: Request) {
         meta: { requested: requested ?? 40, returned: questions.length, short: Math.max(0, (requested ?? 0) - questions.length) },
       });
     } catch (err) {
+      const saved = await bankFallback(subject, year, requested ?? 40, "aloc-error");
+      if (saved) return saved;
       const msg = err instanceof Error ? err.message : "ALOC request failed";
       return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
     }
@@ -140,6 +167,7 @@ export async function GET(request: Request) {
       if (paper.questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No English questions returned" }, { status: 404 });
       }
+      keepCopy("english language", paper.questions, "aloc");
       return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: paper.questions, meta: paper.meta });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ALOC request failed";
@@ -154,6 +182,8 @@ export async function GET(request: Request) {
     }
 
     if (!apiKey) {
+      const saved = await bankFallback(subject, year, count, "no-api-key");
+      if (saved) return saved;
       return NextResponse.json({ ok: false, error: "ALOC_API_KEY not configured" }, { status: 503 });
     }
 
@@ -166,8 +196,11 @@ export async function GET(request: Request) {
       }
       if (!questions) questions = await fetchAlocQuestionCount(apiKey, subject, count, { year, type });
       if (questions.length === 0) {
+        const saved = await bankFallback(subject, year, count, "aloc-empty");
+        if (saved) return saved;
         return NextResponse.json({ ok: false, error: "No questions returned" }, { status: 404 });
       }
+      keepCopy(subject, questions, source);
       return NextResponse.json({
         ok: true,
         provider: "ALOC",
@@ -176,6 +209,8 @@ export async function GET(request: Request) {
         meta: { requested: count, returned: questions.length, short: Math.max(0, count - questions.length) },
       });
     } catch (err) {
+      const saved = await bankFallback(subject, year, count, "aloc-error");
+      if (saved) return saved;
       const msg = err instanceof Error ? err.message : "ALOC request failed";
       return NextResponse.json({ ok: false, provider: "ALOC", error: msg }, { status: 502 });
     }

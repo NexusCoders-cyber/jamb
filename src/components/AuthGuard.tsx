@@ -30,7 +30,7 @@ export default function AuthGuard({ user, loading, children, fallback }: Props) 
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#eef2ff]">
+      <div className="flex min-h-dvh items-center justify-center bg-[#eef2ff]">
         <div className="flex flex-col items-center gap-4">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
           <p className="text-sm font-semibold text-slate-400">Loading…</p>
@@ -42,7 +42,7 @@ export default function AuthGuard({ user, loading, children, fallback }: Props) 
   if (!user) {
     return (
       fallback ?? (
-        <div className="flex min-h-screen items-center justify-center bg-[#eef2ff] px-4">
+        <div className="flex min-h-dvh items-center justify-center bg-[#eef2ff] px-4">
           <div className="w-full max-w-sm rounded-[28px] bg-white p-8 text-center ring-1 ring-slate-200 shadow-lg">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-100">
               <Lock className="h-8 w-8 text-violet-600" aria-hidden />

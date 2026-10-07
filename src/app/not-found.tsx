@@ -3,7 +3,7 @@ import { Telescope } from "lucide-react";
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-[#eef2ff] px-4 text-center">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-[#eef2ff] px-4 text-center">
       <div className="rounded-[32px] bg-white p-10 shadow-[0_18px_60px_rgba(93,74,228,0.1)] ring-1 ring-slate-200 max-w-md w-full">
         <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-violet-100">
           <Telescope className="h-10 w-10 text-violet-600" aria-hidden />

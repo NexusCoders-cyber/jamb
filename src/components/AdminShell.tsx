@@ -37,7 +37,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <div className="flex min-h-dvh items-center justify-center bg-slate-950">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-slate-700 border-t-violet-500" />
       </div>
 );
@@ -45,7 +45,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   if (!user) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <main className="flex min-h-dvh items-center justify-center bg-slate-950 px-4">
         <div className="w-full max-w-sm rounded-[28px] bg-slate-900 p-8 text-center ring-1 ring-slate-800">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-violet-500/15">
             <Lock className="h-8 w-8 text-violet-400" aria-hidden />
@@ -65,7 +65,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   if (!isAdmin) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+      <main className="flex min-h-dvh items-center justify-center bg-slate-950 px-4">
         <div className="w-full max-w-sm rounded-[28px] bg-slate-900 p-8 text-center ring-1 ring-slate-800">
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-500/15">
             <Lock className="h-8 w-8 text-rose-400" aria-hidden />
@@ -87,7 +87,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const email = user.email ?? "";
 
   return (
-    <div className="min-h-screen bg-slate-950 lg:pl-60">
+    <div className="min-h-dvh bg-slate-950 lg:pl-60">
       {/* Sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-slate-800 bg-slate-900/60 backdrop-blur lg:flex">
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-slate-800 px-5">

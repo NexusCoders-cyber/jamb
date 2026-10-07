@@ -101,7 +101,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   const paragraphs = post.body.split(/\n\s*\n/).filter(Boolean);
 
   return (
-    <main className="min-h-screen bg-[#f5f4ff]">
+    <main className="min-h-dvh bg-[#f5f4ff]">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <article className="mx-auto max-w-2xl px-4 py-10 lg:px-6">
         <Link href="/blog" className="mb-6 inline-flex items-center gap-1.5 text-sm font-bold text-violet-600 hover:underline">
