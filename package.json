@@ -8,7 +8,9 @@
     "prebuild": "node scripts/gen-dark-css.mjs",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "bank:fill": "npx tsx scripts/fill-bank.ts",
+    "bank:test": "npx tsx scripts/bank-first-test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

@@ -11,7 +11,7 @@ import { getAlocApiKey } from "@/lib/env";
 import { assembleEnglishPaper } from "@/lib/englishPaper";
 import { tryV1Questions, runV1Diagnostics } from "@/lib/aloc-v1";
 import type { NormalizedQuestion } from "@/lib/aloc";
-import { saveToBank, sampleFromBank } from "@/lib/question-bank";
+import { saveToBank, sampleFromBank, serveFromBank } from "@/lib/question-bank";
 
 // Question sets are topped up over several ALOC calls, which can take longer than a single page
 export const maxDuration = 30;
@@ -48,6 +48,24 @@ async function bankFallback(subject: string, year: string | undefined, want: num
     source: "bank",
     data: list,
     meta: { requested: want, returned: list.length, short: Math.max(0, want - list.length), note: reason },
+  });
+}
+
+/**
+ * BANK FIRST: when our own question bank already holds enough for this request, answer from it and never touch
+ * ALOC (no rate limit used, no waiting on a third party). null = bank too thin, carry on and ask ALOC as before.
+ * The bank is filled by scripts/fill-bank.ts and grows with every live ALOC answer (see keepCopy).
+ */
+async function bankFirst(subject: string, year: string | undefined, want: number, type: string) {
+  if (type !== "utme") return null; // the bank is UTME material
+  const list = await serveFromBank(subject, isYearSpecific(year) ? (year as string) : null, want);
+  if (!list) return null;
+  return NextResponse.json({
+    ok: true,
+    provider: "ALOC",
+    source: "bank",
+    data: list,
+    meta: { requested: want, returned: list.length, short: Math.max(0, want - list.length), note: "bank-first" },
   });
 }
 
@@ -111,6 +129,9 @@ export async function GET(request: Request) {
     if (!subject) {
       return NextResponse.json({ ok: false, error: "subject is required" }, { status: 400 });
     }
+
+    const fromBank = await bankFirst(subject, year, requested ?? 40, type);
+    if (fromBank) return fromBank;
 
     if (!apiKey) {
       const saved = await bankFallback(subject, year, requested ?? 40, "no-api-key");
@@ -180,6 +201,9 @@ export async function GET(request: Request) {
     if (!subject) {
       return NextResponse.json({ ok: false, error: "subject is required" }, { status: 400 });
     }
+
+    const fromBank = await bankFirst(subject, year, count, type);
+    if (fromBank) return fromBank;
 
     if (!apiKey) {
       const saved = await bankFallback(subject, year, count, "no-api-key");

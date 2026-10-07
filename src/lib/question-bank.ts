@@ -3,6 +3,8 @@
  *
  *  - saveToBank():    every question ALOC returns is stored, de-duplicated by its text + options.
  *  - sampleFromBank(): a random sample, used when ALOC is down / out of credits so students are never stranded.
+ *  - serveFromBank():  BANK FIRST — once the bank holds enough questions for a subject (or subject + year), students
+ *                      are served from it directly and ALOC is not called at all. Filled by scripts/fill-bank.ts.
  *
  * Everything FAILS OPEN: if the table isn't created yet or Supabase hiccups, the app behaves exactly as before.
  */
@@ -109,6 +111,89 @@ export async function bankStats(): Promise<{ subject: string; total: number; wit
       total: Number(r.total),
       withImages: Number(r.with_images),
     }));
+  } catch {
+    return null;
+  }
+}
+
+// ─── Bank first ──────────────────────────────────────────────────────────────
+// The bank is the main source once it is full enough; ALOC is only asked when the bank is thin (and what ALOC
+// returns is saved, so the bank keeps growing). Turn it off with QUESTION_SOURCE=live.
+
+/** A named exam year is served from the bank once it holds this many questions (a JAMB paper has 40 per subject). */
+export const BANK_YEAR_SET_SIZE = 40;
+/** "Random mix — all years" is served from the bank once a subject holds at least this many questions. */
+export const BANK_MIN_ANY_YEAR = 150;
+
+/** QUESTION_SOURCE=live switches bank-first off (students always get fresh ALOC questions, as before). */
+export function bankFirstEnabled(): boolean {
+  return (process.env.QUESTION_SOURCE ?? "").trim().toLowerCase() !== "live";
+}
+
+/**
+ * English is never served from the bank yet: its comprehension / cloze questions only make sense grouped with
+ * their passage (see lib/englishPaper.ts), and a random sample would split them up.
+ */
+export function isEnglishSubject(subject: string): boolean {
+  return /^(english|english language|use of english)$/.test(normSubject(subject));
+}
+
+/**
+ * Pure decision (no I/O, so it is easy to test): given how many questions the bank holds, should this request be
+ * answered from the bank, and how many questions must come back for that answer to count?
+ */
+export function bankServePlan(input: {
+  subject: string;
+  /** null = random mix of all years */
+  year: string | null;
+  want: number;
+  bankSize: number;
+}): { serve: boolean; minReturn: number } {
+  const want = Math.min(200, Math.max(1, Math.floor(input.want) || 1));
+  if (isEnglishSubject(input.subject)) return { serve: false, minReturn: want };
+  if (input.year) {
+    // One exam year only has about a paper's worth of questions, so never ask for more than that to be present
+    const need = Math.min(want, BANK_YEAR_SET_SIZE);
+    return { serve: input.bankSize >= need, minReturn: Math.ceil(need * 0.9) };
+  }
+  // Random mix: wait until the pool is comfortably bigger than the request so sessions don't repeat
+  return { serve: input.bankSize >= Math.max(BANK_MIN_ANY_YEAR, want * 2), minReturn: Math.ceil(want * 0.9) };
+}
+
+const COUNT_TTL_MS = 5 * 60 * 1000;
+const countCache = new Map<string, { at: number; n: number }>();
+
+/** How many questions the bank holds for a subject (and optionally one year). 0 when unavailable. Cached for 5 minutes. */
+export async function bankCount(subject: string, year: string | null): Promise<number> {
+  try {
+    const cacheKey = `${normSubject(subject)}|${year ?? ""}`;
+    const hit = countCache.get(cacheKey);
+    if (hit && Date.now() - hit.at < COUNT_TTL_MS) return hit.n;
+    const db = adminClient();
+    if (!db) return 0;
+    let q = db.from("question_bank").select("key", { count: "exact", head: true }).eq("subject", normSubject(subject));
+    if (year) q = q.eq("year", year);
+    const { count, error } = await q;
+    if (error || typeof count !== "number") return 0; // not cached, so a recovered database is noticed straight away
+    countCache.set(cacheKey, { at: Date.now(), n: count });
+    return count;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * BANK FIRST. Returns a random set from the bank when it is full enough for this request, or null — meaning
+ * "ask ALOC as before". Never throws: any database problem simply means null.
+ */
+export async function serveFromBank(subject: string, year: string | null, want: number): Promise<NormalizedQuestion[] | null> {
+  try {
+    if (!bankFirstEnabled() || !subject || isEnglishSubject(subject)) return null;
+    const bankSize = await bankCount(subject, year);
+    const plan = bankServePlan({ subject, year, want, bankSize });
+    if (!plan.serve) return null;
+    const list = await sampleFromBank(subject, year, want);
+    return list.length >= plan.minReturn ? list : null;
   } catch {
     return null;
   }
