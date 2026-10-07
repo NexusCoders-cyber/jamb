@@ -198,6 +198,7 @@ async function main(): Promise<void> {
       const seen = new Set<string>();
       let stagnant = 0;
       let saved = 0;
+      let already = 0;
       for (let call = 0; call < opts.maxCalls && stagnant < opts.stopAfter; call++) {
         const page = await fetchPage(subject.name, year, english);
         if (page === "none" || page.length === 0) {
@@ -213,24 +214,29 @@ async function main(): Promise<void> {
         });
         stagnant = fresh.length === 0 ? stagnant + 1 : 0;
         if (fresh.length > 0 && !opts.dry) {
-          const written = await bank.saveToBank(subject.name, fresh);
-          if (written === 0 && fresh.length >= 5) {
+          const res = await bank.saveNewToBank(subject.name, fresh);
+          if (!res.ok) {
             throw new Error(
               "Could not save to the question bank. Has supabase/question_bank.sql been run, and are the Supabase keys right?",
             );
           }
-          saved += written;
+          saved += res.added;
+          already += res.existing;
         }
       }
       subjectSeen += seen.size;
       totalSeen += seen.size;
       totalSaved += saved;
-      console.log(seen.size === 0 ? `  ${year}: nothing from ALOC` : `  ${year}: ${seen.size} questions${opts.dry ? "" : `, ${saved} saved`}`);
+      console.log(
+        seen.size === 0
+          ? `  ${year}: nothing from ALOC`
+          : `  ${year}: ${seen.size} questions${opts.dry ? "" : ` — ${saved} new, ${already} already saved (not stored again)`}`,
+      );
     }
     console.log(`  → ${subjectSeen} questions seen for ${subject.name}\n`);
   }
 
-  console.log(`Done. ${combos} subject/year combinations, ${totalSeen} questions seen${opts.dry ? "" : `, ${totalSaved} saved`}.`);
+  console.log(`Done. ${combos} subject/year combinations, ${totalSeen} questions seen${opts.dry ? "" : `, ${totalSaved} new ones stored`}.`);
   if (!opts.dry) {
     const stats = await bank.bankStats();
     if (stats) {

@@ -1,7 +1,7 @@
 /**
  * Server-side question bank (table public.question_bank, see supabase/question_bank.sql).
  *
- *  - saveToBank():    every question ALOC returns is stored, de-duplicated by its text + options.
+ *  - saveToBank():    every NEW question ALOC returns is stored; ones already stored are skipped, never rewritten.
  *  - sampleFromBank(): a random sample, used when ALOC is down / out of credits so students are never stranded.
  *  - serveFromBank():  BANK FIRST — once the bank holds enough questions for a subject (or subject + year), students
  *                      are served from it directly and ALOC is not called at all. Filled by scripts/fill-bank.ts.
@@ -47,11 +47,27 @@ function worthKeeping(q: NormalizedQuestion): boolean {
 const hasPictures = (q: NormalizedQuestion) =>
   Boolean(q.image || q.images?.length || q.optionImages?.some(Boolean) || q.sectionImages?.length);
 
-/** @returns how many rows were written (0 when the bank isn't available). */
-export async function saveToBank(subject: string, questions: NormalizedQuestion[]): Promise<number> {
+export type SaveResult = {
+  /** Questions that were NEW and are now stored */
+  added: number;
+  /** Questions the bank already had — left exactly as they were (nothing is written for them) */
+  existing: number;
+  /** false when the database could not be reached or the table is missing */
+  ok: boolean;
+};
+
+/**
+ * Store only the questions the bank does not have yet.
+ *
+ * A question already in the bank (same subject + same text + same options) is NEVER written again:
+ * the insert uses ON CONFLICT DO NOTHING, so repeats cost no storage and leave no rewritten leftovers
+ * behind in the table. Before this, every repeat was rewritten on every save, which wastes database space.
+ */
+export async function saveNewToBank(subject: string, questions: NormalizedQuestion[]): Promise<SaveResult> {
+  const none: SaveResult = { added: 0, existing: 0, ok: false };
   try {
     const db = adminClient();
-    if (!db || !subject) return 0;
+    if (!db || !subject) return none;
     const seen = new Set<string>();
     const rows = questions.filter(worthKeeping).flatMap((q) => {
       const key = bankKey(subject, q);
@@ -64,23 +80,36 @@ export async function saveToBank(subject: string, questions: NormalizedQuestion[
         exam_type: q.examtype ?? null,
         has_images: hasPictures(q),
         data: q,
-        updated_at: new Date().toISOString(),
       }];
     });
-    let written = 0;
+    if (rows.length === 0) return { added: 0, existing: 0, ok: true };
+    let added = 0;
+    let existing = 0;
     for (let i = 0; i < rows.length; i += 100) {
-      const { error } = await db.from("question_bank").upsert(rows.slice(i, i + 100), { onConflict: "key" });
+      const chunk = rows.slice(i, i + 100);
+      // .select("key") makes the database return only the rows it actually inserted
+      const { data, error } = await db
+        .from("question_bank")
+        .upsert(chunk, { onConflict: "key", ignoreDuplicates: true })
+        .select("key");
       if (error) {
         console.warn("[question-bank] save skipped:", error.message);
-        break; // table missing or database trouble — stop quietly
+        return { added, existing, ok: false }; // table missing or database trouble — stop quietly
       }
-      written += Math.min(100, rows.length - i);
+      const inserted = Array.isArray(data) ? data.length : 0;
+      added += inserted;
+      existing += chunk.length - inserted;
     }
-    return written;
+    return { added, existing, ok: true };
   } catch (err) {
     console.warn("[question-bank] save failed:", err instanceof Error ? err.message : err);
-    return 0;
+    return none;
   }
+}
+
+/** Same as saveNewToBank, returning only how many NEW questions were stored (0 when none / unavailable). */
+export async function saveToBank(subject: string, questions: NormalizedQuestion[]): Promise<number> {
+  return (await saveNewToBank(subject, questions)).added;
 }
 
 /** A random sample for a subject (and optionally one exam year). Empty when the bank has nothing / is unavailable. */

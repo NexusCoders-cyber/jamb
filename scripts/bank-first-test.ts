@@ -4,10 +4,16 @@
  *   npx tsx scripts/bank-first-test.ts
  *
  * Covers: when a request is answered from the bank, the QUESTION_SOURCE=live switch, English staying on ALOC,
- * failing open when Supabase is not configured, and the fill script's option parsing.
+ * failing open when Supabase is not configured, questions already saved never being stored again, and the
+ * fill script's option parsing.
  */
 import assert from "node:assert/strict";
-import { BANK_MIN_ANY_YEAR, bankFirstEnabled, bankServePlan, isEnglishSubject, serveFromBank } from "../src/lib/question-bank";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import type { NormalizedQuestion } from "../src/lib/aloc";
+import {
+  BANK_MIN_ANY_YEAR, bankFirstEnabled, bankServePlan, isEnglishSubject, saveNewToBank, serveFromBank,
+} from "../src/lib/question-bank";
 import { parseArgs, parseYears } from "./fill-bank";
 
 let passed = 0;
@@ -80,6 +86,57 @@ async function run() {
     assert.equal(await serveFromBank("Mathematics", "2019", 40), null);
     if (saved.u !== undefined) process.env.NEXT_PUBLIC_SUPABASE_URL = saved.u;
     if (saved.k !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = saved.k;
+  });
+
+  console.log("never stored twice");
+
+  await test("a question already saved is not stored again (only new ones are)", async () => {
+    // A tiny stand-in for the database: inserts only keys it does not have (like ON CONFLICT DO NOTHING)
+    // and answers with the rows it really inserted.
+    const rows = new Map<string, unknown>();
+    const writes: number[] = [];
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (d) => (body += d));
+      req.on("end", () => {
+        const ignore = /ignore-duplicates/.test(String(req.headers["prefer"] ?? ""));
+        const inserted: { key: string }[] = [];
+        for (const r of JSON.parse(body) as { key: string }[]) {
+          if (ignore && rows.has(r.key)) continue;
+          rows.set(r.key, r);
+          inserted.push({ key: r.key });
+        }
+        writes.push(inserted.length);
+        res.writeHead(201, { "content-type": "application/json" });
+        res.end(JSON.stringify(inserted));
+      });
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const saved = { u: process.env.NEXT_PUBLIC_SUPABASE_URL, k: process.env.SUPABASE_SERVICE_ROLE_KEY };
+    process.env.NEXT_PUBLIC_SUPABASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "svc";
+    try {
+      const q = (i: number): NormalizedQuestion => ({
+        id: `id-${i}`, prompt: `What is ${i} + ${i}?`, options: [`${i}`, `${i * 2}`, `${i * 3}`, `${i * 4}`],
+        answer: 1, explanation: null, year: "2019", source: "aloc",
+      });
+      const first = await saveNewToBank("Mathematics", [q(1), q(2), q(3)]);
+      assert.deepEqual(first, { added: 3, existing: 0, ok: true });
+
+      // same three again, plus one genuinely new question, and a repeat of the same question inside one batch
+      const second = await saveNewToBank("Mathematics", [q(1), q(2), q(3), q(4), q(4)]);
+      assert.deepEqual(second, { added: 1, existing: 3, ok: true });
+      assert.equal(rows.size, 4);
+
+      // an ALOC id change does not matter — it is the same question text and options
+      const renamed = { ...q(2), id: "different-id" };
+      assert.deepEqual(await saveNewToBank("Mathematics", [renamed]), { added: 0, existing: 1, ok: true });
+      assert.equal(rows.size, 4);
+    } finally {
+      server.close();
+      if (saved.u === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = saved.u;
+      if (saved.k === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY; else process.env.SUPABASE_SERVICE_ROLE_KEY = saved.k;
+    }
   });
 
   console.log("fill script options");
