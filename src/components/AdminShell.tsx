@@ -22,6 +22,7 @@ const SECTIONS = [
   { label: "Messages",      href: "/admin/messages",       icon: "✉" },
   { label: "Exams",         href: "/admin/exams",          icon: "▤" },
   { label: "Reports",       href: "/admin/reports",        icon: "⚑" },
+  { label: "Message reports", href: "/admin/dm-reports",   icon: "⚐" },
   { label: "Syllabus",      href: "/admin/syllabus",       icon: "✦" },
   { label: "Announcements", href: "/admin/announcements",  icon: "❢" },
   { label: "Promos",        href: "/admin/promos",         icon: "★" },

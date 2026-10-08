@@ -13,7 +13,9 @@ import {
 import Avatar from "@/components/Avatar";
 import OnlineDot, { useOnlineUsers, OnlineStatusText } from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
-import { ChevronDown, Mail, MoreHorizontal, Reply, Copy, Swords, Trash2, X } from "lucide-react";
+import ReportDMDialog from "@/components/ReportDMDialog";
+import { blockUser, isBlocked, unblockUser } from "@/lib/dmSafety";
+import { Ban, ChevronDown, Flag, Mail, MoreHorizontal, Reply, Copy, Swords, Trash2, X } from "lucide-react";
 
 function timeLabel(iso: string) {
   const d = new Date(iso);
@@ -126,7 +128,7 @@ function longPressHandlers(id: string, onLongPress: () => void, ms = 450) {
 // ─── Bottom action sheet (WhatsApp style) ─────────────────────────────────────
 
 function MessageActionSheet({
-  msg, isMine, partnerName, onReply, onCopy, onDelete, onClose,
+  msg, isMine, partnerName, onReply, onCopy, onDelete, onReport, onClose,
 }: {
   msg: DirectMessage;
   isMine: boolean;
@@ -134,6 +136,7 @@ function MessageActionSheet({
   onReply: () => void;
   onCopy: () => void;
   onDelete: () => void;
+  onReport: () => void;
   onClose: () => void;
 }) {
   return (
@@ -163,6 +166,15 @@ function MessageActionSheet({
               className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-slate-800 hover:bg-violet-50">
               <Copy className="h-5 w-5 text-violet-600" aria-hidden /> Copy text
             </button>
+            {!isMine && (
+              <>
+                <div className="h-px bg-slate-100" />
+                <button type="button" onClick={onReport}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left text-sm font-bold text-rose-700 hover:bg-rose-50">
+                  <Flag className="h-5 w-5 text-rose-600" aria-hidden /> Report message
+                </button>
+              </>
+            )}
             {isMine && (
               <>
                 <div className="h-px bg-slate-100" />
@@ -204,7 +216,13 @@ export default function DMConversationPage() {
   const [copied, setCopied] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [expandedReply, setExpandedReply] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reportTarget, setReportTarget] = useState<{ messageId: string | null; preview?: string } | null>(null);
+  const [safetyMsg, setSafetyMsg] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const blockedRef = useRef(false);
+  useEffect(() => { blockedRef.current = blocked; }, [blocked]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -214,13 +232,15 @@ export default function DMConversationPage() {
     Promise.all([
       getProfile(supabase, partnerId),
       getDMThread(supabase, user.id, partnerId),
-    ]).then(([profile, dms]) => {
+      isBlocked(supabase, user.id, partnerId),
+    ]).then(([profile, dms, iBlocked]) => {
+      setBlocked(iBlocked);
       if (profile) {
         setPartnerName(profile.full_name || "Student");
         setPartnerAvatar(profile.avatar_url || null);
       }
-      setMessages(dms);
-      markDMsRead(supabase, user.id, partnerId);
+      setMessages(iBlocked ? [] : dms);
+      if (!iBlocked) markDMsRead(supabase, user.id, partnerId);
     }).finally(() => { setLoading(false); setTimeout(() => bottomRef.current?.scrollIntoView(), 50); });
   }, [user, partnerId, authLoading]);
 
@@ -240,6 +260,7 @@ export default function DMConversationPage() {
             (msg.sender_id === user.id && msg.receiver_id === partnerId) ||
             (msg.sender_id === partnerId && msg.receiver_id === user.id);
           if (!relevant) return;
+          if (blockedRef.current && msg.sender_id === partnerId) return;
 
           setMessages((prev) => {
             if (prev.find((m) => m.id === msg.id)) return prev;
@@ -285,6 +306,27 @@ export default function DMConversationPage() {
     } else {
       setSendError("Could not delete — the update may not be applied yet.");
     }
+  }
+
+  async function handleBlock() {
+    if (!user) return;
+    setMenuOpen(false);
+    if (!window.confirm(`Block ${partnerName}? They won't be able to message you, and you won't see their messages. They won't be told.`)) return;
+    const err = await blockUser(createSupabaseBrowserClient(), user.id, partnerId);
+    if (err) { setSafetyMsg(err); return; }
+    setBlocked(true); setMessages([]); setReplyTo(null); setReportTarget(null);
+    setSafetyMsg(`${partnerName} is blocked.`);
+  }
+
+  async function handleUnblock() {
+    if (!user) return;
+    setMenuOpen(false);
+    const supabase = createSupabaseBrowserClient();
+    const err = await unblockUser(supabase, user.id, partnerId);
+    if (err) { setSafetyMsg(err); return; }
+    setBlocked(false); setSafetyMsg("");
+    setMessages(await getDMThread(supabase, user.id, partnerId));
+    setTimeout(() => bottomRef.current?.scrollIntoView(), 50);
   }
 
   async function handleCopy(msg: DirectMessage) {
@@ -370,6 +412,37 @@ export default function DMConversationPage() {
         <Link href="/community" className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600">
           Community
         </Link>
+        <div className="relative">
+          <button type="button" onClick={() => setMenuOpen((v) => !v)} aria-label="More options" aria-expanded={menuOpen}
+            className="rounded-full p-2 text-slate-600 hover:bg-slate-100">
+            <MoreHorizontal className="h-5 w-5" aria-hidden />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-slate-200">
+                <button type="button" onClick={() => { setMenuOpen(false); setReportTarget({ messageId: null }); }}
+                  className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-slate-50">
+                  <Flag className="h-4 w-4 text-rose-600" aria-hidden /> Report {partnerName}
+                </button>
+                {blocked ? (
+                  <button type="button" onClick={() => void handleUnblock()}
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-slate-800 hover:bg-slate-50">
+                    <Ban className="h-4 w-4 text-slate-500" aria-hidden /> Unblock
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => void handleBlock()}
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm font-bold text-rose-700 hover:bg-rose-50">
+                    <Ban className="h-4 w-4" aria-hidden /> Block {partnerName}
+                  </button>
+                )}
+                <Link href="/messages/blocked" className="block border-t border-slate-100 px-4 py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">
+                  Blocked people
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
@@ -381,6 +454,14 @@ export default function DMConversationPage() {
                   <div className="animate-pulse rounded-2xl bg-slate-200 h-10 w-48" />
                 </div>
               ))}
+            </div>
+          ) : blocked ? (
+            <div className="pt-16 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-rose-100">
+                <Ban className="h-8 w-8 text-rose-600" aria-hidden />
+              </div>
+              <p className="text-lg font-black text-slate-900">{partnerName} is blocked</p>
+              <p className="mt-1 text-sm text-slate-500">You won&apos;t see their messages and they can&apos;t message you.</p>
             </div>
           ) : messages.length === 0 ? (
             <div className="pt-16 text-center">
@@ -466,6 +547,13 @@ export default function DMConversationPage() {
       <div className="sticky bottom-0 z-30 shrink-0 border-t border-slate-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="mx-auto max-w-2xl">
           {sendError && <p className="mb-2 text-xs text-rose-600">{sendError}</p>}
+          {safetyMsg && !blocked && <p className="mb-2 text-xs text-rose-600">{safetyMsg}</p>}
+          {blocked && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-100 px-4 py-3">
+              <p className="text-sm text-slate-600">You blocked {partnerName}.</p>
+              <button type="button" onClick={() => void handleUnblock()} className="rounded-full bg-violet-600 px-4 py-2 text-xs font-black text-white hover:bg-violet-700">Unblock</button>
+            </div>
+          )}
 
           {replyTo && (
             <div className="mb-2 flex items-center gap-2 rounded-xl border-l-4 border-violet-500 bg-violet-50 px-3 py-2">
@@ -482,7 +570,7 @@ export default function DMConversationPage() {
             </div>
           )}
 
-          <div className="flex items-end gap-3">
+          <div className={`flex items-end gap-3 ${blocked ? "hidden" : ""}`}>
             <Avatar user={{ full_name: myName, avatar_url: null }} size="sm" />
             <div className="flex flex-1 min-w-0 items-end gap-1">
               <EmojiPicker onPick={(emoji) => setBody((b) => b + emoji)} />
@@ -515,7 +603,7 @@ export default function DMConversationPage() {
               )}
             </button>
           </div>
-          <p className="mt-1 text-right text-[10px] text-slate-400">Ctrl+Enter to send</p>
+          {!blocked && <p className="mt-1 text-right text-[10px] text-slate-400">Ctrl+Enter to send</p>}
         </div>
       </div>
 
@@ -528,7 +616,19 @@ export default function DMConversationPage() {
           onReply={() => { setReplyTo(sheetMsg); setSheetMsg(null); setTimeout(() => inputRef.current?.focus(), 60); }}
           onCopy={() => { void handleCopy(sheetMsg); setSheetMsg(null); }}
           onDelete={() => { void handleDelete(sheetMsg); setSheetMsg(null); }}
+          onReport={() => { setReportTarget({ messageId: sheetMsg.id, preview: sheetMsg.body.slice(0, 160) }); setSheetMsg(null); }}
           onClose={() => setSheetMsg(null)}
+        />
+      )}
+
+      {reportTarget && (
+        <ReportDMDialog
+          userId={partnerId}
+          userName={partnerName}
+          messageId={reportTarget.messageId}
+          preview={reportTarget.preview}
+          onClose={() => setReportTarget(null)}
+          onBlock={blocked ? undefined : () => void handleBlock()}
         />
       )}
 

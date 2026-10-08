@@ -262,6 +262,10 @@ export default function MessagesPage() {
                   </div>
                 )}
 
+                <Link href="/messages/blocked" className="mt-4 block text-center text-xs font-semibold text-slate-400 hover:text-slate-600">
+                  Blocked people
+                </Link>
+
                 {/* People you may know — moved to its own Facebook-style page */}
                 {!loading && (
                   <Link href="/people"
