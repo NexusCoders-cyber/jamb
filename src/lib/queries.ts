@@ -124,6 +124,8 @@ export type Notification = {
   user_id: string;
   title: string;
   body: string;
+  /** Where tapping it should go (e.g. an article). Only set once supabase/push.sql has been run. */
+  url?: string | null;
   read_at: string | null;
   created_at: string;
 };

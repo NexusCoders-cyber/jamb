@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { getUnreadDMCount } from "@/lib/queries";
+import { useNewArticles } from "@/lib/useNewArticles";
 import type { LucideIcon } from "lucide-react";
 import {
   Flame,
@@ -32,6 +33,7 @@ import {
   MessagesSquare,
   Mail,
   Bell,
+  Newspaper,
   Trophy,
   Settings,
   UserRound,
@@ -57,6 +59,7 @@ const NAV_GROUPS: { label: string; items: { label: string; href: string; icon: L
       { label: "Analytics",       href: "/analytics",           icon: BarChart3 },
       { label: "Syllabus",        href: "/knowledge-hub",       icon: Library },
       { label: "Novels",          href: "/novels",              icon: BookOpen },
+      { label: "Blog",            href: "/news",                icon: Newspaper },
       { label: "Mistakes",        href: "/mistakes",            icon: Target },
       { label: "Bookmarks",       href: "/bookmarks",           icon: Bookmark },
     ],
@@ -187,7 +190,7 @@ function usePendingInviteCount(): number {
 
 // ─── Sidebar (desktop) ────────────────────────────────────────────────────────
 
-function Sidebar({ pathname, inviteCount }: { pathname: string; inviteCount: number }) {
+function Sidebar({ pathname, inviteCount, newArticles }: { pathname: string; inviteCount: number; newArticles: number }) {
   return (
     <aside className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-slate-200/80 lg:bg-white lg:shadow-[2px_0_20px_rgba(101,87,217,0.06)]">
       {/* Logo */}
@@ -220,6 +223,8 @@ function Sidebar({ pathname, inviteCount }: { pathname: string; inviteCount: num
                       <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">
                         {inviteCount > 9 ? "9+" : inviteCount}
                       </span>
+                    ) : item.href === "/news" && newArticles > 0 ? (
+                      <span className="ml-auto rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-black text-white">NEW</span>
                     ) : (
                       active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-500" />
                     )}
@@ -354,6 +359,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
   // than one component throws "cannot add callbacks after subscribe()".
   const unread = useUnreadDMCount();
   const inviteCount = usePendingInviteCount();
+  const newArticles = useNewArticles();
 
   // Focus mode: the game IS the screen — no navigation anywhere.
   if (focus) {
@@ -367,7 +373,7 @@ export default function AppShell({ children, title, back, hideTopBar = false, hi
     // (OnlineProvider lives in the root layout — survives client navigations.)
     <div className={`bg-[#f5f4ff] lg:pl-64 min-h-dvh ${hideTopBar ? "pt-safe" : ""}`}>
       {/* Desktop sidebar */}
-      <Sidebar pathname={pathname} inviteCount={inviteCount} />
+      <Sidebar pathname={pathname} inviteCount={inviteCount} newArticles={newArticles} />
 
       {/* Mobile top bar */}
       {!hideTopBar && <TopBar title={title} back={back} unread={unread} />}

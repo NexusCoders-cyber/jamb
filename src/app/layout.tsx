@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { OnlineProvider } from "@/components/OnlineDot";
 import OfflineBanner from "@/components/OfflineBanner";
 import PwaInstall from "@/components/PwaInstall";
+import PushResync from "@/components/PushResync";
 import ThemeSync from "@/components/ThemeSync";
 import StorageGuard from "@/components/StorageGuard";
 import { THEME_INIT_SCRIPT } from "@/lib/theme-init";
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <OnlineProvider>
           {children}
           <PwaInstall />
+          <PushResync />
           <OfflineBanner />
         </OnlineProvider>
       </body>

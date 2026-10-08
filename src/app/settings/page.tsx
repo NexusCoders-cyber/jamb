@@ -10,6 +10,7 @@ import AuthGuard from "@/components/AuthGuard";
 import AccountSecurity from "@/components/AccountSecurity";
 import CloudBackupCard from "@/components/CloudBackupCard";
 import OfflinePacksCard from "@/components/OfflinePacksCard";
+import NotificationSettings from "@/components/NotificationSettings";
 import { getProfile, updateProfile } from "@/lib/queries";
 import { Check, Monitor, Moon, Sun } from "lucide-react";
 import { useTheme, type ThemePref } from "@/lib/theme";
@@ -215,15 +216,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Notifications — display only for now */}
-            <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
-              <h2 className="mb-4 text-xl font-black text-slate-900">Notifications</h2>
-              <div className="space-y-2">
-                {["Push notifications", "Announcements", "Streak reminders"].map((item) => (
-                  <div key={item} className="rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200">{item}</div>
-                ))}
-              </div>
-            </div>
+            <NotificationSettings />
 
             <OfflinePacksCard />
 

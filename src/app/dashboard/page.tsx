@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, startTransition } from "react";
-import { ArrowRight, Bell, Bookmark, BookOpen, FileText, MessagesSquare, PenLine, RotateCcw, Target } from "lucide-react";
+import { ArrowRight, Bell, Bookmark, BookOpen, FileText, MessagesSquare, Newspaper, PenLine, RotateCcw, Target } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { productCatalog, type Product } from "@/lib/catalog";
 import { useUser } from "@/lib/useUser";
@@ -14,6 +14,7 @@ import { attemptLabel, attemptSubjects, accuracyToJamb, WEAK_BELOW, MIN_ANSWERED
 import type { AttemptSubject } from "@/lib/analytics";
 import AppShell from "@/components/AppShell";
 import ExamCountdown from "@/components/ExamCountdown";
+import { useNewArticles } from "@/lib/useNewArticles";
 
 const quickActions: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
   { label: "Full mock exam", detail: "2 hrs · 180 questions", href: "/exam", tone: "bg-[#e6f5ef] text-[#0d6b3f]", icon: FileText },
@@ -22,6 +23,8 @@ const quickActions: { label: string; detail: string; href: string; tone: string;
   { label: "Saved questions", detail: "Your bookmarks, offline", href: "/bookmarks", tone: "bg-[#e8f0fb] text-[#2b5c9a]", icon: Bookmark },
   { label: "Mistakes", detail: "Re-drill what you missed", href: "/mistakes", tone: "bg-[#fde9ec] text-[#b4233b]", icon: Target },
   { label: "Community", detail: "Discuss with others", href: "/community", tone: "bg-[#f6e9e1] text-[#975334]", icon: MessagesSquare },
+  { label: "Blog", detail: "Study tips & news", href: "/news", tone: "bg-[#e7f3f8] text-[#1f6a8a]", icon: Newspaper },
+  { label: "Notifications", detail: "Updates for you", href: "/notifications", tone: "bg-[#f3ecfb] text-[#6b3fa0]", icon: Bell },
 ];
 
 const SUBJECT_COLORS = ["bg-[#d7a62d]", "bg-[#2b9b6a]", "bg-[#4a78a8]", "bg-[#b9684a]"];
@@ -63,6 +66,7 @@ function MiniRing({ pct }: { pct: number }) {
 
 export default function DashboardPage() {
   const { user, loading: authLoading } = useUser();
+  const newArticles = useNewArticles();
 
   const [userName, setUserName] = useState("Student");
   const [targetScore, setTargetScore] = useState(300);
@@ -360,7 +364,12 @@ export default function DashboardPage() {
                   <action.icon className="h-5 w-5" aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-black text-slate-900">{action.label}</p>
+                  <p className="truncate text-sm font-black text-slate-900">
+                    {action.label}
+                    {action.href === "/news" && newArticles > 0 && (
+                      <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 align-middle text-[9px] font-black text-white">NEW</span>
+                    )}
+                  </p>
                   <p className="truncate text-[11px] text-slate-400">{action.detail}</p>
                 </div>
               </Link>

@@ -123,3 +123,35 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 });
+
+// ── Phone notifications (web push) ───────────────────────────────────────────
+// The server sends { title, body, url, tag }. Show it, and open the right page when it is tapped.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_e) { data = { title: "Qubit", body: event.data ? event.data.text() : "" }; }
+  const title = (data && data.title) || "Qubit";
+  const options = {
+    body: (data && data.body) || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: (data && data.tag) || undefined,   // same tag = replaces an older notification instead of stacking
+    renotify: false,
+    data: { url: (data && typeof data.url === "string" && data.url.startsWith("/") ? data.url : "/notifications") },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || "/notifications", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+          return c.focus().then((f) => ("navigate" in f ? f.navigate(target) : f)).catch(() => self.clients.openWindow(target));
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

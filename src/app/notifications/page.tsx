@@ -87,6 +87,9 @@ export default function NotificationsPage() {
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{item.body}</p>
                   <p className="mt-1 text-xs text-slate-400">{relativeTime(item.created_at)}</p>
+                  {item.url && item.url.startsWith("/") && (
+                    <Link href={item.url} className="mt-2 inline-block text-xs font-black text-violet-600 hover:underline">Open →</Link>
+                  )}
                 </div>
                 <span className="shrink-0 rounded-full bg-violet-100 px-3 py-1 text-[10px] font-bold text-violet-700">
                   {item.read_at ? "Read" : "New"}

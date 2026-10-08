@@ -49,8 +49,20 @@ export default function AdminAnnouncementsPage() {
     const res = await sendAnnouncement(supabase, title.trim(), body.trim());
     if (res.ok) {
       remember({ title: title.trim(), body: body.trim(), at: new Date().toISOString() });
+      let extra = "";
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const r = await fetch("/api/admin/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+          body: JSON.stringify({ title: title.trim(), body: body.trim(), url: "/notifications" }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { push?: { configured: boolean; sent: number; targeted: number } };
+        if (r.ok && j.push?.configured) extra = ` Phone notification sent to ${j.push.sent} of ${j.push.targeted} phones.`;
+        else if (r.ok) extra = " (Phone notifications aren't set up on the server yet.)";
+      } catch { /* the in-app announcement already went out */ }
       setTitle(""); setBody("");
-      setNotice({ text: "Announcement sent to all students.", ok: true });
+      setNotice({ text: "Announcement sent to all students." + extra, ok: true });
     } else {
       setNotice({ text: res.error ?? "Could not send. Make sure the SQL migration has run and you are an admin.", ok: false });
     }
