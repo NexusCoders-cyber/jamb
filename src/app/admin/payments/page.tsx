@@ -56,6 +56,8 @@ export default function AdminPaymentsPage() {
   const [secretKey, setSecretKey]   = useState("");
   const [publicKey, setPublicKey]   = useState("");
   const [showSecret, setShowSecret] = useState(false);
+  // Where the live secret comes from. The secret itself is never loaded into this page.
+  const [secretInfo, setSecretInfo] = useState<{ source: "env" | "database" | "none"; hint: string; dbHasKey: boolean } | null>(null);
 
   // ── Plan prices ────────────────────────────────────────────────────────────
   const [prices, setPrices] = useState<Record<string, string>>({
@@ -97,6 +99,28 @@ export default function AdminPaymentsPage() {
     setTimeout(() => setNotice(null), 4000);
   };
 
+  const loadSecretInfo = useCallback(async () => {
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch("/api/admin/paystack", { headers: { Authorization: `Bearer ${session.access_token}` }, cache: "no-store" });
+      if (res.ok) setSecretInfo(await res.json());
+    } catch { /* leave the status blank */ }
+  }, []);
+
+  async function removeDbSecret() {
+    setBusy(true);
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/admin/paystack", { method: "DELETE", headers: { Authorization: `Bearer ${session?.access_token ?? ""}` } });
+      const j = (await res.json().catch(() => ({}))) as { error?: string };
+      flash(res.ok ? "Removed the secret key from the database." : (j.error ?? "Could not remove it."), res.ok);
+      void loadSecretInfo();
+    } finally { setBusy(false); }
+  }
+
   const load = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
     const [settingsRes, codesRes, paymentsRes, proRes] = await Promise.all([
@@ -116,10 +140,12 @@ export default function AdminPaymentsPage() {
     ]);
 
     const settings = Object.fromEntries(
-      ((settingsRes.data ?? []) as Array<{ key: string; value: string }>).map((s) => [s.key, s.value]),
+      ((settingsRes.data ?? []) as Array<{ key: string; value: string }>)
+        .filter((s) => s.key !== "paystack_secret_key") // never keep the secret in browser memory
+        .map((s) => [s.key, s.value]),
     );
 
-    setSecretKey(settings.paystack_secret_key ?? "");
+    void loadSecretInfo();
     setPublicKey(settings.paystack_public_key ?? "");
     setPrices({
       price_weekly_naira:   settings.price_weekly_naira   ?? "200",
@@ -134,22 +160,25 @@ export default function AdminPaymentsPage() {
     setPayments(((paymentsRes.data ?? []) as unknown) as PaymentRow[]);
     setProUsers(((proRes.data ?? []) as unknown) as ProUser[]);
     setLoading(false);
-  }, []);
+  }, [loadSecretInfo]);
 
   useEffect(() => { void load(); }, [load]);
 
   // ── Save Paystack keys ─────────────────────────────────────────────────────
   async function saveKeys() {
-    if (!secretKey.trim() || !publicKey.trim()) {
-      flash("Both keys are required.", false); return;
+    if (!publicKey.trim()) { flash("The public key is required.", false); return; }
+    if (secretKey.trim() && !/^sk_(live|test)_/.test(secretKey.trim())) {
+      flash("That doesn't look like a Paystack secret key (it starts with sk_live_ or sk_test_).", false); return;
     }
     setBusy(true);
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("admin_settings").upsert([
-      { key: "paystack_secret_key", value: secretKey.trim(),  updated_at: new Date().toISOString() },
-      { key: "paystack_public_key", value: publicKey.trim(),  updated_at: new Date().toISOString() },
-    ]);
+    const now = new Date().toISOString();
+    const rows = [{ key: "paystack_public_key", value: publicKey.trim(), updated_at: now }];
+    // Leave the saved secret alone unless a new one was typed
+    if (secretKey.trim()) rows.push({ key: "paystack_secret_key", value: secretKey.trim(), updated_at: now });
+    const { error } = await supabase.from("admin_settings").upsert(rows);
     flash(error ? error.message : "Paystack keys saved — checkout will use them immediately.", !error);
+    if (!error) { setSecretKey(""); void loadSecretInfo(); }
     setBusy(false);
   }
 
@@ -299,17 +328,33 @@ export default function AdminPaymentsPage() {
           <a href="https://dashboard.paystack.com/#/settings/developer" target="_blank" rel="noopener noreferrer"
             className="text-violet-400 underline">
             Paystack dashboard → Settings → API Keys
-          </a>. The secret key is stored securely server-side and never sent to the browser.
+          </a>. The secret key is never shown here again after saving.
         </p>
+        {secretInfo && (
+          <div className={`mb-4 rounded-xl px-4 py-3 text-xs ring-1 ${
+            secretInfo.source === "env" ? "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30"
+            : secretInfo.source === "database" ? "bg-amber-500/10 text-amber-300 ring-amber-500/30"
+            : "bg-rose-500/10 text-rose-300 ring-rose-500/30"}`}>
+            {secretInfo.source === "env" && <>Secret key comes from the server environment (<span className="font-mono">{secretInfo.hint}</span>) — the safest setup.</>}
+            {secretInfo.source === "database" && <>Secret key is saved in the database (<span className="font-mono">{secretInfo.hint}</span>). Safer: add it as <span className="font-mono">PAYSTACK_SECRET_KEY</span> in your hosting settings, redeploy, then come back and remove the database copy.</>}
+            {secretInfo.source === "none" && <>No secret key is set — payments will not work until you add one.</>}
+            {secretInfo.source === "env" && secretInfo.dbHasKey && (
+              <button type="button" onClick={() => void removeDbSecret()} disabled={busy}
+                className="ml-3 rounded-full bg-emerald-600 px-3 py-1 font-black text-white hover:bg-emerald-700 disabled:opacity-50">
+                Remove database copy
+              </button>
+            )}
+          </div>
+        )}
         <div className="space-y-3">
           <label className="block">
-            <span className="text-xs font-bold text-slate-400">Secret Key (sk_live_… or sk_test_…)</span>
+            <span className="text-xs font-bold text-slate-400">New secret key (sk_live_… or sk_test_…)</span>
             <div className="relative mt-1">
               <input
                 type={showSecret ? "text" : "password"}
                 value={secretKey}
                 onChange={(e) => setSecretKey(e.target.value)}
-                placeholder="sk_live_xxxxxxxxxxxxxxxx"
+                placeholder={secretInfo?.source === "none" ? "sk_live_xxxxxxxxxxxxxxxx" : "Leave empty to keep the current key"}
                 className="w-full rounded-xl bg-slate-800 px-4 py-2.5 pr-10 text-sm font-mono text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500"
               />
               <button type="button" onClick={() => setShowSecret((v) => !v)}

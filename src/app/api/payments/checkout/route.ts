@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPaystackSecret } from "@/lib/paystack-key";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
 
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     const admin = adminClient();
     const settings = await getSettings(admin);
 
-    const secretKey = settings.paystack_secret_key?.trim();
+    const secretKey = (await getPaystackSecret(admin, settings.paystack_secret_key)).key;
     const publicKey = settings.paystack_public_key?.trim();
     if (!secretKey || secretKey.length < 10) {
       return NextResponse.json(

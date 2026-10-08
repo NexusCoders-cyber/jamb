@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPaystackSecretKey } from "@/lib/env";
+import { getPaystackSecret } from "@/lib/paystack-key";
 import { getAdminClient, requireUser, HttpError, errorResponse } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
@@ -87,9 +88,9 @@ export async function POST(req: Request) {
     });
     if (insertErr) throw new HttpError(500, `Could not record payment: ${insertErr.message}`);
 
-    // Paystack initialize — use the admin-configured key first, env as fallback
+    // Paystack initialize — the server env key wins, the admin-saved key is the fallback
     const settingsMap = Object.fromEntries(((settingsData ?? []) as Array<{ key: string; value: string }>).map((s) => [s.key, s.value]));
-    const secretKey = (settingsMap.paystack_secret_key ?? "").trim() || getPaystackSecretKey();
+    const secretKey = (await getPaystackSecret(supabase, settingsMap.paystack_secret_key ?? "")).key || getPaystackSecretKey();
     const origin = new URL(req.url).origin;
     const initRes = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",

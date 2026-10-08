@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getPaystackSecret } from "@/lib/paystack-key";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
 import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
@@ -42,13 +43,8 @@ export async function POST(req: Request) {
 
     const admin = adminClient();
 
-    // Get Paystack secret key from admin_settings
-    const { data: keyRow } = await admin
-      .from("admin_settings")
-      .select("value")
-      .eq("key", "paystack_secret_key")
-      .maybeSingle();
-    const secretKey = (keyRow?.value as string | undefined)?.trim();
+    // Paystack secret: server env first, admin_settings as fallback
+    const secretKey = (await getPaystackSecret(admin)).key;
     if (!secretKey) {
       return NextResponse.json({ error: "Payment not configured." }, { status: 503 });
     }
