@@ -63,7 +63,9 @@ export async function POST(req: Request) {
     // Grant premium
     const plan = payment.plan ?? "lifetime";
     if (plan === "lifetime") {
-      await supabase.from("profiles").update({ premium_lifetime: true }).eq("id", user.id);
+      // There is no "premium_lifetime" column — lifetime simply means a plan end date 100 years away
+      const until = new Date(Date.now() + 100 * 365 * 24 * 3600 * 1000);
+      await supabase.from("profiles").update({ premium_until: until.toISOString() }).eq("id", user.id);
     } else {
       const { data: p } = await supabase.from("profiles").select("premium_until").eq("id", user.id).single();
       const current = (p as { premium_until: string | null } | null)?.premium_until;

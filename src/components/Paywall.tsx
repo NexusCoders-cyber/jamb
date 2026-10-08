@@ -22,6 +22,8 @@ import Link from "next/link";
 import { usePro } from "@/lib/usePro";
 import { Smartphone } from "lucide-react";
 import { useUser } from "@/lib/useUser";
+import { useEffect, useState } from "react";
+import { DEFAULT_PRICES, planCards, type Prices } from "@/lib/pricing";
 
 // ─── Feature metadata ─────────────────────────────────────────────────────────
 const FEATURE_META: Record<string, { icon: string; title: string; description: string }> = {
@@ -74,8 +76,34 @@ const PRO_PERKS = [
 ];
 
 // ─── Paywall wall UI ──────────────────────────────────────────────────────────
-function PaywallWall({ feature, deviceLocked = false, otherDevice = null }: { feature: string; deviceLocked?: boolean; otherDevice?: string | null }) {
+function PaywallWall({ feature, deviceLocked = false, otherDevice = null, needsVerify = false }: { feature: string; deviceLocked?: boolean; otherDevice?: string | null; needsVerify?: boolean }) {
   const meta = FEATURE_META[feature] ?? FEATURE_META.default;
+  // Show the real prices (the same ones the upgrade page charges), not a hard-coded copy
+  const [prices, setPrices] = useState<Prices>(DEFAULT_PRICES);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/payments/prices").then((r) => (r.ok ? r.json() : null)).then((p: Prices | null) => { if (alive && p?.weekly) setPrices(p); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, []);
+
+  // Pro paid for, but this phone hasn't been online long enough to re-confirm the plan: no payment needed
+  if (needsVerify) {
+    return (
+      <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md rounded-[24px] bg-white p-6 text-center shadow-sm ring-1 ring-sky-200" role="status">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-sky-50 text-3xl ring-4 ring-sky-100">📶</div>
+          <h1 className="text-xl font-black text-slate-900">Connect to the internet to check your Pro plan</h1>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            Pro works offline for a few days at a time, then this phone needs to go online once to confirm the plan. Turn on data or Wi-Fi and tap the button — you won&apos;t need to pay again.
+          </p>
+          <button type="button" onClick={() => window.location.reload()}
+            className="mt-5 flex h-12 w-full touch-manipulation items-center justify-center rounded-2xl bg-violet-600 text-sm font-black text-white">
+            Check again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4 py-12">
@@ -121,11 +149,7 @@ function PaywallWall({ feature, deviceLocked = false, otherDevice = null }: { fe
 
         {/* Plans preview */}
         <div className="mb-5 grid grid-cols-3 gap-2 text-center">
-          {[
-            { label: "Weekly", price: "₦200", sub: "7 days" },
-            { label: "Monthly", price: "₦800", sub: "30 days", highlight: true },
-            { label: "6-Month", price: "₦1,700", sub: "180 days" },
-          ].map((plan) => (
+          {planCards(prices).map((plan) => (
             <div
               key={plan.label}
               className={`rounded-2xl p-3 ring-1 ${
@@ -166,7 +190,7 @@ type PaywallGateProps = {
 
 export function PaywallGate({ feature = "default", children }: PaywallGateProps) {
   const { user, loading: authLoading } = useUser();
-  const { isPro, loading: proLoading, deviceLocked, otherDevice } = usePro();
+  const { isPro, loading: proLoading, deviceLocked, otherDevice, needsVerify } = usePro();
 
   // While auth or pro status is resolving, render nothing (avoids flash of wall)
   if (authLoading || proLoading) {
@@ -195,7 +219,7 @@ export function PaywallGate({ feature = "default", children }: PaywallGateProps)
 
   // Free user — show the wall
   if (!isPro) {
-    return <PaywallWall feature={feature} deviceLocked={deviceLocked} otherDevice={otherDevice} />;
+    return <PaywallWall feature={feature} deviceLocked={deviceLocked} otherDevice={otherDevice} needsVerify={needsVerify} />;
   }
 
   // Pro user — render normally
