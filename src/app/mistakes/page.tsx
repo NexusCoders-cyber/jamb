@@ -14,6 +14,7 @@ import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
 import BookmarkButton from "@/components/BookmarkButton";
+import ReportQuestionButton from "@/components/ReportQuestionButton";
 import { Check, PartyPopper, XCircle } from "lucide-react";
 import type { AttemptAnswer } from "@/lib/queries";
 
@@ -181,6 +182,7 @@ export default function MistakesPage() {
                     <p className="text-sm font-bold text-rose-600">Wrong answer</p>
                     <span className="flex items-center gap-2">
                       <BookmarkButton snapshot={q} subject={q.subject_name ?? "Unknown"} />
+                      <ReportQuestionButton subject={q.subject_name ?? "Unknown"} questionId={String(q.id)} prompt={q.prompt} options={q.options} />
                       <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-bold text-rose-700">Mistake</span>
                     </span>
                   </div>

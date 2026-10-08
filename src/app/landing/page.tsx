@@ -6,6 +6,11 @@ import {
   ImageIcon, Library, Menu, Monitor, Smartphone, Swords, Target, Trophy, WifiOff, Users, CalendarCheck, Moon,
 } from "lucide-react";
 import InstallButton from "@/components/InstallButton";
+import { getLivePrices } from "@/lib/prices-server";
+import { formatNaira, planCards } from "@/lib/pricing";
+
+// Prices come from the same place the app charges from; the page refreshes itself every 5 minutes.
+export const revalidate = 300;
 import Logo from "@/components/Logo";
 
 const BRAND = "Qubit";
@@ -34,8 +39,8 @@ export const metadata: Metadata = {
 };
 
 // ── Content ───────────────────────────────────────────────────────────────────
-const faqs = [
-  { q: `Is ${BRAND} free?`, a: "Community, Arena duels and browsing are free. Pro unlocks unlimited practice, mock exams and full analytics from ₦200/week." },
+const faqsFor = (weekly: string) => [
+  { q: `Is ${BRAND} free?`, a: `Community, Arena duels and browsing are free. Pro unlocks unlimited practice, mock exams and full analytics from ${weekly}/week.` },
   { q: "Do I need to install anything?", a: "No. It works in any browser. You can optionally install it on Android or desktop for an offline-capable, app-like experience." },
   { q: "Can I use it without internet?", a: "Yes. Questions you've studied before are cached locally via IndexedDB and available offline. New questions still require a connection." },
   { q: "Is the Lekki Headmaster novel included?", a: "Yes — 124 questions covering the full novel are built into the app. You can practise them solo or duel a friend in the Arena." },
@@ -47,7 +52,7 @@ const faqs = [
 
 const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://orbitprep.app").replace(/\/$/, "");
 
-const schemaOrg = {
+const schemaFor = (weekly: string, faqs: { q: string; a: string }[]) => ({
   "@context": "https://schema.org",
   "@graph": [
     {
@@ -57,7 +62,7 @@ const schemaOrg = {
       "url": siteUrl,
       "applicationCategory": "EducationalApplication",
       "operatingSystem": "Android, Web Browser",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NGN", "description": "Free basic access. Pro subscription from ₦200/week." },
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "NGN", "description": `Free basic access. Pro subscription from ${weekly}/week.` },
       "description": "Smart JAMB/UTME preparation app with 10,000+ past questions, mock CBT exams, study mode, live quiz duels and analytics.",
       "screenshot": `${siteUrl}/screenshots/mock-question.webp`,
     },
@@ -67,7 +72,7 @@ const schemaOrg = {
       "mainEntity": faqs.map(({ q, a }) => ({ "@type": "Question", "name": q, "acceptedAnswer": { "@type": "Answer", "text": a } })),
     },
   ],
-};
+});
 
 const navLinks = [
   { href: "#features", label: "Features" },
@@ -115,12 +120,6 @@ const steps = [
   { n: "3", title: "Review, improve, repeat", desc: "Check corrections per subject, watch your analytics climb and keep your streak alive." },
 ];
 
-const plans = [
-  { label: "Weekly", price: "₦200", sub: "7 days", accent: "bg-slate-50 ring-slate-200" },
-  { label: "Monthly", price: "₦800", sub: "30 days", accent: "bg-violet-600 text-white ring-violet-500", highlight: true },
-  { label: "6-Month", price: "₦1,700", sub: "180 days · best value", accent: "bg-slate-50 ring-slate-200" },
-];
-
 const proPerks = [
   "Unlimited practice & past questions",
   "Full 180-question mock CBT exams",
@@ -146,7 +145,11 @@ function Phone({ src, alt, className = "", priority = false }: { src: string; al
   );
 }
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const prices = await getLivePrices();
+  const plans = planCards(prices);
+  const faqs = faqsFor(formatNaira(prices.weekly));
+  const schemaOrg = schemaFor(formatNaira(prices.weekly), faqs);
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaOrg) }} />
@@ -343,7 +346,7 @@ export default function LandingPage() {
             <p className="mt-3 text-sm text-slate-500">Arena duels and community are always free. Pro unlocks everything else.</p>
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               {plans.map((p) => (
-                <div key={p.label} className={`rounded-[24px] p-6 text-center shadow-sm ring-1 ${p.accent}`}>
+                <div key={p.id} className={`rounded-[24px] p-6 text-center shadow-sm ring-1 ${p.highlight ? "bg-violet-600 text-white ring-violet-500" : "bg-slate-50 ring-slate-200"}`}>
                   {p.highlight && (
                     <span className="mb-2 inline-block rounded-full bg-white/20 px-3 py-0.5 text-[10px] font-black uppercase tracking-wide">Most popular</span>
                   )}
@@ -354,6 +357,11 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
+            {prices.freeTrialEnabled && (
+              <p className="mx-auto mt-6 max-w-md rounded-full bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700 ring-1 ring-emerald-200">
+                New here? Try Pro free for {prices.freeTrialDays} day{prices.freeTrialDays === 1 ? "" : "s"} — no card needed.
+              </p>
+            )}
             <ul className="mx-auto mt-8 grid max-w-xl gap-2.5 text-left sm:grid-cols-2">
               {proPerks.map((t) => (
                 <li key={t} className="flex items-start gap-2 text-sm font-semibold text-slate-600"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />{t}</li>

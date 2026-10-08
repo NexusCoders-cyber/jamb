@@ -11,7 +11,9 @@ import { getAlocApiKey } from "@/lib/env";
 import { assembleEnglishPaper } from "@/lib/englishPaper";
 import { tryV1Questions, runV1Diagnostics } from "@/lib/aloc-v1";
 import type { NormalizedQuestion } from "@/lib/aloc";
-import { saveToBank, sampleFromBank } from "@/lib/question-bank";
+import { saveToBank, sampleFromBank, dropHidden } from "@/lib/question-bank";
+import { questionAccess, FREE_SAMPLE_MAX } from "@/lib/pro-server";
+import { getAdminClient } from "@/lib/quiz-server";
 
 // Question sets are topped up over several ALOC calls, which can take longer than a single page
 export const maxDuration = 30;
@@ -40,7 +42,7 @@ function keepCopy(subject: string, questions: NormalizedQuestion[], source: stri
 
 /** When ALOC can't answer, serve the questions we saved earlier. null = the bank has nothing for this request. */
 async function bankFallback(subject: string, year: string | undefined, want: number, reason: string) {
-  const list = await sampleFromBank(subject, isYearSpecific(year) ? (year as string) : null, Math.min(200, want));
+  const list = await dropHidden(subject, await sampleFromBank(subject, isYearSpecific(year) ? (year as string) : null, Math.min(200, want)));
   if (list.length === 0) return null;
   return NextResponse.json({
     ok: true,
@@ -94,6 +96,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
   }
 
+  // ── Pro rules, enforced here as well as in the screens ─────────────────────
+  // (Free students may only take the small daily-challenge sample; everything else needs an active plan on this phone.)
+  if (endpoint === "questions" || endpoint === "questions-count" || endpoint === "english-paper") {
+    const freeSample = endpoint === "questions-count" && count <= FREE_SAMPLE_MAX;
+    let access: Awaited<ReturnType<typeof questionAccess>> = { allowed: true };
+    try {
+      access = await questionAccess(getAdminClient(), user.id, request.headers.get("x-device-id"), { freeSample });
+    } catch {
+      /* env missing in local dev → don't block */
+    }
+    if (!access.allowed) {
+      return NextResponse.json({ ok: false, code: access.code, error: access.message }, { status: 402 });
+    }
+  }
+
   // ── v1 diagnostics — admins only, spends ~12 ALOC credits, needs &confirm=1 ─
   if (endpoint === "v1-check") {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
@@ -141,6 +158,7 @@ export async function GET(request: Request) {
         if (saved) return saved;
         return NextResponse.json({ ok: false, error: "No questions returned for this subject" }, { status: 404 });
       }
+      questions = await dropHidden(subject, questions);
       keepCopy(subject, questions, source);
       return NextResponse.json({
         ok: true,
@@ -167,6 +185,7 @@ export async function GET(request: Request) {
       if (paper.questions.length === 0) {
         return NextResponse.json({ ok: false, error: "No English questions returned" }, { status: 404 });
       }
+      paper.questions = await dropHidden("english language", paper.questions);
       keepCopy("english language", paper.questions, "aloc");
       return NextResponse.json({ ok: true, provider: "ALOC", source: "aloc", data: paper.questions, meta: paper.meta });
     } catch (err) {
@@ -200,6 +219,7 @@ export async function GET(request: Request) {
         if (saved) return saved;
         return NextResponse.json({ ok: false, error: "No questions returned" }, { status: 404 });
       }
+      questions = await dropHidden(subject, questions);
       keepCopy(subject, questions, source);
       return NextResponse.json({
         ok: true,

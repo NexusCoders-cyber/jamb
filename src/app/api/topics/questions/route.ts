@@ -12,6 +12,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { fetchAlocMany, nameToSlug, slugToName } from "@/lib/aloc";
 import { getAlocApiKey } from "@/lib/env";
 import { TOPICS_BY_SLUG, questionMatchesTopic } from "@/lib/topics";
+import { questionAccess } from "@/lib/pro-server";
+import { getAdminClient } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,14 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
+  // Topic practice is a Pro feature: enforced here too, not only in the screens
+  try {
+    const access = await questionAccess(getAdminClient(), user.id, request.headers.get("x-device-id"));
+    if (!access.allowed) return NextResponse.json({ ok: false, code: access.code, error: access.message }, { status: 402 });
+  } catch {
+    /* env missing in local dev → don't block */
   }
 
   const { searchParams } = new URL(request.url);

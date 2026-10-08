@@ -126,7 +126,7 @@ function UpgradePageContent() {
     { id: "biannual", label: "6-Month", price: `₦${livePrices.biannual.toLocaleString()}`, naira: livePrices.biannual, duration: "180 days", badge: "Best value" },
   ] : [
     { id: "weekly",   label: "Weekly",  price: "₦200",   naira: 200,  duration: "7 days" },
-    { id: "monthly",  label: "Monthly", price: "₦800",   naira: 800,  duration: "30 days", badge: "Most popular", highlight: true },
+    { id: "monthly",  label: "Monthly", price: "₦900",   naira: 900,  duration: "30 days", badge: "Most popular", highlight: true },
     { id: "biannual", label: "6-Month", price: "₦1,700", naira: 1700, duration: "180 days", badge: "Best value" },
   ];
 

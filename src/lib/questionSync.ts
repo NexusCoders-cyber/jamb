@@ -11,6 +11,7 @@
 import { cacheKey } from "./questionCache";
 import { getMeta, setMeta } from "./localDb";
 import { addToPool } from "./questionPool";
+import { deviceHeaders } from "./device";
 
 export const QSYNC_EVERY_MS = 6 * 60 * 60 * 1000;
 const BATCH = 100;
@@ -58,7 +59,10 @@ export async function syncQuestionsInBackground(
       try {
         const res = (await fetch(
           `/api/aloc?endpoint=questions&subject=${encodeURIComponent(subject)}&type=utme&count=${BATCH}&spread=1&t=${Date.now()}`,
-        ).then((r) => r.json())) as { ok: boolean; data?: { id: string | number }[] };
+          { headers: await deviceHeaders() },
+        ).then((r) => r.json())) as { ok: boolean; code?: string; data?: { id: string | number }[] };
+        // Free plan or a phone that doesn't hold the licence: nothing to top up, stop asking
+        if (res.code === "pro_required" || res.code === "device_locked") break;
         if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
           await addToPool(cacheKey(subject), res.data);
           subjects++;

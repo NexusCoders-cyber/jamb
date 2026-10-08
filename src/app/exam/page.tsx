@@ -9,6 +9,8 @@ import AppShell from "@/components/AppShell";
 import ScoreSummary from "@/components/ScoreSummary";
 import { usePro } from "@/lib/usePro";
 import { cacheKey as idbCacheKey } from "@/lib/questionCache";
+import { deviceHeaders } from "@/lib/device";
+import ReportQuestionButton from "@/components/ReportQuestionButton";
 import { buildSessionPool, markQuestionsSeen } from "@/lib/questionPool";
 import { preloadImages } from "@/lib/imagePreload";
 import {
@@ -593,6 +595,7 @@ function InlineReview({
                         </span>
                         <div className="flex items-center gap-1.5">
                           <BookmarkButton snapshot={toSnapshot(q, { index: questionIdx, number: locateInSubject(tabs, questionIdx, total).number }, subject)} subject={q.subject ?? subject} className="!px-2.5 !py-1 !text-xs" />
+                          <ReportQuestionButton subject={q.subject ?? subject} questionId={String(q.id)} prompt={q.prompt} options={q.options} />
                           {q.subject && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">{q.subject}</span>}
                           {q.year && <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{q.year}</span>}
                         </div>
@@ -848,6 +851,7 @@ function ExamPageContent() {
             const spread = examYear === "random" ? "&spread=1" : "";
             const res = (await fetch(
               `/api/aloc?endpoint=questions&subject=${encodeURIComponent(name)}&type=utme${yearParam}&count=${size}${spread}&t=${Date.now()}`,
+              { headers: await deviceHeaders() },
             ).then((r) => r.json())) as { ok: boolean; data?: ExamQuestion[]; error?: string };
             if (res.ok && Array.isArray(res.data) && res.data.length > 0) return res.data;
             throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
@@ -859,7 +863,7 @@ function ExamPageContent() {
       // 5-9 set-text questions, lexis, oral) assembled server-side. Any failure falls
       // back to the plain random pool below, so an exam always starts.
       async function fetchEnglishPaper(): Promise<ExamQuestion[]> {
-        const res = (await fetch(`/api/aloc?endpoint=english-paper&type=utme${yearParam}&t=${Date.now()}`).then((r) => r.json())) as {
+        const res = (await fetch(`/api/aloc?endpoint=english-paper&type=utme${yearParam}&t=${Date.now()}`, { headers: await deviceHeaders() }).then((r) => r.json())) as {
           ok: boolean;
           data?: ExamQuestion[];
           error?: string;
@@ -872,7 +876,7 @@ function ExamPageContent() {
       if (!isExamMode && urlTopic) {
         // Topic session (Learn → Topics): the server fetches a big ALOC pool and
         // filters it with the syllabus keywords for this topic.
-        const res = (await fetch(`/api/topics/questions?subject=${encodeURIComponent(studySubject)}&topic=${encodeURIComponent(urlTopic)}&count=${studyCount}`).then((r) => r.json())) as {
+        const res = (await fetch(`/api/topics/questions?subject=${encodeURIComponent(studySubject)}&topic=${encodeURIComponent(urlTopic)}&count=${studyCount}`, { headers: await deviceHeaders() }).then((r) => r.json())) as {
           ok: boolean;
           data?: ExamQuestion[];
           error?: string;

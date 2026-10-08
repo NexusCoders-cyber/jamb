@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { deviceHeaders } from "@/lib/device";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
@@ -224,6 +225,7 @@ export default function PracticeModePage() {
     try {
       const res = await fetch(
         `/api/aloc?endpoint=questions&subject=${encodeURIComponent(subject)}&year=${encodeURIComponent(yr)}&type=utme`,
+        { headers: await deviceHeaders() },
       );
       const json = (await res.json()) as { ok: boolean; data?: Array<{ category?: string | null }>; error?: string };
 

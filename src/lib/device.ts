@@ -15,8 +15,32 @@ function randomId(): string {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
 }
 
+/**
+ * Inside a native Android/iOS shell (a Capacitor build of this app) the phone's own id is available and survives
+ * reinstalling the app, so it is used instead of the random one. A website or Play-Store "web app" cannot read the
+ * Android ID — browsers don't allow it — so there the random id below is the closest equivalent.
+ */
+async function nativeDeviceId(): Promise<string | null> {
+  try {
+    const cap = (window as unknown as {
+      Capacitor?: { isNativePlatform?: () => boolean; Plugins?: { Device?: { getId?: () => Promise<{ identifier?: string }> } } };
+    }).Capacitor;
+    if (!cap?.isNativePlatform?.() || !cap.Plugins?.Device?.getId) return null;
+    const { identifier } = await cap.Plugins.Device.getId();
+    const clean = (identifier ?? "").replace(/[^A-Za-z0-9]/g, "");
+    return clean.length >= 12 ? `and-${clean}`.slice(0, 64) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getDeviceId(): Promise<string> {
   if (cached) return cached;
+  const native = await nativeDeviceId();
+  if (native) {
+    cached = native;
+    return native;
+  }
   let id: string | null = null;
   try {
     id = localStorage.getItem(KEY);
@@ -49,4 +73,13 @@ export function deviceLabel(): string {
   if (/Mac OS X/.test(ua)) return `Mac · ${browser}`;
   if (/Linux/.test(ua)) return `Linux · ${browser}`;
   return browser;
+}
+
+/** Header that tells the server which phone is asking (so a shared paid login can't be used from another phone). */
+export async function deviceHeaders(): Promise<Record<string, string>> {
+  try {
+    return { "x-device-id": await getDeviceId() };
+  } catch {
+    return {};
+  }
 }

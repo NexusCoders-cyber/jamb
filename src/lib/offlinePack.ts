@@ -11,6 +11,7 @@ import { cacheKey } from "./questionCache";
 import { getMeta, setMeta } from "./localDb";
 import { addToPool } from "./questionPool";
 import { proxiedUrl } from "./imagePreload";
+import { deviceHeaders } from "./device";
 
 export type PackInfo = { at: string; questions: number; images: number; imagesFailed: number };
 export type PackProgress = { phase: "questions" | "images"; done: number; total: number };
@@ -58,6 +59,7 @@ export async function downloadPack(
     try {
       const res = (await fetch(
         `/api/aloc?endpoint=questions&subject=${encodeURIComponent(subject)}&type=utme&count=200&spread=1&t=${Date.now()}-${i}`,
+        { headers: await deviceHeaders() },
       ).then((r) => r.json())) as { ok: boolean; data?: Q[]; error?: string };
       if (res.ok && Array.isArray(res.data) && res.data.length > 0) {
         all.push(...res.data);

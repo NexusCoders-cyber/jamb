@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
-import type { NormalizedQuestion } from "@/lib/aloc";
+import { nameToSlug, slugToName, type NormalizedQuestion } from "@/lib/aloc";
 
 let cached: SupabaseClient | null = null;
 function adminClient(): SupabaseClient | null {
@@ -24,7 +24,8 @@ function adminClient(): SupabaseClient | null {
   }
 }
 
-export const normSubject = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
+/** One canonical spelling per subject ("english", "English" and "English Language" all become "english language"). */
+export const normSubject = (s: string) => slugToName(nameToSlug(s)).toLowerCase().replace(/\s+/g, " ").trim();
 const normText = (s: string) => s.toLowerCase().replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 
 /** Same question reused under another ALOC id → same key. */
@@ -112,4 +113,35 @@ export async function bankStats(): Promise<{ subject: string; total: number; wit
   } catch {
     return null;
   }
+}
+
+// ── Wrong-question reports: hidden questions are no longer served ───────────────────────────────────────────────
+let hiddenCache: { at: number; keys: Set<string> } | null = null;
+
+/** Keys of questions an admin chose to hide (cached for a minute). Empty when reporting isn't set up. */
+export async function getHiddenKeys(): Promise<Set<string>> {
+  if (hiddenCache && Date.now() - hiddenCache.at < 60_000) return hiddenCache.keys;
+  let keys = new Set<string>();
+  try {
+    const db = adminClient();
+    if (db) {
+      const { data, error } = await db.from("question_reports").select("bank_key").eq("status", "hidden").limit(5000);
+      if (!error && data) keys = new Set((data as { bank_key: string }[]).map((r) => r.bank_key));
+    }
+  } catch {
+    /* table not created yet */
+  }
+  hiddenCache = { at: Date.now(), keys };
+  return keys;
+}
+
+export function forgetHiddenCache(): void {
+  hiddenCache = null;
+}
+
+/** Removes admin-hidden questions from a list about to be served. */
+export async function dropHidden<T extends Pick<NormalizedQuestion, "prompt" | "options">>(subject: string, list: T[]): Promise<T[]> {
+  const hidden = await getHiddenKeys();
+  if (hidden.size === 0) return list;
+  return list.filter((q) => !hidden.has(bankKey(subject, q)));
 }
