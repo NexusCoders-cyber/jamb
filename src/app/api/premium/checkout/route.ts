@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPaystackSecretKey } from "@/lib/env";
 import { getPaystackSecret } from "@/lib/paystack-key";
+import { cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 import { getAdminClient, requireUser, HttpError, errorResponse } from "@/lib/quiz-server";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ type DiscountRow = {
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
-    const body = (await req.json().catch(() => ({}))) as { plan?: string; discountCode?: string };
+    const body = (await req.json().catch(() => ({}))) as { plan?: string; discountCode?: string; deviceId?: string; label?: string };
     const plan = body.plan === "monthly" ? "monthly" : body.plan === "lifetime" ? "lifetime" : null;
     if (!plan) throw new HttpError(400, "plan must be 'lifetime' or 'monthly'");
     if (!user.email || !user.email.includes("@")) throw new HttpError(400, "Your account needs a valid email to pay");
@@ -84,7 +85,10 @@ export async function POST(req: Request) {
       status: "pending",
       plan,
       discount_code: discount?.code ?? null,
-      metadata: { plan, base_kobo: baseKobo, discount_kobo: discountKobo, code_id: discount?.id ?? null },
+      metadata: {
+        plan, base_kobo: baseKobo, discount_kobo: discountKobo, code_id: discount?.id ?? null,
+        ...(typeof body.deviceId === "string" && DEVICE_ID_RE.test(body.deviceId) ? { device_id: body.deviceId, device_label: cleanLabel(body.label) } : {}),
+      },
     });
     if (insertErr) throw new HttpError(500, `Could not record payment: ${insertErr.message}`);
 

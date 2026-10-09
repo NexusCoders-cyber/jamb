@@ -56,6 +56,7 @@ export default function AdminPaymentsPage() {
   const [secretKey, setSecretKey]   = useState("");
   const [publicKey, setPublicKey]   = useState("");
   const [showSecret, setShowSecret] = useState(false);
+  const [origin, setOrigin] = useState("");
   // Where the live secret comes from. The secret itself is never loaded into this page.
   const [secretInfo, setSecretInfo] = useState<{ source: "env" | "database" | "none"; hint: string; dbHasKey: boolean } | null>(null);
 
@@ -146,6 +147,7 @@ export default function AdminPaymentsPage() {
     );
 
     void loadSecretInfo();
+    setOrigin(window.location.origin);
     setPublicKey(settings.paystack_public_key ?? "");
     setPrices({
       price_weekly_naira:   settings.price_weekly_naira   ?? "200",
@@ -346,6 +348,14 @@ export default function AdminPaymentsPage() {
             )}
           </div>
         )}
+        <div className="mb-4 rounded-xl bg-slate-800/60 px-4 py-3 text-xs text-slate-300 ring-1 ring-slate-700">
+          <p className="font-bold text-white">Webhook (so no payment is ever missed)</p>
+          <p className="mt-1 text-slate-400">
+            In Paystack → Settings → API Keys &amp; Webhooks, set the <strong className="text-slate-200">Live Webhook URL</strong> to:
+          </p>
+          <p className="mt-1 select-all break-all rounded-lg bg-slate-950 px-3 py-2 font-mono text-[11px] text-emerald-300">{origin || "https://your-domain"}/api/payments/webhook</p>
+          <p className="mt-1 text-slate-500">If a student pays and then closes the app or loses signal, Paystack tells us directly and Pro is switched on anyway.</p>
+        </div>
         <div className="space-y-3">
           <label className="block">
             <span className="text-xs font-bold text-slate-400">New secret key (sk_live_… or sk_test_…)</span>

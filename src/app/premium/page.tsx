@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { deviceLabel, getDeviceId } from "@/lib/device";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import { Crown, Loader2, Tag, Zap } from "lucide-react";
@@ -81,7 +82,7 @@ export default function PremiumPage() {
       const res = await fetch("/api/premium/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
-        body: JSON.stringify({ plan, discountCode: code.trim() || undefined }),
+        body: JSON.stringify({ plan, discountCode: code.trim() || undefined, deviceId: await getDeviceId(), label: deviceLabel() }),
       });
       const json = (await res.json()) as { authorizationUrl?: string; amountNaira?: number; discountNaira?: number; error?: string };
       if (!res.ok || !json.authorizationUrl) throw new Error(json.error ?? "Could not start payment");

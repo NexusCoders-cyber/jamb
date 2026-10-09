@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPaystackSecret } from "@/lib/paystack-key";
+import { cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
 
@@ -59,6 +60,8 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => ({}))) as {
       plan?: string;
       code?: string;
+      deviceId?: string;
+      label?: string;
     };
 
     const plan = body.plan?.toLowerCase();
@@ -206,6 +209,8 @@ export async function POST(req: Request) {
         code_id: codeId,
         discount_kobo: discountKobo,
         label: PLAN_LABELS[plan],
+        // The phone that is paying — the Paystack webhook gives Pro to this phone even if the app is closed
+        ...(typeof body.deviceId === "string" && DEVICE_ID_RE.test(body.deviceId) ? { device_id: body.deviceId, device_label: cleanLabel(body.label) } : {}),
       },
     });
 

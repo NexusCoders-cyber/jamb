@@ -262,7 +262,7 @@ function UpgradePageContent() {
       const res = await fetch("/api/payments/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: selectedPlan, code: discountCode.trim() || undefined }),
+        body: JSON.stringify({ plan: selectedPlan, code: discountCode.trim() || undefined, deviceId: await getDeviceId(), label: deviceLabel() }),
       });
       const data = (await res.json()) as {
         authorizationUrl?: string;

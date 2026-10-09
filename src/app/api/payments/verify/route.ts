@@ -13,13 +13,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getPaystackSecret } from "@/lib/paystack-key";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
-import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
-
-const PLAN_DAYS: Record<string, number> = {
-  weekly: 7,
-  monthly: 30,
-  biannual: 180,
-};
+import { finalizePayment, type PaymentRow } from "@/lib/payment-finalize";
 
 function adminClient() {
   const { url, serviceRoleKey } = getSupabaseAdminEnv();
@@ -94,96 +88,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Transaction does not belong to your account." }, { status: 403 });
     }
 
-    // Idempotency — already paid
-    if (paymentRow.status === "paid") {
-      const { data: prof } = await admin
-        .from("profiles")
-        .select("premium_until")
-        .eq("id", user.id)
-        .maybeSingle();
-      return NextResponse.json({
-        ok: true,
-        already: true,
-        plan: paymentRow.plan,
-        premiumUntil: prof?.premium_until,
-      });
-    }
-
-    // The amount actually charged must cover the price we quoted
-    if (Number(txn.amount) < Number(paymentRow.amount_kobo ?? 0)) {
+    // Grant Pro (shared with the Paystack webhook; safe to run twice, only the first one does anything)
+    const result = await finalizePayment(admin, paymentRow as PaymentRow, Number(txn.amount), {
+      deviceId: typeof body.deviceId === "string" ? body.deviceId : null,
+      label: body.label ?? null,
+    });
+    if (result.status === "underpaid") {
       return NextResponse.json({ error: "Paid amount does not match the plan price." }, { status: 402 });
     }
-
-    // Claim the payment atomically, so two parallel verify calls (double tap / retry) cannot both grant Pro
-    const { data: claimed } = await admin
-      .from("payments")
-      .update({ status: "paid", paid_at: new Date().toISOString() })
-      .eq("id", paymentRow.id)
-      .neq("status", "paid")
-      .select("id");
-    if (!claimed || claimed.length === 0) {
-      const { data: prof } = await admin.from("profiles").select("premium_until").eq("id", user.id).maybeSingle();
-      return NextResponse.json({ ok: true, already: true, plan: paymentRow.plan, premiumUntil: prof?.premium_until });
+    if (result.status === "already") {
+      return NextResponse.json({ ok: true, already: true, plan: result.plan, premiumUntil: result.premiumUntil });
     }
-
-    const plan = (paymentRow.plan ?? "monthly") as string;
-    const days = PLAN_DAYS[plan] ?? 30;
-
-    // Extend premium_until from now (or from current expiry if still active)
-    const { data: currentProfile } = await admin
-      .from("profiles")
-      .select("premium_until")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const base =
-      currentProfile?.premium_until && new Date(currentProfile.premium_until) > new Date()
-        ? new Date(currentProfile.premium_until)
-        : new Date();
-
-    const premiumUntil = new Date(base.getTime() + days * 24 * 3600 * 1000).toISOString();
-
-    // Grant premium
-    await admin
-      .from("profiles")
-      .update({ premium_until: premiumUntil, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
-
-    // Record discount redemption
-    const codeId = paymentRow.metadata?.code_id ?? txn.metadata?.code_id;
-    if (codeId) {
-      try {
-        await admin.from("discount_redemptions").insert({
-          code_id: codeId,
-          user_id: user.id,
-          payment_id: paymentRow.id,
-          amount_off_kobo: paymentRow.metadata?.discount_kobo ?? txn.metadata?.discount_kobo ?? 0,
-        });
-        // Increment used_count — RPC may not exist on older DBs, ignore failure
-        await admin.rpc("increment_discount_used", { p_code_id: codeId }).then(
-          undefined,
-          () => { /* RPC not deployed yet */ },
-        );
-      } catch (_e) { /* silently skip */ }
-    }
-
-    // The phone that just paid now holds the Pro licence (another phone on the same account goes back to free)
-    if (typeof body.deviceId === "string" && DEVICE_ID_RE.test(body.deviceId)) {
-      await claimDevice(admin, user.id, body.deviceId, cleanLabel(body.label), "force");
-    }
-
-    // Pro notification
-    const planLabel: Record<string, string> = {
-      weekly: "7-day",
-      monthly: "30-day",
-      biannual: "6-month",
-    };
-    await admin.from("notifications").insert({
-      user_id: user.id,
-      title: "⭐ You are now Pro!",
-      body: `Your ${planLabel[plan] ?? plan} Pro subscription is active. Enjoy unlimited access to all features!`,
-    });
-
+    const { plan, premiumUntil } = result;
     return NextResponse.json({ ok: true, plan, premiumUntil });
   } catch (e) {
     console.error("[verify]", e);
