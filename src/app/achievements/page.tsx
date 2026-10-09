@@ -113,7 +113,7 @@ export default function AchievementsPage() {
     setSharing(card.key);
     try {
       const supabase = createSupabaseBrowserClient();
-      const text = `🏆 I just unlocked "${card.title}" on Qubit! ${card.description} (+${card.points} QPoints)`;
+      const text = `🏆 I just unlocked "${card.title}" on Qubit Learn! ${card.description} (+${card.points} QPoints)`;
 
       // 1. Post it into the community (first channel is the general one)
       const channels = await getChannels(supabase);
@@ -129,7 +129,7 @@ export default function AchievementsPage() {
       // 2. Outside the app: native share sheet (mobile) or copy to clipboard
       const url = typeof window !== "undefined" ? window.location.origin : "";
       if (navigator.share) {
-        await navigator.share({ title: `Qubit achievement: ${card.title}`, text, url }).catch(() => {});
+        await navigator.share({ title: `Qubit Learn achievement: ${card.title}`, text, url }).catch(() => {});
       } else {
         await navigator.clipboard?.writeText(`${text} ${url}`).catch(() => {});
         setShareDone(card.key);
@@ -147,7 +147,7 @@ export default function AchievementsPage() {
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
           <div className="mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-500 to-orange-500 p-6 text-white shadow-xl shadow-amber-200/40">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-amber-100">
-              <Trophy className="h-4 w-4" aria-hidden /> Qubit Achievements
+              <Trophy className="h-4 w-4" aria-hidden /> Achievements
             </p>
             <h1 className="mt-2 text-3xl font-black">{unlocked.length} of {cards.length} unlocked</h1>
             <div className="mt-3 flex flex-wrap gap-2">

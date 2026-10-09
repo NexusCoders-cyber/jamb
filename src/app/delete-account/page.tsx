@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import LegalPage from "@/components/LegalPage";
 
-export const metadata: Metadata = { title: "Delete your account", description: "How to delete your Qubit account and data." };
+export const metadata: Metadata = { title: "Delete your account", description: "How to delete your Qubit Learn account and data." };
 
 /** Public page (no login) — app stores ask for a web address that explains account and data deletion. */
 export default function DeleteAccountPage() {
@@ -11,7 +11,7 @@ export default function DeleteAccountPage() {
       <section>
         <h2>In the app</h2>
         <ul>
-          <li>Sign in to Qubit.</li>
+          <li>Sign in to Qubit Learn.</li>
           <li>Open <strong>Settings</strong> (from your profile or the menu).</li>
           <li>Go to <strong>Account &amp; privacy → Delete my account</strong>.</li>
           <li>Type <strong>DELETE</strong> and confirm.</li>

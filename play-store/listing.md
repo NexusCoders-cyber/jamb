@@ -1,10 +1,10 @@
 # Store listing text (copy into Play Console)
 
-**App name:** Qubit: JAMB & UTME Prep
+**App name:** Qubit Learn: JAMB & UTME Prep
 **Short description (80 max):** JAMB/UTME past questions, mock CBT exams and study mode — works offline.
 
 **Full description:**
-Qubit helps you prepare for JAMB UTME the smart way.
+Qubit Learn helps you prepare for JAMB UTME the smart way.
 
 • Mock CBT exams built to JAMB standard: English (60 questions) plus three subjects, with a real exam timer
 • Thousands of past questions with fresh sets every time — no repeating the same questions

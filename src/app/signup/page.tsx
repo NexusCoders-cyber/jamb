@@ -133,9 +133,9 @@ export default function SignUpPage() {
           {/* Left panel */}
           <section className="gradient-bg p-6 text-white sm:p-8 lg:p-10">
             <div className="mb-10 flex items-center gap-3">
-              <Image src="/logo-192.png"      alt="Qubit logo" width={48} height={48} priority />
+              <Image src="/logo-192.png"      alt="Qubit Learn logo" width={48} height={48} priority />
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Qubit</h1>
+                <h1 className="text-2xl font-bold tracking-tight">Qubit Learn</h1>
                 <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Quick Unified Brain Interactive Test</p>
               </div>
             </div>

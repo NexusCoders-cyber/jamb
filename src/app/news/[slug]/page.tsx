@@ -61,7 +61,7 @@ export default function NewsArticlePage() {
             {article.published_at && (
               <time dateTime={article.published_at} className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-slate-400">
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden />
-                {new Date(article.published_at).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} · Qubit Team
+                {new Date(article.published_at).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })} · Qubit Learn Team
               </time>
             )}
             <div className="mt-6 space-y-5">

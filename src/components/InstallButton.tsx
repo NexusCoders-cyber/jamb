@@ -35,7 +35,7 @@ export default function InstallButton({ tone }: { tone: "light" | "dark" }) {
   if (installed) {
     return (
       <Link href="/dashboard" className={style}>
-        <CheckCircle2 className="h-4 w-4" aria-hidden /> Installed — open Qubit
+        <CheckCircle2 className="h-4 w-4" aria-hidden /> Installed — open Qubit Learn
       </Link>
     );
   }

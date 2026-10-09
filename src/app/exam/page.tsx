@@ -348,14 +348,9 @@ function InlineReview({
   retryingSave?: boolean;
   /** Seconds the student spent on the session (shown on the score card) */
   timeUsedSeconds?: number | null;
-  /** Explicit cloud backup of what is stored on this device */
+  /** Results back up to the account on their own; this only tells the screen when the browser cannot keep data */
   backup?: {
-    pending: number;
-    online: boolean;
-    syncing: boolean;
     persistent: boolean;
-    message: string | null;
-    onBackup: () => void;
   };
 }) {
   const [filter, setFilter] = useState<"all" | "wrong" | "unanswered" | "correct">("all");
@@ -462,33 +457,11 @@ function InlineReview({
               <p className="mt-1 break-words font-mono">{saveProblem}</p>
             </details>
           </div>
-        ) : (
-          <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-900 ring-1 ring-emerald-200">
-            <div className="min-w-0 flex-1">
-              <p className="font-bold">Saved on this device</p>
-              <p className="mt-0.5 text-xs text-emerald-800">
-                {backup?.persistent === false
-                  ? "Your browser is not keeping data between visits, so back this up before closing the app."
-                  : backup && backup.pending > 0
-                    ? backup.online
-                      ? "Back it up to your account to keep it if you change phone or clear your browser."
-                      : "You're offline. It will be safe here until you back up with a connection."
-                    : "Backed up to your account."}
-              </p>
-              {backup?.message && <p className="mt-1 text-xs font-semibold text-emerald-900">{backup.message}</p>}
-            </div>
-            {backup && backup.pending > 0 && (
-              <button
-                type="button"
-                onClick={backup.onBackup}
-                disabled={backup.syncing || !backup.online}
-                className="touch-manipulation rounded-full bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
-              >
-                {backup.syncing ? "Backing up…" : "Back up now"}
-              </button>
-            )}
+        ) : backup?.persistent === false ? (
+          <div role="status" className="mb-4 rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+            Your browser is not keeping data between visits (private mode?). Your result is backed up to your account automatically when you have a connection.
           </div>
-        )}
+        ) : null}
         {!saveProblem && saveNote && (
           <div role="status" className="mb-4 rounded-2xl bg-amber-50 p-3 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
             {saveNote}
@@ -1345,7 +1318,7 @@ function ExamPageContent() {
       });
     })();
 
-    // Saved on this device first — works with no connection. The cloud copy is made on "Back up now".
+    // Saved on this device first — works with no connection. The cloud copy is made automatically right afterwards (AutoBackup).
     const attemptId = attemptIdRef.current ?? newId();
     attemptIdRef.current = attemptId;
     const startedMs = startedAtMsRef.current ?? Date.now();
@@ -1459,14 +1432,7 @@ function ExamPageContent() {
         onRetrySave={retrySave}
         retryingSave={retryingSave}
         timeUsedSeconds={reviewSeconds}
-        backup={{
-          pending: sync.pending.total,
-          online: sync.online,
-          syncing: sync.syncing,
-          persistent: sync.persistent,
-          message: sync.result ? (sync.result.ok ? (sync.result.attempts > 0 ? "Backed up." : null) : sync.result.message) : null,
-          onBackup: () => void sync.sync(),
-        }}
+        backup={{ persistent: sync.persistent }}
       />
     );
   }

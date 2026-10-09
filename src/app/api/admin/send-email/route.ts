@@ -51,9 +51,9 @@ export async function POST(req: Request) {
     const from = getResendConfig().from;
     const html = `
       <div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;">
-        <p style="font-weight:800;font-size:18px;color:#4c1d95;">Qubit</p>
+        <p style="font-weight:800;font-size:18px;color:#4c1d95;">Qubit Learn</p>
         <div style="font-size:15px;line-height:1.6;color:#1e293b;"><p>${escapeHtml(text)}</p></div>
-        <p style="margin-top:24px;font-size:12px;color:#94a3b8;">Sent by the Qubit team · <a href="https://qubit.ng" style="color:#7c3aed;">open Qubit</a></p>
+        <p style="margin-top:24px;font-size:12px;color:#94a3b8;">Sent by the Qubit Learn team · <a href="https://qubit.ng" style="color:#7c3aed;">open Qubit Learn</a></p>
       </div>`;
 
     let sent = 0;

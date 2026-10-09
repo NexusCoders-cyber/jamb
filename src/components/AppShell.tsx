@@ -196,7 +196,7 @@ function Sidebar({ pathname, inviteCount, newArticles }: { pathname: string; inv
       {/* Logo */}
       <div className="flex h-16 shrink-0 items-center gap-2.5 border-b border-slate-100 px-5">
         <Logo size={36} />
-        <p className="text-base font-black leading-tight text-slate-900">Qubit</p>
+        <p className="text-base font-black leading-tight text-slate-900">Qubit Learn</p>
       </div>
 
       {/* Nav groups */}
@@ -319,7 +319,7 @@ function TopBar({ title, back, unread }: { title?: string; back?: string; unread
           <Logo size={32} />
         </div>
       )}
-      <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Qubit"}</h1>
+      <h1 className="flex-1 truncate text-base font-black text-slate-900">{title ?? "Qubit Learn"}</h1>
       <ThemeToggle />
       {unread > 0 && (
         <Link href="/messages" aria-label={`${unread} unread messages`}

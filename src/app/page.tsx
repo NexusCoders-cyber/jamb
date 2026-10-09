@@ -67,7 +67,7 @@ function IntroCarousel({ onDone }: { onDone: () => void }) {
       <div className="flex items-center gap-3">
         <Logo size={44} />
         <div>
-          <h1 className="text-xl font-bold tracking-tight">Qubit</h1>
+          <h1 className="text-xl font-bold tracking-tight">Qubit Learn</h1>
           <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-100/80">Quick Unified Brain Interactive Test</p>
         </div>
       </div>
@@ -184,8 +184,8 @@ export default function Home() {
           <div className="w-full max-w-sm">
             {/* Logo header */}
             <div className="mb-8 text-center">
-              <Image src="/logo-512.png"      alt="Qubit logo" width={72} height={72} priority className="mx-auto drop-shadow-xl shadow-violet-300/40" />
-              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900">Qubit</h1>
+              <Image src="/logo-512.png"      alt="Qubit Learn logo" width={72} height={72} priority className="mx-auto drop-shadow-xl shadow-violet-300/40" />
+              <h1 className="mt-4 text-3xl font-black tracking-tight text-slate-900">Qubit Learn</h1>
               <p className="mt-1 text-sm font-semibold text-violet-600">Quick Unified Brain Interactive Test</p>
               <p className="mt-0.5 text-sm text-slate-500">Smart preparation for UTME &amp; JAMB</p>
             </div>

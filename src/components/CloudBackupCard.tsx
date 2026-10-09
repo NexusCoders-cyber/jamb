@@ -14,8 +14,8 @@ function ago(iso: string | null): string {
 }
 
 /**
- * Cloud backup control. Qubit keeps results, bookmarks and unfinished exams on this device; this is the
- * one place (besides signing in and the button on a result) where they are sent to the student's account.
+ * Cloud backup control. Qubit Learn keeps results, bookmarks and unfinished exams on this device first and backs
+ * finished exams up on its own (AutoBackup); this card shows what is waiting and lets the student force a backup.
  */
 export default function CloudBackupCard({ userId }: { userId: string }) {
   const { pending, lastSyncAt, online, syncing, result, persistent, sync } = useSyncStatus(userId);
@@ -31,7 +31,7 @@ export default function CloudBackupCard({ userId }: { userId: string }) {
         <CloudUpload className="h-5 w-5 text-violet-600" aria-hidden /> Cloud backup
       </h2>
       <p className="mb-3 mt-1 text-xs leading-5 text-slate-500">
-        Your results, bookmarks and unfinished exams are saved on this device and work with no internet. Back up to keep them if you change phone or clear your browser.
+        Finished exams back up to your account automatically when you have a connection. Your results, bookmarks and unfinished exams are always saved on this device first, so they work with no internet. Use Back up now to force it, for example before changing phone.
       </p>
 
       <dl className="space-y-1.5 text-sm">

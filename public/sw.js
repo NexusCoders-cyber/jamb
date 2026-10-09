@@ -1,5 +1,5 @@
 /**
- * Qubit — Service Worker
+ * Qubit Learn — Service Worker
  *
  * Strategy:
  *   • App shell (HTML, JS, CSS) → Network-first with cache fallback
@@ -128,8 +128,8 @@ self.addEventListener("fetch", (event) => {
 // The server sends { title, body, url, tag }. Show it, and open the right page when it is tapped.
 self.addEventListener("push", (event) => {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (_e) { data = { title: "Qubit", body: event.data ? event.data.text() : "" }; }
-  const title = (data && data.title) || "Qubit";
+  try { data = event.data ? event.data.json() : {}; } catch (_e) { data = { title: "Qubit Learn", body: event.data ? event.data.text() : "" }; }
+  const title = (data && data.title) || "Qubit Learn";
   const options = {
     body: (data && data.body) || "",
     icon: "/icons/icon-192.png",

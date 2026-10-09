@@ -31,7 +31,7 @@ function SuccessInner() {
         const json = (await res.json()) as { ok?: boolean; plan?: string; error?: string };
         if (!res.ok || !json.ok) throw new Error(json.error ?? "Confirmation failed");
         setState("done");
-        setMessage(json.plan === "monthly" ? "Monthly premium is active for 30 days." : "Lifetime premium unlocked. Thanks for backing Qubit!");
+        setMessage(json.plan === "monthly" ? "Monthly premium is active for 30 days." : "Lifetime premium unlocked. Thanks for backing Qubit Learn!");
       } catch (err) {
         setState("failed");
         setMessage(err instanceof Error ? err.message : "Confirmation failed");

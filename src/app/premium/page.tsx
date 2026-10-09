@@ -99,14 +99,14 @@ export default function PremiumPage() {
         <div className="mx-auto max-w-2xl px-4 py-4 lg:px-6">
           <div className="mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-500 to-orange-600 p-6 text-white shadow-xl shadow-amber-200/40">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-amber-100">
-              <Crown className="h-4 w-4" aria-hidden /> Qubit Premium
+              <Crown className="h-4 w-4" aria-hidden /> Qubit Learn Premium
             </p>
             <h1 className="mt-2 text-3xl font-black">
-              {isPremium ? "You're Premium 👑" : "Support Qubit, stand out"}
+              {isPremium ? "You're Premium 👑" : "Support Qubit Learn, stand out"}
             </h1>
             <p className="mt-2 max-w-md text-sm text-amber-50">
               {isPremium
-                ? "Your premium badge is active. Thanks for backing Qubit!"
+                ? "Your premium badge is active. Thanks for backing Qubit Learn!"
                 : "Get the premium badge on your profile and leaderboard, and back the platform that keeps your prep running."}
             </p>
           </div>

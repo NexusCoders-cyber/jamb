@@ -1,6 +1,6 @@
-# Putting Qubit on the Google Play Store
+# Putting Qubit Learn on the Google Play Store
 
-Qubit is a Progressive Web App. The Play Store version is a thin Android wrapper (a **Trusted Web Activity**) that opens
+Qubit Learn is a Progressive Web App. The Play Store version is a thin Android wrapper (a **Trusted Web Activity**) that opens
 your live site full-screen with no browser bar. Updates you deploy to the site show up in the Android app instantly —
 no new Play release needed for normal changes.
 
@@ -13,7 +13,7 @@ no new Play release needed for normal changes.
 ## 1. Build the Android app (no coding)
 1. Open **https://www.pwabuilder.com**, paste your site URL, click *Start*.
 2. It should show the manifest and service worker as passing (the repo now ships valid icons, manifest, offline support).
-3. Click *Package for stores → Android → Google Play*. Enter your package name, app name **Qubit**, and let PWABuilder
+3. Click *Package for stores → Android → Google Play*. Enter your package name, app name **Qubit Learn**, and let PWABuilder
    generate a new signing key. **Download the zip and keep the key file + passwords safe forever** — losing them means you
    can never update the app.
 4. The zip contains `app-release-bundle.aab` (upload this to Play) and `assetlinks.json` snippets with the key's SHA-256.
@@ -45,7 +45,7 @@ Complete *App content*: Privacy policy, Ads (none), App access (give reviewers a
 (education, no violence), Target audience (13+ / 16+ recommended since there is chat), Data safety (see `listing.md`).
 
 ## 4. ⚠️ Payments policy — read before submitting
-Google Play requires **Google Play Billing** for digital subscriptions sold *inside* an app distributed on Play. Qubit
+Google Play requires **Google Play Billing** for digital subscriptions sold *inside* an app distributed on Play. Qubit Learn
 Pro is sold through **Paystack**. As of the Play help page checked on 6 Oct 2026, Nigeria is not listed among the
 countries with alternative-billing programs, so an app that sells Pro through Paystack can be **rejected or suspended**.
 

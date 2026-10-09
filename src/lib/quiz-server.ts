@@ -1,5 +1,5 @@
 /**
- * Server-side quiz engine for Qubit Arena.
+ * Server-side quiz engine for Arena.
  *
  * Everything in here runs ONLY inside /api/quiz/* routes with the
  * service-role key, so QPoints and match answers can never be manipulated

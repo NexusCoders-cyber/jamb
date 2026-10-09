@@ -10,7 +10,7 @@ import {
 
 const LABEL: Record<PushTopicId, { title: string; hint: string }> = {
   blog: { title: "New articles", hint: "When we publish a new study guide or update on the blog" },
-  announcements: { title: "Announcements", hint: "Important news from the Qubit team" },
+  announcements: { title: "Announcements", hint: "Important news from the Qubit Learn team" },
 };
 
 function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
@@ -70,8 +70,8 @@ export default function NotificationSettings() {
 
   const unavailable =
     support === "unsupported" ? "This browser can't show notifications."
-    : support === "needs-install" ? "On iPhone, tap Share → Add to Home Screen, open Qubit from there, then come back to switch notifications on."
-    : support === "blocked" ? "Notifications are blocked for Qubit. Allow them in your browser or phone settings (site settings → Notifications), then reload."
+    : support === "needs-install" ? "On iPhone, tap Share → Add to Home Screen, open Qubit Learn from there, then come back to switch notifications on."
+    : support === "blocked" ? "Notifications are blocked for Qubit Learn. Allow them in your browser or phone settings (site settings → Notifications), then reload."
     : !serverReady && checked ? "Notifications aren't switched on for this app yet."
     : "";
 

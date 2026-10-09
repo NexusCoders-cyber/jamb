@@ -8,12 +8,12 @@ import { CalendarDays, ArrowRight } from "lucide-react";
 export const revalidate = 60;
 
 export const metadata: Metadata = {
-  title: "Blog | Qubit — UTME & JAMB study guides",
+  title: "Blog | Qubit Learn — UTME & JAMB study guides",
   description:
-    "Study guides, exam strategy and prep tips for JAMB/UTME candidates from the Qubit team.",
+    "Study guides, exam strategy and prep tips for JAMB/UTME candidates from the Qubit Learn team.",
   alternates: { canonical: "/blog" },
   openGraph: {
-    title: "Qubit Blog — UTME & JAMB study guides",
+    title: "Qubit Learn Blog — UTME & JAMB study guides",
     description: "Study guides, exam strategy and prep tips for JAMB/UTME candidates.",
     type: "website",
     url: "/blog",
@@ -53,12 +53,12 @@ export default async function BlogIndexPage() {
       <div className="mx-auto max-w-3xl px-4 py-10 lg:px-6">
         <header className="mb-8">
           <div className="flex items-center gap-3">
-            <Image src="/logo-192.png"      alt="Qubit logo" width={40} height={40} priority />
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-600">Qubit</p>
+            <Image src="/logo-192.png"      alt="Qubit Learn logo" width={40} height={40} priority />
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-violet-600">Qubit Learn</p>
           </div>
           <h1 className="mt-2 text-4xl font-black tracking-tight text-slate-900">Blog</h1>
           <p className="mt-3 text-base text-slate-600">
-            Study guides, exam strategy and prep tips for JAMB/UTME candidates — written by the Qubit team.
+            Study guides, exam strategy and prep tips for JAMB/UTME candidates — written by the Qubit Learn team.
           </p>
         </header>
 
@@ -98,7 +98,7 @@ export default async function BlogIndexPage() {
 
         <footer className="mt-10 text-center">
           <Link href="/" className="text-sm font-bold text-violet-600 hover:underline">
-            Prepare for UTME with Qubit →
+            Prepare for UTME with Qubit Learn →
           </Link>
         </footer>
       </div>

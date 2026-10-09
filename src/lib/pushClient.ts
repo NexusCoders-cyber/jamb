@@ -78,9 +78,9 @@ export async function serverStatus(endpoint: string): Promise<{ subscribed: bool
 /** Ask permission (must be called from a tap), subscribe this phone, and register it with the server. */
 export async function enablePush(topics: PushTopicId[] = ALL_TOPICS): Promise<{ ok: boolean; error?: string }> {
   const support = pushSupport();
-  if (support === "needs-install") return { ok: false, error: "On iPhone, add Qubit to your Home Screen first, then switch notifications on from there." };
+  if (support === "needs-install") return { ok: false, error: "On iPhone, add Qubit Learn to your Home Screen first, then switch notifications on from there." };
   if (support === "unsupported") return { ok: false, error: "This browser can't show notifications." };
-  if (support === "blocked") return { ok: false, error: "Notifications are blocked for Qubit. Allow them in your browser or phone settings, then try again." };
+  if (support === "blocked") return { ok: false, error: "Notifications are blocked for Qubit Learn. Allow them in your browser or phone settings, then try again." };
 
   const cfg = await getPushConfig();
   if (!cfg.enabled || !cfg.publicKey) return { ok: false, error: "Notifications aren't switched on for this app yet. Please try again later." };

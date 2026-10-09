@@ -13,7 +13,7 @@ import { formatNaira, planCards } from "@/lib/pricing";
 export const revalidate = 300;
 import Logo from "@/components/Logo";
 
-const BRAND = "Qubit";
+const BRAND = "Qubit Learn";
 /** Set NEXT_PUBLIC_PLAY_STORE_URL in Vercel once the app is live on Google Play to show the store button. */
 const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || "";
 
@@ -132,9 +132,9 @@ const btnPrimary = "inline-flex items-center justify-center gap-2 rounded-2xl bg
 
 // ── Real app screenshots ──────────────────────────────────────────────────────
 const screens = [
-  { src: "/screenshots/learn.webp", alt: "Qubit Learn screen with Topics, Past questions, Study mode, Mock CBT and Syllabus revision", title: "Everything in one place", desc: "Topics, past questions, study mode, mock CBT, syllabus revision and JAMB set texts." },
-  { src: "/screenshots/mock-setup.webp", alt: "Qubit mock exam setup with English plus three subjects, 180 questions and 120 minutes", title: "A mock built to JAMB standard", desc: "English plus three subjects, 180 questions and 120 minutes — the real exam pace." },
-  { src: "/screenshots/english-passage.webp", alt: "Qubit English mock question with a comprehension passage", title: "Passages the way JAMB sets them", desc: "Read the comprehension passage, then answer the questions that follow." },
+  { src: "/screenshots/learn.webp", alt: "Learn tab of Qubit Learn with Topics, Past questions, Study mode, Mock CBT and Syllabus revision", title: "Everything in one place", desc: "Topics, past questions, study mode, mock CBT, syllabus revision and JAMB set texts." },
+  { src: "/screenshots/mock-setup.webp", alt: "Qubit Learn mock exam setup with English plus three subjects, 180 questions and 120 minutes", title: "A mock built to JAMB standard", desc: "English plus three subjects, 180 questions and 120 minutes — the real exam pace." },
+  { src: "/screenshots/english-passage.webp", alt: "Qubit Learn English mock question with a comprehension passage", title: "Passages the way JAMB sets them", desc: "Read the comprehension passage, then answer the questions that follow." },
 ];
 
 function Phone({ src, alt, className = "", priority = false }: { src: string; alt: string; className?: string; priority?: boolean }) {
@@ -215,8 +215,8 @@ export default async function LandingPage() {
               </ul>
             </div>
             <div className="relative mx-auto h-[640px] w-[260px] sm:w-[440px]">
-              <Phone src="/screenshots/mock-question.webp" alt="Qubit mock exam question showing a physics diagram with options A to D" priority className="absolute left-0 top-0 w-[250px] sm:-rotate-3" />
-              <Phone src="/screenshots/mock-setup.webp" alt="Qubit mock exam setup screen" className="absolute right-0 top-16 hidden w-[200px] rotate-6 sm:block" />
+              <Phone src="/screenshots/mock-question.webp" alt="Qubit Learn mock exam question showing a physics diagram with options A to D" priority className="absolute left-0 top-0 w-[250px] sm:-rotate-3" />
+              <Phone src="/screenshots/mock-setup.webp" alt="Qubit Learn mock exam setup screen" className="absolute right-0 top-16 hidden w-[200px] rotate-6 sm:block" />
             </div>
           </div>
         </section>
@@ -335,7 +335,7 @@ export default async function LandingPage() {
                 <InstallButton tone="dark" />
               </div>
             </div>
-            <p className="mt-6 text-center text-xs text-slate-400">Installing adds Qubit to your home screen like any other app — no app store needed.</p>
+            <p className="mt-6 text-center text-xs text-slate-400">Installing adds Qubit Learn to your home screen like any other app — no app store needed.</p>
           </div>
         </section>
 

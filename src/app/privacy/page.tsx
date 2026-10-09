@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import LegalPage from "@/components/LegalPage";
 
-export const metadata: Metadata = { title: "Privacy Policy", description: "What Qubit stores, why, and how to delete it." };
+export const metadata: Metadata = { title: "Privacy Policy", description: "What Qubit Learn stores, why, and how to delete it." };
 
 export default function PrivacyPage() {
   return (
@@ -9,7 +9,7 @@ export default function PrivacyPage() {
       <section>
         <h2>The short version</h2>
         <p>
-          Qubit helps students prepare for JAMB/UTME. We keep only what the app needs to work, we never sell your data, and you
+          Qubit Learn helps students prepare for JAMB/UTME. We keep only what the app needs to work, we never sell your data, and you
           can delete your account and everything linked to it from Settings at any time.
         </p>
       </section>
@@ -50,7 +50,7 @@ export default function PrivacyPage() {
       </section>
       <section>
         <h2>Children</h2>
-        <p>Qubit is meant for exam candidates. If you are under 13, use it with a parent or guardian.</p>
+        <p>Qubit Learn is meant for exam candidates. If you are under 13, use it with a parent or guardian.</p>
       </section>
       <section>
         <h2>Changes</h2>

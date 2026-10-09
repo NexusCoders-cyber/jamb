@@ -1,7 +1,7 @@
 {
   "id": "/dashboard",
-  "name": "Qubit — JAMB & UTME Prep",
-  "short_name": "Qubit",
+  "name": "Qubit Learn — JAMB & UTME Prep",
+  "short_name": "Qubit Learn",
   "description": "JAMB/UTME past questions, mock CBT exams, study mode, duels and analytics — works offline.",
   "start_url": "/dashboard?source=pwa",
   "scope": "/",

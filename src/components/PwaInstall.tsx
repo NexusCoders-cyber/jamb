@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * PwaInstall — registers the service worker and shows a slim "Install Qubit" banner when the browser says the
+ * PwaInstall — registers the service worker and shows a slim "Install Qubit Learn" banner when the browser says the
  * app can be installed. The install prompt itself lives in lib/pwaInstall so the landing page can use it too.
  * On iOS Safari (no install prompt API) the banner never shows — the landing page's Download section explains it.
  */
@@ -43,14 +43,14 @@ export default function PwaInstall() {
   return (
     <div
       role="dialog"
-      aria-label="Install Qubit"
+      aria-label="Install Qubit Learn"
       className="fixed bottom-20 left-1/2 z-[200] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-[20px] bg-white p-4 shadow-2xl ring-1 ring-violet-200 lg:bottom-6"
     >
       <div className="flex items-center gap-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/icons/icon-96.png" alt="" width={48} height={48} className="h-12 w-12 shrink-0 rounded-2xl" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-slate-900">Install Qubit</p>
+          <p className="text-sm font-black text-slate-900">Install Qubit Learn</p>
           <p className="text-xs text-slate-500">Works offline · No app store needed</p>
         </div>
         <button

@@ -403,7 +403,7 @@ export default function ArenaPage() {
 
   async function nativeShare() {
     try {
-      await navigator.share({ title: "Qubit duel", text: `Join my ${match?.subject ?? ""} duel on Qubit!`, url: shareUrl });
+      await navigator.share({ title: "Qubit Learn duel", text: `Join my ${match?.subject ?? ""} duel on Qubit Learn!`, url: shareUrl });
     } catch { /* user dismissed */ }
   }
 
@@ -756,12 +756,12 @@ export default function ArenaPage() {
 
   // ── Lobby: subject + mode + opponent select ──────────────────────────────
   return (
-    <AppShell title="Qubit Arena">
+    <AppShell title="Arena">
       <AuthGuard user={user} loading={authLoading}>
         <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-4xl lg:px-6">
           <div className="mb-5 overflow-hidden rounded-[28px] bg-gradient-to-br from-[#41348f] to-[#6557d9] p-6 text-white shadow-xl shadow-violet-300/25">
             <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-violet-200">
-              <Swords className="h-4 w-4" aria-hidden /> Qubit Arena
+              <Swords className="h-4 w-4" aria-hidden /> Arena
             </p>
             <h1 className="mt-2 text-3xl font-black">Quiz duels &amp; QPoints</h1>
             <p className="mt-2 max-w-md text-sm text-violet-100">

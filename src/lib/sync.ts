@@ -1,6 +1,7 @@
 /**
- * Cloud backup / sync — runs ONLY on an explicit action (Settings → "Back up now", the "Back up" button on a
- * result, or right after the student signs in). Taking an exam never touches the network.
+ * Cloud backup / sync — runs automatically after an exam is submitted, when signal returns and when the app opens
+ * (see autoBackup.ts), on Settings → "Back up now", and right after sign-in. Taking an exam itself never touches
+ * the network: the result is stored on the device first and copied to the account afterwards.
  *
  * What is pushed:
  *  • finished attempts that only exist on this device (with their original finish time),

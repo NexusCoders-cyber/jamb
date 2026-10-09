@@ -1,5 +1,5 @@
 /**
- * Qubit Arena — duel rules (pure, no I/O).
+ * Arena — duel rules (pure, no I/O).
  *
  * Imported by BOTH the /api/quiz/* routes and the Arena UI, so the timer and
  * the round logic can never drift apart between server and screen.

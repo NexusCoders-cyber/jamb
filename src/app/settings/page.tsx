@@ -151,7 +151,7 @@ export default function SettingsPage() {
             {/* Appearance — applies instantly and is remembered on this device */}
             <div className="rounded-[24px] bg-slate-50 p-5 ring-1 ring-slate-200">
               <h2 className="text-xl font-black text-slate-900">Appearance</h2>
-              <p className="mb-4 mt-1 text-xs leading-5 text-slate-500">Choose how Qubit looks. It changes straight away and is saved on this device.</p>
+              <p className="mb-4 mt-1 text-xs leading-5 text-slate-500">Choose how Qubit Learn looks. It changes straight away and is saved on this device.</p>
               <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-2.5">
                 {THEME_OPTIONS.map((o) => {
                   const active = themePref === o.value;
