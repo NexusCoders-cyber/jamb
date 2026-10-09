@@ -19,7 +19,7 @@ const PLAY_STORE_URL = process.env.NEXT_PUBLIC_PLAY_STORE_URL || "";
 
 // ── SEO metadata ──────────────────────────────────────────────────────────────
 export const metadata: Metadata = {
-  title: `${BRAND} — Smart JAMB & UTME Preparation App`,
+  title: { absolute: `${BRAND} — Smart JAMB & UTME Preparation App` },
   description:
     `Pass JAMB with confidence. ${BRAND} gives you 10,000+ past questions, full mock CBT exams, study mode with instant explanations, live quiz duels and personal analytics — all in one app. Available now on Android and desktop. iOS coming soon.`,
   alternates: { canonical: "/landing" },
