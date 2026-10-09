@@ -140,7 +140,7 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
     setExpr((e) => e + k);
   }
   return (
-    <div className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] z-50 w-72 max-w-[calc(100vw-2rem)] rounded-[28px] bg-slate-900 p-4 text-white shadow-2xl shadow-slate-900/40 lg:bottom-6">
+    <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 w-64 max-w-[calc(100vw-1.5rem)] rounded-[24px] bg-slate-900 p-3 text-white shadow-2xl shadow-slate-900/40 sm:w-72 sm:rounded-[28px] sm:p-4 lg:bottom-6">
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm font-bold">Calculator</p>
         <button type="button" onClick={onClose} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold" aria-label="Close calculator">Hide</button>
@@ -151,12 +151,12 @@ function CalculatorPad({ onClose }: { onClose: () => void }) {
       <div className="grid grid-cols-4 gap-1.5">
         {keys.map((k) => (
           <button key={k} type="button" onClick={() => press(k)}
-            className={`h-11 rounded-xl text-base font-bold ${k === "=" ? "bg-emerald-500 text-white" : "bg-white/10 active:bg-white/20"}`}>
+            className={`h-9 rounded-xl text-base font-bold sm:h-11 ${k === "=" ? "bg-emerald-500 text-white" : "bg-white/10 active:bg-white/20"}`}>
             {k === "*" ? "×" : k === "/" ? "÷" : k}
           </button>
         ))}
-        <button type="button" onClick={() => setExpr((e) => e.slice(0, -1))} className="col-span-2 h-11 rounded-xl bg-white/10 text-sm font-bold">Backspace</button>
-        <button type="button" onClick={() => setExpr("")} className="col-span-2 h-11 rounded-xl bg-rose-500/80 text-sm font-bold">Clear</button>
+        <button type="button" onClick={() => setExpr((e) => e.slice(0, -1))} className="col-span-2 h-9 rounded-xl bg-white/10 text-sm font-bold sm:h-11">Backspace</button>
+        <button type="button" onClick={() => setExpr("")} className="col-span-2 h-9 rounded-xl bg-rose-500/80 text-sm font-bold sm:h-11">Clear</button>
       </div>
     </div>
   );
@@ -430,7 +430,7 @@ function InlineReview({
 
   return (
     <AppShell title="Results" back="/practice">
-      <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+      <div className="mx-auto min-w-0 max-w-2xl overflow-x-clip px-3 py-4 sm:px-4 lg:max-w-3xl lg:px-6">
         <ScoreSummary
           subject={subject}
           correct={score}
@@ -593,7 +593,7 @@ function InlineReview({
                         <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${isCorrect ? "bg-emerald-200 text-emerald-800" : isSkipped ? "bg-slate-200 text-slate-700" : "bg-rose-200 text-rose-800"}`}>
                           Q{locateInSubject(tabs, questionIdx, total).number} · {isCorrect ? "Correct" : isSkipped ? "Unanswered" : "Wrong"}
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                           <BookmarkButton snapshot={toSnapshot(q, { index: questionIdx, number: locateInSubject(tabs, questionIdx, total).number }, subject)} subject={q.subject ?? subject} className="!px-2.5 !py-1 !text-xs" />
                           <ReportQuestionButton subject={q.subject ?? subject} questionId={String(q.id)} prompt={q.prompt} options={q.options} />
                           {q.subject && <span className="rounded-full bg-violet-100 px-2.5 py-1 text-xs font-bold text-violet-700">{q.subject}</span>}
@@ -602,7 +602,7 @@ function InlineReview({
                       </div>
 
                       <QuestionMedia question={q} hidePassage={!!q.passageId} />
-                      <p className="text-base font-semibold leading-7 text-slate-800">
+                      <p className="[overflow-wrap:anywhere] text-base font-semibold leading-7 text-slate-800">
                         <RichText segments={q.promptSegments} fallback={q.prompt} />
                       </p>
 
@@ -624,7 +624,7 @@ function InlineReview({
                           const optImg = q.optionImages?.[idx] ?? null;
                           return (
                             <div key={idx}
-                              className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium
+                              className={`flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-3 py-2.5 text-sm font-medium sm:px-4
                                 ${isCorrectOpt ? "border-emerald-400 bg-emerald-100 text-emerald-900"
                                   : isYours && !isCorrectOpt ? "border-rose-300 bg-rose-100 text-rose-800"
                                   : "border-slate-200 bg-white text-slate-600"}`}>
@@ -634,7 +634,7 @@ function InlineReview({
                                   : "bg-slate-100 text-slate-500"}`}>
                                 {String.fromCharCode(65 + idx)}
                               </span>
-                              <span className="min-w-0 flex-1 break-words">
+                              <span className="min-w-0 flex-1 basis-32 [overflow-wrap:anywhere]">
                                 {optImg && <QuestionImage key={optImg} src={optImg} zoomable={false} compact className={opt ? "mb-2" : ""} />}
                                 <RichText segments={q.optionSegments?.[idx]} fallback={opt} />
                               </span>
@@ -794,6 +794,8 @@ function ExamPageContent() {
   useEffect(() => {
     if (calcManuallySet) return;
     if (!started || !activeSubjectName) return;
+    // On a phone the pad would sit on top of the answer options, so there it only opens when the student taps "Calc"
+    if (window.matchMedia("(max-width: 639px)").matches) return;
     setShowCalc(NEEDS_CALCULATOR.has(activeSubjectName));
   }, [activeSubjectName, started, calcManuallySet]);
   const isRevealed = revealEnabled && revealedInStudy.has(currentQuestion);
@@ -1158,7 +1160,7 @@ function ExamPageContent() {
     }
     return (
       <AppShell title={urlNovel ? "Novel Study" : isStudyMode ? "Study Mode" : "Mock Exam"} back={setupHref}>
-        <div className="mx-auto max-w-2xl px-4 py-4 lg:max-w-3xl lg:px-6">
+        <div className="mx-auto min-w-0 max-w-2xl overflow-x-clip px-3 py-4 sm:px-4 lg:max-w-3xl lg:px-6">
           <div className="mb-5 rounded-[28px] bg-gradient-to-br from-violet-600 to-violet-500 p-6 text-white shadow-xl shadow-violet-300/25">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-100">
               {isStudyMode ? "Study mode · answers shown as you go" : isPracticeMode ? "Practice · answers shown as you go" : "JAMB standard · 4 subjects"}
@@ -1471,8 +1473,8 @@ function ExamPageContent() {
 
   return (
     <AppShell hideTopBar hideBottomNav>
-      <main className="px-2 py-4 sm:px-4 lg:px-6">
-      <div className="mx-auto max-w-7xl"
+      <main className="overflow-x-clip px-2 py-4 sm:px-4 lg:px-6">
+      <div className="mx-auto w-full min-w-0 max-w-7xl"
         style={{ paddingLeft: "env(safe-area-inset-left)", paddingRight: "env(safe-area-inset-right)", paddingBottom: "env(safe-area-inset-bottom)" }}>
         <header className="sticky top-[env(safe-area-inset-top,0px)] z-30 mb-3 rounded-[20px] border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur sm:mb-4 sm:rounded-[24px] sm:p-4 xl:static">
           <div className="flex items-center justify-between gap-2 sm:flex-wrap sm:gap-3">
@@ -1508,12 +1510,12 @@ function ExamPageContent() {
           )}
         </header>
 
-        <div className="grid gap-4 sm:gap-6 xl:grid-cols-[1.7fr_0.7fr]">
-          <section id="exam-question" className="scroll-mt-28 rounded-[28px] bg-white p-4 ring-1 ring-slate-200 sm:p-6">
+        <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,0.7fr)]">
+          <section id="exam-question" className="min-w-0 scroll-mt-28 rounded-[28px] bg-white p-4 ring-1 ring-slate-200 sm:p-6">
             <div className="mb-4 flex items-center justify-between sm:mb-5">
               <div className="flex items-center gap-2">
                 <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${isStudyMode ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}>{pos.number}</span>
-                <span className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                <span className="whitespace-nowrap text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 sm:tracking-[0.2em]">
                   Q {pos.number} / {pos.count}
                 </span>
               </div>
@@ -1541,7 +1543,7 @@ function ExamPageContent() {
             {q && <QuestionMedia question={q} hidePassage={!!passageInfo} />}
 
             <div className={`rounded-[24px] p-4 ring-1 sm:p-5 ${isStudyMode ? "bg-violet-50 ring-violet-100" : "bg-slate-50 ring-slate-200"}`}>
-              <p className="text-base leading-7 text-slate-800 sm:text-lg sm:leading-8">
+              <p className="[overflow-wrap:anywhere] text-base leading-7 text-slate-800 sm:text-lg sm:leading-8">
                 <RichText segments={q?.promptSegments} fallback={q?.prompt ?? ""} />
               </p>
             </div>
@@ -1561,14 +1563,14 @@ function ExamPageContent() {
                   <button key={`${q?.id}-${idx}`} type="button"
                     onClick={() => !isRevealed && chooseAnswer(idx)}
                     disabled={revealEnabled && isRevealed}
-                    className={`flex touch-manipulation items-center rounded-2xl border p-3 text-left text-sm font-medium transition sm:p-4 ${cls}`}>
+                    className={`flex w-full min-w-0 touch-manipulation items-center rounded-2xl border p-3 text-left text-sm font-medium transition sm:p-4 ${cls}`}>
                     <span className={`mr-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold
                       ${showResult && isCorrectOpt ? "bg-emerald-500 text-white"
                         : showResult && isSelected && !isCorrectOpt ? "bg-rose-400 text-white"
                         : "bg-slate-100 text-slate-600"}`}>
                       {String.fromCharCode(65 + idx)}
                     </span>
-                    <span className="min-w-0 flex-1 break-words">
+                    <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                       {q?.optionImages?.[idx] && (
                         <QuestionImage key={q.optionImages[idx] as string} src={q.optionImages[idx] as string} zoomable={false} compact className={opt ? "mb-2" : ""} />
                       )}
@@ -1605,10 +1607,10 @@ function ExamPageContent() {
             </div>
             </div>
 
-            <div className="sticky bottom-0 z-30 -mx-4 -mb-4 mt-5 flex items-center justify-between gap-2 rounded-b-[28px] border-t border-slate-100 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 xl:static xl:z-auto xl:mx-0 xl:mb-0 xl:mt-6 xl:flex-wrap xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none">
+            <div className="sticky bottom-0 z-30 -mx-4 -mb-4 mt-5 flex items-center justify-between gap-1.5 rounded-b-[28px] border-t border-slate-100 bg-white/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 xl:static xl:z-auto xl:mx-0 xl:mb-0 xl:mt-6 xl:flex-wrap xl:gap-3 xl:rounded-none xl:border-0 xl:bg-transparent xl:p-0 xl:backdrop-blur-none">
               {/* Left: tools (mark for review, jump to the question list on phones) */}
-              <div className="flex shrink-0 gap-2 sm:gap-3">
-                {q && <BookmarkButton snapshot={toSnapshot(q, { index: currentQuestion, number: pos.number }, sessionLabel)} subject={q.subject ?? sessionLabel} />}
+              <div className="flex shrink-0 gap-1.5 sm:gap-3">
+                {q && <BookmarkButton snapshot={toSnapshot(q, { index: currentQuestion, number: pos.number }, sessionLabel)} subject={q.subject ?? sessionLabel} className="max-[399px]:[&>span]:hidden" />}
                 {!isStudyMode && (
                   <button type="button" onClick={toggleMark}
                     aria-label={marked.has(currentQuestion) ? "Unmark question" : "Mark question for review"}
@@ -1625,17 +1627,17 @@ function ExamPageContent() {
               </div>
 
               {/* Right: Prev and Next side by side, same size — Prev goes back to the question you just left */}
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <div className="flex min-w-0 items-center gap-1.5 sm:gap-3">
                 <button type="button" disabled={currentQuestion === 0}
                   onClick={() => setCurrentQuestion((v) => Math.max(v - 1, 0))}
                   aria-label="Previous question"
-                  className="inline-flex touch-manipulation items-center justify-center gap-1 rounded-2xl border-2 border-slate-300 bg-white px-3 py-[10px] text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-40 sm:px-6">
-                  <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden /> Prev
+                  className="inline-flex touch-manipulation items-center justify-center gap-1 rounded-2xl border-2 border-slate-300 bg-white px-2.5 py-[10px] text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-40 sm:px-6">
+                  <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden /> <span className="hidden min-[400px]:inline">Prev</span>
                 </button>
                 <button type="button" onClick={moveNext} disabled={currentQuestion === questionTotal - 1}
                   aria-label="Next question"
-                  className={`inline-flex min-w-0 touch-manipulation items-center justify-center gap-1 rounded-2xl px-3 py-3 text-sm font-bold text-white disabled:opacity-40 sm:px-6 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
-                  <span className="truncate">
+                  className={`inline-flex shrink-0 touch-manipulation items-center justify-center gap-1 rounded-2xl px-2.5 py-3 text-sm font-bold text-white disabled:opacity-40 sm:px-6 ${revealEnabled ? "bg-violet-600 hover:bg-violet-700" : "bg-emerald-700"}`}>
+                  <span className="whitespace-nowrap">
                     {revealEnabled && !isRevealed && answers[currentQuestion] !== undefined ? "Reveal answer" : "Next"}
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
@@ -1645,7 +1647,7 @@ function ExamPageContent() {
           </section>
 
           <aside className="space-y-5">
-            <div id="exam-navigator" className="scroll-mt-28 rounded-[28px] bg-white p-4 ring-1 ring-slate-200 sm:p-5">
+            <div id="exam-navigator" className="min-w-0 scroll-mt-28 rounded-[28px] bg-white p-4 ring-1 ring-slate-200 sm:p-5">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-base font-black text-slate-900">Navigator</h3>
                 <span className="text-xs font-semibold text-slate-500">
