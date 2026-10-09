@@ -100,7 +100,7 @@ function ScoreRuler({ estimate, target, armed, hasData }: { estimate: number; ta
         {/* estimate pin */}
         {hasData && (
           <span
-            className="absolute bottom-[1px] h-[14px] w-[14px] -translate-x-1/2 rounded-full border-[3px] border-[#1d1747] bg-white transition-[left] duration-[1400ms] ease-out motion-reduce:transition-none"
+            className="keep-light absolute bottom-[1px] h-[14px] w-[14px] -translate-x-1/2 rounded-full border-[3px] border-[#1d1747] bg-white transition-[left] duration-[1400ms] ease-out motion-reduce:transition-none"
             style={{ left: armed ? `${estPct}%` : "0%" }}
           />
         )}

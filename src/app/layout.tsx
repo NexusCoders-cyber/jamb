@@ -24,7 +24,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
   // When the keyboard opens, shrink the layout (like a native app) instead of covering the answer field
   interactiveWidget: "resizes-content",
-  themeColor: "#6557d9",
+  themeColor: "#0d0c18", // dark is the default; the theme script switches this when someone picks light
 };
 
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || "https://orbitprep.app";

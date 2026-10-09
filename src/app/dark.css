@@ -2,25 +2,26 @@
    GENERATED FILE — do not edit by hand.
    Source: scripts/gen-dark-css.mjs   (runs automatically before `dev` and `build`)
    Dark-mode colour overrides for every Tailwind colour class used in src/.
-   185 rules.
+   196 rules.
    ────────────────────────────────────────────────────────────────────────────── */
 .dark .bg-\[\#e6f5ef\] { background-color: color-mix(in srgb, #e6f5ef 16%, #141327); }
+.dark .bg-\[\#e7f3f8\] { background-color: color-mix(in srgb, #e7f3f8 16%, #141327); }
 .dark .bg-\[\#e8eef8\] { background-color: color-mix(in srgb, #e8eef8 16%, #141327); }
+.dark .bg-\[\#e8f0fb\] { background-color: color-mix(in srgb, #e8f0fb 16%, #141327); }
 .dark .bg-\[\#e8f2f5\] { background-color: color-mix(in srgb, #e8f2f5 16%, #141327); }
 .dark .bg-\[\#ede8fb\] { background-color: color-mix(in srgb, #ede8fb 16%, #141327); }
 .dark .bg-\[\#eee9f8\] { background-color: color-mix(in srgb, #eee9f8 16%, #141327); }
 .dark .bg-\[\#eeecff\] { background-color: color-mix(in srgb, #eeecff 16%, #141327); }
 .dark .bg-\[\#eef2ff\] { background-color: color-mix(in srgb, #eef2ff 16%, #141327); }
 .dark .bg-\[\#eef6f1\] { background-color: color-mix(in srgb, #eef6f1 16%, #141327); }
-.dark .bg-\[\#f1e5c9\] { background-color: color-mix(in srgb, #f1e5c9 16%, #141327); }
+.dark .bg-\[\#f3ecfb\] { background-color: color-mix(in srgb, #f3ecfb 16%, #141327); }
 .dark .bg-\[\#f5eee1\] { background-color: color-mix(in srgb, #f5eee1 16%, #141327); }
 .dark .bg-\[\#f5f4ff\] { background-color: #0d0c18; }
 .dark .bg-\[\#f6e9e1\] { background-color: color-mix(in srgb, #f6e9e1 16%, #141327); }
 .dark .bg-\[\#f8e8ed\] { background-color: color-mix(in srgb, #f8e8ed 16%, #141327); }
 .dark .bg-\[\#f8fafb\] { background-color: color-mix(in srgb, #f8fafb 16%, #141327); }
+.dark .bg-\[\#fde9ec\] { background-color: color-mix(in srgb, #fde9ec 16%, #141327); }
 .dark .bg-\[\#fff3d9\] { background-color: color-mix(in srgb, #fff3d9 16%, #141327); }
-.dark .bg-\[\#fff8f4\] { background-color: color-mix(in srgb, #fff8f4 16%, #141327); }
-.dark .bg-\[\#fffaf0\] { background-color: color-mix(in srgb, #fffaf0 16%, #141327); }
 .dark .bg-amber-100 { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 17%, #141327); }
 .dark .bg-amber-50 { background-color: color-mix(in srgb, var(--color-amber-500, #f59e0b) 11%, #141327); }
 .dark .bg-blue-100 { background-color: color-mix(in srgb, var(--color-blue-500, #3b82f6) 17%, #141327); }
@@ -45,6 +46,7 @@
 .dark .bg-slate-800\/60 { background-color: color-mix(in srgb, #2a2950 60%, transparent); }
 .dark .bg-slate-900 { background-color: #2d2c52; }
 .dark .bg-slate-900\/40 { background-color: color-mix(in srgb, #2d2c52 40%, transparent); }
+.dark .bg-slate-900\/50 { background-color: color-mix(in srgb, #2d2c52 50%, transparent); }
 .dark .bg-slate-900\/60 { background-color: color-mix(in srgb, #2d2c52 60%, transparent); }
 .dark .bg-slate-900\/70 { background-color: color-mix(in srgb, #2d2c52 70%, transparent); }
 .dark .bg-slate-900\/90 { background-color: color-mix(in srgb, #2d2c52 90%, transparent); }
@@ -90,9 +92,12 @@
 .dark .ring-emerald-100 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 26%, #141327); }
 .dark .ring-emerald-200 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
 .dark .ring-emerald-300 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 40%, #141327); }
+.dark .ring-offset-white { --tw-ring-offset-color: #1b1a31; }
 .dark .ring-orange-200 { --tw-ring-color: color-mix(in srgb, var(--color-orange-500, #f97316) 32%, #141327); }
 .dark .ring-rose-100 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 26%, #141327); }
 .dark .ring-rose-200 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 32%, #141327); }
+.dark .ring-rose-300 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 40%, #141327); }
+.dark .ring-sky-100 { --tw-ring-color: color-mix(in srgb, var(--color-sky-500, #0ea5e9) 26%, #141327); }
 .dark .ring-sky-200 { --tw-ring-color: color-mix(in srgb, var(--color-sky-500, #0ea5e9) 32%, #141327); }
 .dark .ring-slate-100 { --tw-ring-color: #24233f; }
 .dark .ring-slate-200 { --tw-ring-color: #2e2d4e; }
@@ -102,17 +107,20 @@
 .dark .ring-violet-300 { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 40%, #141327); }
 .dark .ring-white { --tw-ring-color: #1b1a31; }
 .dark .text-\[\#0d6b3f\] { color: color-mix(in srgb, #0d6b3f 32%, #ffffff); }
+.dark .text-\[\#1f6a8a\] { color: color-mix(in srgb, #1f6a8a 32%, #ffffff); }
 .dark .text-\[\#211b3d\] { color: #f1f0ff; }
 .dark .text-\[\#28527d\] { color: #f1f0ff; }
+.dark .text-\[\#2b5c9a\] { color: color-mix(in srgb, #2b5c9a 32%, #ffffff); }
 .dark .text-\[\#2d6875\] { color: color-mix(in srgb, #2d6875 32%, #ffffff); }
 .dark .text-\[\#4f35c2\] { color: color-mix(in srgb, #4f35c2 32%, #ffffff); }
 .dark .text-\[\#5145b5\] { color: color-mix(in srgb, #5145b5 32%, #ffffff); }
 .dark .text-\[\#654b8d\] { color: color-mix(in srgb, #654b8d 32%, #ffffff); }
-.dark .text-\[\#6557d9\] { color: color-mix(in srgb, #6557d9 32%, #ffffff); }
+.dark .text-\[\#6b3fa0\] { color: color-mix(in srgb, #6b3fa0 32%, #ffffff); }
 .dark .text-\[\#8a6325\] { color: color-mix(in srgb, #8a6325 32%, #ffffff); }
 .dark .text-\[\#975334\] { color: color-mix(in srgb, #975334 32%, #ffffff); }
 .dark .text-\[\#9a6814\] { color: color-mix(in srgb, #9a6814 32%, #ffffff); }
 .dark .text-\[\#a24b67\] { color: color-mix(in srgb, #a24b67 32%, #ffffff); }
+.dark .text-\[\#b4233b\] { color: color-mix(in srgb, #b4233b 32%, #ffffff); }
 .dark .text-amber-600 { color: var(--color-amber-400, #fbbf24); }
 .dark .text-amber-700 { color: var(--color-amber-300, #fcd34d); }
 .dark .text-amber-800 { color: var(--color-amber-200, #fde68a); }
@@ -145,7 +153,10 @@
 .dark .to-white { --tw-gradient-to: #1b1a31; }
 
 /* state variants */
+.dark .active\:bg-slate-200:active { background-color: #2c2b4c; }
+.dark .active\:bg-slate-50:active { background-color: #151428; }
 .dark .active\:bg-violet-100:active { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 17%, #141327); }
+.dark .active\:bg-violet-50:active { background-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 11%, #141327); }
 .dark .focus\:bg-white:focus { background-color: #1b1a31; }
 .dark .focus\:ring-violet-100:focus { --tw-ring-color: color-mix(in srgb, var(--color-violet-500, #8b5cf6) 26%, #141327); }
 .dark .group:hover .group-hover\:text-violet-600 { color: var(--color-violet-400, #a78bfa); }

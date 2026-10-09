@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Offline — Qubit Learn</title>
 <script>
-  // Same rule as the app: saved choice (light/dark/system), default light
+  // Same rule as the app: saved choice (light/dark/system); dark until the student picks something else
   (function () {
     try {
       var p = localStorage.getItem("qubit-theme");
-      var d = p === "dark" || (p === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      var d = p === "dark" || (p !== "light" && p !== "system") || (p === "system" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
       if (d) document.documentElement.className = "dark";
     } catch (e) {}
   })();
