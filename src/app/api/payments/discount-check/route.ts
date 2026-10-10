@@ -15,6 +15,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
+import { applyDiscount, isExpired } from "@/lib/discount";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
     if (!dc || !dc.active) {
       return NextResponse.json({ valid: false, message: "That code doesn't exist or is no longer active." });
     }
-    if (dc.expires_at && new Date(dc.expires_at).getTime() < Date.now()) {
+    if (isExpired(dc.expires_at)) {
       return NextResponse.json({ valid: false, message: "That code has expired." });
     }
     if (dc.max_uses !== null && dc.used_count >= dc.max_uses) {
@@ -78,18 +79,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ valid: false, message: "You have already used this code." });
     }
 
-    // baseNaira is display-only (the client's selected plan price); the real
-    // charged amount is recomputed server-side at checkout. Paystack channels
-    // on this merchant reject charges below ₦100, so the discount is capped so
-    // the student always pays at least the ₦100 floor (same rule as checkout).
-    const MIN_PAYABLE_KOBO = 10000;
+    // baseNaira is display-only (the client's selected plan price); the real charged amount is recomputed
+    // server-side at checkout with the same applyDiscount(), including the ₦100 floor Paystack needs.
     const baseNaira = Math.max(0, Math.round(Number(body.baseNaira ?? 0)));
-    const baseKobo = baseNaira * 100;
-    const rawDiscountKobo = dc.kind === "percent"
-      ? Math.round((baseKobo * dc.value) / 100)
-      : Math.min(dc.value, baseKobo);
-    const discountKobo = Math.min(rawDiscountKobo, Math.max(0, baseKobo - MIN_PAYABLE_KOBO));
-    const finalNaira = Math.max(Math.round(MIN_PAYABLE_KOBO / 100), Math.round((baseKobo - discountKobo) / 100));
+    const { discountKobo, payableKobo } = applyDiscount(baseNaira * 100, dc.kind, dc.value);
+    const finalNaira = Math.round(payableKobo / 100);
 
     return NextResponse.json({
       valid: true,

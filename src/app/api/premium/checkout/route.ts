@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getPaystackSecretKey } from "@/lib/env";
 import { getPaystackSecret } from "@/lib/paystack-key";
+import { applyDiscount, isExpired, MIN_PAYABLE_KOBO } from "@/lib/discount";
 import { cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 import { getAdminClient, requireUser, HttpError, errorResponse } from "@/lib/quiz-server";
 
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
       discount = (dc as unknown as DiscountRow) ?? null;
 
       if (!discount || !discount.active) throw new HttpError(400, "That discount code is not valid");
-      if (discount.expires_at && new Date(discount.expires_at).getTime() < Date.now()) throw new HttpError(400, "That discount code has expired");
+      if (isExpired(discount.expires_at)) throw new HttpError(400, "That discount code has expired");
       if (discount.max_uses !== null && discount.used_count >= discount.max_uses) throw new HttpError(400, "That discount code has been fully used");
 
       // One redemption per student per code
@@ -67,14 +68,12 @@ export async function POST(req: Request) {
         .maybeSingle();
       if (mine) throw new HttpError(400, "You have already used this discount code");
 
-      discountKobo = discount.kind === "percent"
-        ? Math.floor((baseKobo * discount.value) / 100)
-        : Math.min(discount.value, baseKobo);
+      discountKobo = applyDiscount(baseKobo, discount.kind, discount.value).discountKobo;
     }
 
     // Paystack's channels on this merchant reject charges below ₦100 with
     // "No active channel to process transaction" — keep the ₦100 floor.
-    const payableKobo = Math.max(10000, baseKobo - discountKobo);
+    const payableKobo = Math.max(MIN_PAYABLE_KOBO, baseKobo - discountKobo);
     const reference = `QB-${plan.toUpperCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
     // Record the pending payment BEFORE redirecting, so /confirm can match it

@@ -28,6 +28,7 @@ import { ALOC_SUBJECTS } from "@/lib/aloc";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
+import CalculatorPad from "@/components/exam/CalculatorPad";
 import { novelMatches, type NormalizedQuestion } from "@/lib/aloc";
 import { finalizeEnglishPaper } from "@/lib/englishPaper";
 import { sampleLekkiForExam } from "@/lib/lekki-questions";
@@ -92,75 +93,6 @@ const FALLBACK: ExamQuestion[] = [
   { id: "f4", prompt: "Which compound is an alkane?", options: ["C2H4", "C2H2", "C2H6", "C6H6"], answer: 2, explanation: "Alkanes: CnH2n+2. C2H6 = ethane." },
   { id: "f5", prompt: "Photosynthesis in green plants produces:", options: ["CO2 and water", "Glucose and oxygen", "Starch and CO2", "Oxygen only"], answer: 1, explanation: null },
 ];
-
-function calcExpr(input: string): string | number {
-  const tokens = input.match(/\d+(?:\.\d+)?|[+\-*/]/g);
-  if (!tokens) return "-";
-  if (tokens.join("") !== input.replace(/\s/g, "")) return "-";
-  if (tokens.length === 0 || /[+\-*/]/.test(tokens[0]) || /[+\-*/]/.test(tokens[tokens.length - 1])) return "-";
-
-  const numsAndOps: (string | number)[] = tokens.map((t) => (/[+\-*/]/.test(t) ? t : Number(t)));
-
-  const highPrecedence: (string | number)[] = [numsAndOps[0]];
-  for (let i = 1; i < numsAndOps.length; i += 2) {
-    const op = numsAndOps[i];
-    const next = numsAndOps[i + 1];
-    if (typeof next !== "number" || Number.isNaN(next)) return "-";
-    if (op === "*" || op === "/") {
-      const prev = highPrecedence.pop();
-      if (typeof prev !== "number") return "-";
-      if (op === "/" && next === 0) return "-";
-      highPrecedence.push(op === "*" ? prev * next : prev / next);
-    } else {
-      highPrecedence.push(op, next);
-    }
-  }
-
-  let result = highPrecedence[0];
-  if (typeof result !== "number") return "-";
-  for (let i = 1; i < highPrecedence.length; i += 2) {
-    const op = highPrecedence[i];
-    const next = highPrecedence[i + 1];
-    if (typeof next !== "number") return "-";
-    result = op === "+" ? result + next : result - next;
-  }
-
-  return Number.isFinite(result) ? Math.round(result * 1e10) / 1e10 : "-";
-}
-
-function CalculatorPad({ onClose }: { onClose: () => void }) {
-  const [expr, setExpr] = useState("");
-  const keys = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+"];
-  function press(k: string) {
-    if (k === "=") {
-      const result = calcExpr(expr);
-      if (typeof result === "number") setExpr(String(result));
-      return;
-    }
-    setExpr((e) => e + k);
-  }
-  return (
-    <div className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-50 w-64 max-w-[calc(100vw-1.5rem)] rounded-[24px] bg-slate-900 p-3 text-white shadow-2xl shadow-slate-900/40 sm:w-72 sm:rounded-[28px] sm:p-4 lg:bottom-6">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-bold">Calculator</p>
-        <button type="button" onClick={onClose} className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold" aria-label="Close calculator">Hide</button>
-      </div>
-      <div className="mb-3 min-h-[2.5rem] rounded-xl bg-white/10 px-3 py-2 text-right font-mono text-lg font-bold break-all">
-        {expr || "0"}
-      </div>
-      <div className="grid grid-cols-4 gap-1.5">
-        {keys.map((k) => (
-          <button key={k} type="button" onClick={() => press(k)}
-            className={`h-9 rounded-xl text-base font-bold sm:h-11 ${k === "=" ? "bg-emerald-500 text-white" : "bg-white/10 active:bg-white/20"}`}>
-            {k === "*" ? "×" : k === "/" ? "÷" : k}
-          </button>
-        ))}
-        <button type="button" onClick={() => setExpr((e) => e.slice(0, -1))} className="col-span-2 h-9 rounded-xl bg-white/10 text-sm font-bold sm:h-11">Backspace</button>
-        <button type="button" onClick={() => setExpr("")} className="col-span-2 h-9 rounded-xl bg-rose-500/80 text-sm font-bold sm:h-11">Clear</button>
-      </div>
-    </div>
-  );
-}
 
 /** Every diagram for a question, including older saved ones that only have `image` */
 function questionImageList(q: { images?: string[]; image?: string | null }): string[] {

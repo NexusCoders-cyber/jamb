@@ -14,6 +14,7 @@ import { getPaystackSecret } from "@/lib/paystack-key";
 import { cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
+import { applyDiscount, isExpired, MIN_PAYABLE_KOBO } from "@/lib/discount";
 
 const PLAN_DAYS: Record<string, number> = {
   weekly: 7,
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
       if (!codeRow || !codeRow.active) {
         return NextResponse.json({ error: "Discount code is invalid or expired." }, { status: 400 });
       }
-      if (codeRow.expires_at && new Date(codeRow.expires_at) < new Date()) {
+      if (isExpired(codeRow.expires_at)) {
         return NextResponse.json({ error: "Discount code has expired." }, { status: 400 });
       }
       if (codeRow.max_uses !== null && codeRow.used_count >= codeRow.max_uses) {
@@ -122,19 +123,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "You have already used this discount code." }, { status: 400 });
       }
 
-      const baseKobo = baseNaira * 100;
-      if (codeRow.kind === "percent") {
-        discountKobo = Math.round((baseKobo * codeRow.value) / 100);
-      } else {
-        discountKobo = Math.min(codeRow.value, baseKobo);
-      }
+      discountKobo = applyDiscount(baseNaira * 100, codeRow.kind, codeRow.value).discountKobo;
       codeId = codeRow.id;
     }
 
     // Paystack's channels on this merchant reject charges below ₦100 with
     // "No active channel to process transaction" — so after discounts, never
     // charge less than the ₦100 floor (verified against the live account).
-    const finalKobo = Math.max(10000, baseNaira * 100 - discountKobo);
+    const finalKobo = Math.max(MIN_PAYABLE_KOBO, baseNaira * 100 - discountKobo);
 
     // Create Paystack transaction
     const { data: profile } = await admin

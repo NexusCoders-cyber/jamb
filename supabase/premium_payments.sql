@@ -17,7 +17,7 @@ create table if not exists public.discount_codes (
   id uuid primary key default gen_random_uuid(),
   code text not null unique,                 -- uppercase, e.g. JAMB2026
   kind text not null check (kind in ('percent','fixed')),
-  value integer not null check (value > 0),  -- percent (1-100) or kobo amount
+  value integer not null check (value > 0),  -- percent (1-100), or whole NAIRA for kind = 'fixed' (200 = ₦200 off)
   max_uses integer,                           -- null = unlimited
   used_count integer not null default 0,
   active boolean not null default true,

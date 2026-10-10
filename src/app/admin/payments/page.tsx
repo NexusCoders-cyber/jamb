@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { applyDiscount, checkNewCode, codeStatus, describeDiscount, type CodeStatus } from "@/lib/discount";
 import { Eye, EyeOff, Loader2, Plus, Power, Tag, Trash2, Key, RefreshCw } from "lucide-react";
 
 type DiscountCode = {
@@ -43,6 +44,14 @@ type ProUser = {
   full_name: string;
   email: string | null;
   premium_until: string | null;
+};
+
+const STATUS_LABEL: Record<CodeStatus, string> = { live: "Live", off: "Off", expired: "Expired", "used-up": "Used up" };
+const STATUS_STYLE: Record<CodeStatus, string> = {
+  live: "bg-emerald-500/15 text-emerald-300",
+  off: "bg-slate-700 text-slate-400",
+  expired: "bg-amber-500/15 text-amber-300",
+  "used-up": "bg-amber-500/15 text-amber-300",
 };
 
 const PLAN_KEYS = [
@@ -81,6 +90,14 @@ export default function AdminPaymentsPage() {
   const [newValue, setNewValue]     = useState("10");
   const [newMaxUses, setNewMaxUses] = useState("");
   const [newExpires, setNewExpires] = useState("");
+
+  // What the code does to the monthly price, shown while the admin types so a wrong unit is obvious
+  const exampleBase = Number(prices.price_monthly_naira) || 800;
+  const exampleValue = /^\d+$/.test(newValue.trim()) ? Number(newValue.trim()) : 0;
+  const example = applyDiscount(exampleBase * 100, newKind, exampleValue);
+  const discountExample = exampleValue > 0
+    ? `Example: a ₦${exampleBase.toLocaleString("en-NG")} plan costs ₦${Math.round(example.payableKobo / 100).toLocaleString("en-NG")} with this code (${newKind === "percent" ? `${exampleValue}% off` : `₦${exampleValue.toLocaleString("en-NG")} off`}). Students never pay less than ₦100.`
+    : "Pick % off or ₦ off, then the amount. Students never pay less than ₦100.";
 
   // ── Recent payments ────────────────────────────────────────────────────────
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -233,23 +250,15 @@ export default function AdminPaymentsPage() {
 
   // ── Create discount code ─────────────────────────────────────────────────────
   async function createCode() {
-    const code = newCode.trim().toUpperCase().replace(/\s+/g, "");
-    const value = parseInt(newValue, 10);
-    if (!code)                              { flash("Enter a code name.", false); return; }
-    if (Number.isNaN(value) || value <= 0)  { flash("Enter a valid value.", false); return; }
-    if (newKind === "percent" && value > 100) { flash("Percent can't exceed 100.", false); return; }
+    const checked = checkNewCode({ code: newCode, kind: newKind, value: newValue, maxUses: newMaxUses, expires: newExpires });
+    if (!checked.ok) { flash(checked.error, false); return; }
     setBusy(true);
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("discount_codes").insert({
-      code,
-      kind: newKind,
-      value,
-      max_uses: newMaxUses.trim() ? parseInt(newMaxUses, 10) : null,
-      expires_at: newExpires ? new Date(newExpires).toISOString() : null,
-    });
+    const { error } = await supabase.from("discount_codes").insert({ ...checked.row, active: true });
+    const dup = !!error && (error.code === "23505" || /duplicate|unique/i.test(error.message));
     flash(error
-      ? (error.message.includes("unique") ? `Code "${code}" already exists.` : error.message)
-      : `Code ${code} created.`,
+      ? (dup ? `Code "${checked.row.code}" already exists.` : error.message)
+      : `Code ${checked.row.code} created — students can use it now.`,
     !error);
     if (!error) { setNewCode(""); setNewMaxUses(""); setNewExpires(""); }
     setBusy(false);
@@ -258,16 +267,16 @@ export default function AdminPaymentsPage() {
 
   async function toggleCode(c: DiscountCode) {
     const supabase = createSupabaseBrowserClient();
-    await supabase.from("discount_codes").update({ active: !c.active }).eq("id", c.id);
-    flash(`${c.code} ${c.active ? "deactivated" : "activated"}.`);
+    const { error } = await supabase.from("discount_codes").update({ active: !c.active }).eq("id", c.id);
+    flash(error ? `Could not change ${c.code}: ${error.message}` : `${c.code} ${c.active ? "turned off" : "turned on"}.`, !error);
     void load();
   }
 
   async function deleteCode(c: DiscountCode) {
-    if (!window.confirm(`Delete code ${c.code}? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete code ${c.code}? This cannot be undone.${c.used_count > 0 ? ` It has been used ${c.used_count} time${c.used_count === 1 ? "" : "s"}; the payment records stay.` : ""}`)) return;
     const supabase = createSupabaseBrowserClient();
-    await supabase.from("discount_codes").delete().eq("id", c.id);
-    flash(`${c.code} deleted.`);
+    const { error } = await supabase.from("discount_codes").delete().eq("id", c.id);
+    flash(error ? `Could not delete ${c.code}: ${error.message}` : `${c.code} deleted.`, !error);
     void load();
   }
 
@@ -511,14 +520,16 @@ export default function AdminPaymentsPage() {
           </select>
           <input value={newValue} onChange={(e) => setNewValue(e.target.value)}
             inputMode="numeric" placeholder={newKind === "percent" ? "10" : "200"}
+            aria-label={newKind === "percent" ? "Percent off" : "Naira off"}
             className="rounded-xl bg-slate-800 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500" />
           <input value={newMaxUses} onChange={(e) => setNewMaxUses(e.target.value)}
             inputMode="numeric" placeholder="Max uses (∞)"
             className="rounded-xl bg-slate-800 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500" />
         </div>
+        <p className="mt-2 text-xs text-slate-400">{discountExample}</p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="text-xs font-bold text-slate-400">Expires (optional)</span>
+            <span className="text-xs font-bold text-slate-400">Last day it works (optional)</span>
             <input type="date" value={newExpires} onChange={(e) => setNewExpires(e.target.value)}
               className="mt-0.5 block rounded-xl bg-slate-800 px-3 py-2 text-sm text-white outline-none ring-1 ring-slate-700 focus:ring-violet-500" />
           </label>
@@ -530,30 +541,37 @@ export default function AdminPaymentsPage() {
         <div className="mt-4 space-y-2">
           {codes.length === 0 ? (
             <p className="rounded-2xl bg-slate-800/60 px-4 py-3 text-xs text-slate-400">No discount codes yet.</p>
-          ) : codes.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 rounded-2xl bg-slate-800/60 p-3">
-              <span className="font-mono text-sm font-black text-white">{c.code}</span>
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-black text-violet-300">
-                {c.kind === "percent" ? `${c.value}% off` : `₦${c.value} off`}
-              </span>
-              <span className="text-[11px] text-slate-400">
-                {c.used_count}{c.max_uses ? `/${c.max_uses}` : ""} used
-                {c.expires_at ? ` · expires ${new Date(c.expires_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" })}` : ""}
-              </span>
-              <span className="flex-1" />
-              {!c.active && <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-black text-slate-400">OFF</span>}
-              <button type="button" onClick={() => void toggleCode(c)}
-                aria-label={`Toggle ${c.code}`}
-                className={`rounded-full p-2 ${c.active ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700 text-slate-400"}`}>
-                <Power className="h-3.5 w-3.5" />
-              </button>
-              <button type="button" onClick={() => void deleteCode(c)}
-                aria-label={`Delete ${c.code}`}
-                className="rounded-full bg-rose-500/10 p-2 text-rose-400 hover:bg-rose-500/20">
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
+          ) : codes.map((c) => {
+            const status = codeStatus(c);
+            return (
+              <div key={c.id} className={`flex items-start gap-3 rounded-2xl bg-slate-800/60 p-3 ${status === "live" ? "" : "opacity-75"}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-sm font-black text-white">{c.code}</span>
+                    <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-black text-violet-300">{describeDiscount(c.kind, c.value)}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${STATUS_STYLE[status]}`}>{STATUS_LABEL[status]}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    {c.used_count}{c.max_uses ? ` of ${c.max_uses}` : ""} used
+                    {c.expires_at ? ` · last day ${new Date(c.expires_at).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Lagos" })}` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <button type="button" onClick={() => void toggleCode(c)}
+                    aria-label={c.active ? `Turn off ${c.code}` : `Turn on ${c.code}`}
+                    title={c.active ? "Turn off" : "Turn on"}
+                    className={`rounded-full p-2 ${c.active ? "bg-emerald-500/10 text-emerald-400" : "bg-slate-700 text-slate-400"}`}>
+                    <Power className="h-3.5 w-3.5" />
+                  </button>
+                  <button type="button" onClick={() => void deleteCode(c)}
+                    aria-label={`Delete ${c.code}`}
+                    className="rounded-full bg-rose-500/10 p-2 text-rose-400 hover:bg-rose-500/20">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
