@@ -29,6 +29,7 @@ import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
 import CalculatorPad from "@/components/exam/CalculatorPad";
+import { AWAY_ENDED_NOTE, AWAY_LIMIT_MS, AWAY_RULE, awayVerdict } from "@/lib/examAway";
 import { novelMatches, type NormalizedQuestion } from "@/lib/aloc";
 import { finalizeEnglishPaper } from "@/lib/englishPaper";
 import { sampleLekkiForExam } from "@/lib/lekki-questions";
@@ -260,6 +261,7 @@ function InlineReview({
   tabs = [],
   saveProblem = null,
   saveNote = null,
+  endedNote = null,
   onRetrySave,
   retryingSave = false,
   timeUsedSeconds = null,
@@ -276,6 +278,8 @@ function InlineReview({
   saveProblem?: string | null;
   /** The attempt was stored, but with less detail than usual */
   saveNote?: string | null;
+  /** Set when the exam ended because the student was away from the screen for over a minute */
+  endedNote?: string | null;
   onRetrySave?: () => void;
   retryingSave?: boolean;
   /** Seconds the student spent on the session (shown on the score card) */
@@ -358,6 +362,11 @@ function InlineReview({
   return (
     <AppShell title="Results" back="/practice">
       <div className="mx-auto min-w-0 max-w-2xl overflow-x-clip px-3 py-4 sm:px-4 lg:max-w-3xl lg:px-6">
+        {endedNote && (
+          <div role="status" className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold leading-5 text-amber-900 ring-1 ring-amber-200">
+            {endedNote}
+          </div>
+        )}
         <ScoreSummary
           subject={subject}
           correct={score}
@@ -587,7 +596,11 @@ function InlineReview({
 
 type SubjectPlan = { name: string; count: number };
 
-/** Everything needed to continue an unfinished session (stored on the device only). */
+/**
+ * A running exam captured at the moment the student leaves the screen (stored on the device only). It is only ever
+ * restored if they are back within a minute; after that the exam is ended and submitted. The "Re-drill my
+ * mistakes" button also hands a ready-made practice session over in this shape (no `leftAt`); it is read once.
+ */
 type SavedExamState = {
   questions: ExamQuestion[];
   subjectTabs: { name: string; start: number }[];
@@ -598,13 +611,16 @@ type SavedExamState = {
   skipped: number[];
   revealed: number[];
   currentQuestion: number;
-  /** Seconds left (null = untimed). The clock is paused while the app is closed. */
+  /** Seconds left (null = untimed) when the snapshot was taken. The clock never pauses: time away is taken off. */
   timeLeft: number | null;
   startedAtMs: number;
   attemptId: string;
+  /** When the student left the exam screen (ms since 1970). Absent on a re-drill hand-off. */
+  leftAt?: number;
 };
 
-const SESSION_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
+/** A "Re-drill my mistakes" hand-off is only valid for a few minutes */
+const HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
 
 function ExamPageContent() {
   const searchParams = useSearchParams();
@@ -886,27 +902,20 @@ function ExamPageContent() {
     if (started && !attemptIdRef.current) attemptIdRef.current = newId();
   }, [started]);
 
-  // Unfinished session saved on this device (one per mode) → offer to resume it
-  const [resumable, setResumable] = useState<SavedExamState | null>(null);
-  useEffect(() => {
-    if (!user || started || reviewEntries) return;
-    let cancelled = false;
-    void getLocalSession(user.id, mode).then(async (row) => {
-      if (cancelled) return;
-      const state = row?.state as SavedExamState | undefined;
-      const fresh = row && Date.now() - new Date(row.savedAt).getTime() < SESSION_MAX_AGE_MS;
-      if (state && fresh && Array.isArray(state.questions) && state.questions.length > 0) setResumable(state);
-      else {
-        setResumable(null);
-        if (row) await clearLocalSession(user.id, mode);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [user, mode, started, reviewEntries]);
+  // ── No "continue later": leaving the exam ends it ────────────────────────────────────────────────────────────────
+  // Like a real JAMB centre, a student who leaves the exam screen has ONE minute to come back. After that the exam ends
+  // and the answers so far are submitted. Study mode shows the answers as you go, so it is exempt.
+  const awayRule = !isStudyMode;
+  const [awayNotice, setAwayNotice] = useState<string | null>(null); // shown on the start screen
+  const [endedAway, setEndedAway] = useState(false); // shown on the results
+  const [welcomeBack, setWelcomeBack] = useState(false);
+  const [pendingAwaySubmit, setPendingAwaySubmit] = useState(false);
+  const autoResume = searchParams.get("resume") === "1";
+  const storeReadRef = useRef(false);
+  const awayAtRef = useRef<number | null>(null);
+  const awayTimerRef = useRef<number | undefined>(undefined);
 
-  function resumeSession(state: SavedExamState) {
+  function restoreSession(state: SavedExamState, awayMs = 0) {
     attemptIdRef.current = state.attemptId || newId();
     submittedRef.current = false;
     startTransition(() => {
@@ -919,29 +928,59 @@ function ExamPageContent() {
       setSkipped(new Set(state.skipped));
       setRevealedInStudy(new Set(state.revealed));
       setCurrentQuestion(Math.min(state.currentQuestion, Math.max(0, state.questions.length - 1)));
-      setTimeLeft(state.timeLeft);
+      // the exam clock never pauses, so the time spent away is taken off
+      setTimeLeft(state.timeLeft === null ? null : Math.max(0, state.timeLeft - Math.round(awayMs / 1000)));
       startedAtMsRef.current = state.startedAtMs;
-      setResumable(null);
       setStarted(true);
     });
   }
 
-  // Arriving from "Re-drill my mistakes": the drill was saved as the practice session — start it straight away
-  const autoResume = searchParams.get("resume") === "1";
+  // Read the device store ONCE per visit, then empty it:
+  //  • a snapshot taken when the student left the screen → back within a minute: carry on; later: submit what they had
+  //  • a "Re-drill my mistakes" hand-off (arrives with ?resume=1) → start that practice session
+  //  • anything else (e.g. an old unfinished exam from before this rule) is simply deleted
   useEffect(() => {
-    if (autoResume && resumable && !started) resumeSession(resumable);
+    if (!user || started || reviewEntries || storeReadRef.current) return;
+    storeReadRef.current = true;
+    void getLocalSession(user.id, mode).then(async (row) => {
+      if (!row) return;
+      await clearLocalSession(user.id, mode);
+      const state = row.state as SavedExamState | undefined;
+      if (!state || !Array.isArray(state.questions) || state.questions.length === 0) return;
+      const now = Date.now();
+      if (typeof state.leftAt === "number") {
+        if (!awayRule) return;
+        if (awayVerdict(state.leftAt, now) === "continue") {
+          restoreSession(state, now - state.leftAt);
+          setWelcomeBack(true);
+        } else if (Object.keys(state.answers).length > 0) {
+          restoreSession(state, now - state.leftAt);
+          setEndedAway(true);
+          setPendingAwaySubmit(true);
+        } else {
+          setAwayNotice("Your last exam ended because you were away from the exam screen for more than 1 minute.");
+        }
+        return;
+      }
+      if (autoResume && now - new Date(row.savedAt).getTime() < HANDOFF_MAX_AGE_MS) restoreSession(state);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoResume, resumable, started]);
+  }, [user, mode, started, reviewEntries]);
 
-  async function discardSession() {
-    if (user) await clearLocalSession(user.id, mode);
-    setResumable(null);
-  }
+  // The ended-while-away exam is rebuilt on screen first, then submitted from there
+  useEffect(() => {
+    if (pendingAwaySubmit && started && !submittedRef.current) {
+      setPendingAwaySubmit(false);
+      void doSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAwaySubmit, started]);
 
-  // Autosave the running session on this device (debounced; the clock is captured by a slower timer)
   const timeLeftRef = useRef<number | null>(null);
   timeLeftRef.current = timeLeft;
-  const saveSessionNow = useCallback(() => {
+
+  // Captured only at the moment the student leaves the screen (never while they are working)
+  const saveAwaySnapshot = useCallback((leftAt: number) => {
     if (!user || !started || submittedRef.current || questions.length === 0) return;
     const state: SavedExamState = {
       questions,
@@ -956,30 +995,93 @@ function ExamPageContent() {
       timeLeft: timeLeftRef.current,
       startedAtMs: startedAtMsRef.current ?? Date.now(),
       attemptId: attemptIdRef.current ?? "",
+      leftAt,
     };
     void saveLocalSession(user.id, mode, state);
   }, [user, started, questions, subjectTabs, questionTotal, sessionLabel, answers, marked, skipped, revealedInStudy, currentQuestion, mode]);
 
-  useEffect(() => {
-    if (!started) return;
-    const t = window.setTimeout(saveSessionNow, 700);
-    return () => window.clearTimeout(t);
-  }, [started, saveSessionNow]);
+  /** Back to the start screen without recording anything (nothing was answered, so there is nothing to score) */
+  function abandonExam(note: string) {
+    setStarted(false);
+    setQuestions([]);
+    setSubjectTabs([]);
+    setAnswers({});
+    setMarked(new Set());
+    setSkipped(new Set());
+    setRevealedInStudy(new Set());
+    setCurrentQuestion(0);
+    setTimeLeft(null);
+    setConfirmOpen(false);
+    setLeaveOpen(false);
+    setShowCalc(false);
+    setCalcManuallySet(false);
+    attemptIdRef.current = null;
+    submittedRef.current = false;
+    storeReadRef.current = true;
+    setAwayNotice(note);
+  }
+
+  /** The student was away too long: submit what they have (or, if nothing is answered, just end it) */
+  function endForAway() {
+    if (submittedRef.current) return;
+    if (user) void clearLocalSession(user.id, mode);
+    if (Object.keys(answers).length > 0) {
+      setEndedAway(true);
+      void doSubmit();
+    } else {
+      abandonExam("Your exam ended because you were away from the exam screen for more than 1 minute.");
+    }
+  }
+
+  const saveAwaySnapshotRef = useRef(saveAwaySnapshot);
+  saveAwaySnapshotRef.current = saveAwaySnapshot;
+  const endForAwayRef = useRef(endForAway);
+  endForAwayRef.current = endForAway;
 
   useEffect(() => {
-    if (!started) return;
-    const id = window.setInterval(saveSessionNow, 5000);
-    const onHide = () => {
-      if (document.visibilityState === "hidden") saveSessionNow();
+    if (!started || !awayRule || reviewEntries) return;
+    const leave = () => {
+      if (awayAtRef.current !== null || submittedRef.current) return;
+      const at = Date.now();
+      awayAtRef.current = at;
+      saveAwaySnapshotRef.current(at);
+      // phones freeze timers while the app is in the background, so the wall clock is checked again on return too
+      awayTimerRef.current = window.setTimeout(() => {
+        awayAtRef.current = null;
+        endForAwayRef.current();
+      }, AWAY_LIMIT_MS);
     };
-    document.addEventListener("visibilitychange", onHide);
-    window.addEventListener("pagehide", saveSessionNow);
+    const back = () => {
+      const at = awayAtRef.current;
+      if (at === null) return;
+      window.clearTimeout(awayTimerRef.current);
+      awayAtRef.current = null;
+      if (awayVerdict(at, Date.now()) === "ended") {
+        endForAwayRef.current();
+      } else {
+        if (user) void clearLocalSession(user.id, mode);
+        setWelcomeBack(true);
+      }
+    };
+    const onVisibility = () => (document.visibilityState === "hidden" ? leave() : back());
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", leave);
+    window.addEventListener("pageshow", back);
     return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onHide);
-      window.removeEventListener("pagehide", saveSessionNow);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", leave);
+      window.removeEventListener("pageshow", back);
+      window.clearTimeout(awayTimerRef.current);
+      awayAtRef.current = null;
     };
-  }, [started, saveSessionNow]);
+  }, [started, awayRule, reviewEntries, user, mode]);
+
+  // The "welcome back" reminder fades by itself
+  useEffect(() => {
+    if (!welcomeBack) return;
+    const t = window.setTimeout(() => setWelcomeBack(false), 8000);
+    return () => window.clearTimeout(t);
+  }, [welcomeBack]);
 
   // Clock — runs on the wall clock, not on "one tick = one second". Phones throttle timers when the screen is off
   // or another app is in front, so counting ticks would silently give a student extra time (the real CBT never pauses).
@@ -1007,8 +1109,7 @@ function ExamPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeLeft]);
 
-  // Back button / swipe-back guard: a running exam is never thrown away by one accidental gesture.
-  // (Progress is autosaved on this device, so leaving is safe — but it should be a choice.)
+  // Back button / swipe-back guard: a running exam is never ended by one accidental gesture, only by choosing to.
   const [leaveOpen, setLeaveOpen] = useState(false);
   const guardActive = started && !reviewEntries;
   useEffect(() => {
@@ -1034,8 +1135,12 @@ function ExamPageContent() {
   }
 
   function leaveExam() {
-    saveSessionNow();
     setLeaveOpen(false);
+    // Leaving a mock or practice exam ENDS it: what has been answered is submitted and scored
+    if (awayRule && answeredCount > 0) {
+      void doSubmit();
+      return;
+    }
     window.history.back();
   }
 
@@ -1078,22 +1183,15 @@ function ExamPageContent() {
             </p>
           </div>
 
-          {resumable && (
-            <div className="mb-5 rounded-[24px] bg-amber-50 p-5 ring-1 ring-amber-200" role="region" aria-label="Unfinished session">
-              <h2 className="text-base font-black text-amber-900">You have an unfinished session</h2>
-              <p className="mt-1 text-sm text-amber-800">
-                {resumable.sessionLabel} · {Object.keys(resumable.answers).length} of {resumable.questionTotal} answered
-                {resumable.timeLeft !== null && ` · ${Math.floor(resumable.timeLeft / 60)} min left`}. Saved on this device.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => resumeSession(resumable)} className="h-11 touch-manipulation rounded-2xl bg-amber-600 px-5 text-sm font-black text-white hover:bg-amber-700">
-                  Resume
-                </button>
-                <button type="button" onClick={() => void discardSession()} className="h-11 touch-manipulation rounded-2xl border border-amber-300 bg-white px-5 text-sm font-bold text-amber-800">
-                  Discard
-                </button>
-              </div>
+          {awayNotice && (
+            <div role="status" className="mb-5 rounded-[20px] bg-amber-50 p-4 text-sm font-bold text-amber-900 ring-1 ring-amber-200">
+              {awayNotice}
             </div>
+          )}
+          {awayRule && (
+            <p className="mb-5 rounded-[20px] bg-amber-50 px-4 py-3 text-xs font-semibold leading-5 text-amber-900 ring-1 ring-amber-200">
+              {AWAY_RULE}
+            </p>
           )}
 
           {!isExamMode && !showFullSetup ? (
@@ -1285,7 +1383,7 @@ function ExamPageContent() {
 
   async function doSubmit() {
     if (submitting || submittedRef.current) return;
-    submittedRef.current = true; // stops the autosave from re-creating the session after we clear it
+    submittedRef.current = true; // an exam is only ever submitted once (button, clock, leaving or being away)
     setConfirmOpen(false);
     setSubmitting(true);
 
@@ -1329,6 +1427,8 @@ function ExamPageContent() {
     setCalcManuallySet(false);
     attemptIdRef.current = null;
     submittedRef.current = false;
+    setEndedAway(false);
+    setAwayNotice(null);
     setStarted(false);
   }
 
@@ -1361,6 +1461,7 @@ function ExamPageContent() {
         tabs={subjectTabs}
         saveProblem={saveProblem}
         saveNote={saveNote}
+        endedNote={endedAway ? AWAY_ENDED_NOTE : null}
         onRetrySave={retrySave}
         retryingSave={retryingSave}
         timeUsedSeconds={reviewSeconds}
@@ -1609,7 +1710,14 @@ function ExamPageContent() {
               {submitting ? "Saving…" : revealEnabled ? "Finish & Review" : "Submit Exam"}
             </button>
             <Link href={setupHref}
-              onClick={(e) => { if (answeredCount > 0 && !window.confirm("Leave this session? Your progress is saved on this device, and you can resume it from the start screen.")) e.preventDefault(); }}
+              onClick={(e) => {
+                if (answeredCount === 0) return;
+                if (awayRule) {
+                  // leaving a mock or practice exam ends it: the answers so far are submitted
+                  e.preventDefault();
+                  if (window.confirm("Leave this exam? Leaving ends it, and your answers so far will be submitted.")) void doSubmit();
+                } else if (!window.confirm("Leave this session? It will not be saved.")) e.preventDefault();
+              }}
               className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 
           </aside>
@@ -1618,20 +1726,29 @@ function ExamPageContent() {
       </main>
       {showCalc && <CalculatorPad onClose={() => setShowCalc(false)} />}
 
+      {welcomeBack && (
+        <div role="status" className="fixed inset-x-3 top-3 z-[90] mx-auto max-w-md rounded-2xl bg-amber-500 px-4 py-3 text-sm font-bold text-white shadow-xl" style={{ marginTop: "env(safe-area-inset-top)" }}>
+          Welcome back. Stay on the exam screen: leaving for more than 1 minute ends the exam.
+        </div>
+      )}
+
       {leaveOpen && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/60 sm:items-center sm:p-4" role="alertdialog" aria-modal="true" aria-labelledby="leave-title">
           <div className="w-full max-w-md rounded-t-[28px] bg-white p-5 shadow-2xl sm:rounded-[28px] sm:p-6" style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}>
             <h2 id="leave-title" className="text-xl font-black text-slate-900">Leave this {isExamMode ? "exam" : "session"}?</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Your answers are saved on this device, so you can pick up where you stopped.
-              {timeLeft !== null && " The exam clock keeps its place while you are away."}
+              {!awayRule
+                ? "This session will not be saved."
+                : answeredCount > 0
+                  ? `Leaving ends the ${isExamMode ? "exam" : "session"}. Your ${answeredCount} answer${answeredCount === 1 ? "" : "s"} so far will be submitted and scored.`
+                  : "You have not answered anything yet, so nothing will be saved."}
             </p>
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button type="button" onClick={stayInExam} className="h-12 touch-manipulation rounded-2xl bg-violet-600 text-sm font-bold text-white">
                 Stay
               </button>
               <button type="button" onClick={leaveExam} className="h-12 touch-manipulation rounded-2xl border border-slate-200 bg-white text-sm font-bold text-slate-700">
-                Leave
+                {awayRule && answeredCount > 0 ? "End & submit" : "Leave"}
               </button>
             </div>
           </div>

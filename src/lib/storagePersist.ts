@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Asks the browser to keep this app's saved data (questions, unfinished exams, bookmarks) instead of clearing it
+ * Asks the browser to keep this app's saved data (questions, results, bookmarks) instead of clearing it
  * when the phone runs low on space. Without this, Safari on iPhone can erase a website's storage after about a
  * week of not opening it, and Android Chrome may evict it under pressure. Installed apps are granted it far more
  * readily, which is one more reason to install.

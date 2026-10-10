@@ -14,7 +14,7 @@ function ago(iso: string | null): string {
 }
 
 /**
- * Cloud backup control. Qubit Learn keeps results, bookmarks and unfinished exams on this device first and backs
+ * Cloud backup control. Qubit Learn keeps results and bookmarks on this device first and backs
  * finished exams up on its own (AutoBackup); this card shows what is waiting and lets the student force a backup.
  */
 export default function CloudBackupCard({ userId }: { userId: string }) {
@@ -31,7 +31,7 @@ export default function CloudBackupCard({ userId }: { userId: string }) {
         <CloudUpload className="h-5 w-5 text-violet-600" aria-hidden /> Cloud backup
       </h2>
       <p className="mb-3 mt-1 text-xs leading-5 text-slate-500">
-        Finished exams back up to your account automatically when you have a connection. Your results, bookmarks and unfinished exams are always saved on this device first, so they work with no internet. Use Back up now to force it, for example before changing phone.
+        Finished exams back up to your account automatically when you have a connection. Your results and bookmarks are always saved on this device first, so they work with no internet. Use Back up now to force it, for example before changing phone.
       </p>
 
       <dl className="space-y-1.5 text-sm">

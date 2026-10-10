@@ -7,7 +7,7 @@ import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import QuestionImage from "@/components/QuestionImage";
 import { useUser } from "@/lib/useUser";
-import { getLocalSession, listLocalBookmarks, removeLocalBookmark, subscribeLocal, type LocalBookmark } from "@/lib/localDb";
+import { listLocalBookmarks, removeLocalBookmark, subscribeLocal, type LocalBookmark } from "@/lib/localDb";
 import { startMistakeRedrill } from "@/lib/redrill";
 
 const LETTERS = ["A", "B", "C", "D", "E"];
@@ -38,8 +38,6 @@ export default function BookmarksPage() {
     if (!user || starting || visible.length === 0) return;
     setStarting(true);
     try {
-      const existing = await getLocalSession(user.id, "practice");
-      if (existing && !window.confirm("You have an unfinished practice session. Starting this will replace it. Continue?")) return;
       await startMistakeRedrill(user.id, visible.slice(0, 40).map((b) => b.question), "Saved questions");
       router.push("/exam?mode=practice&resume=1");
     } finally {

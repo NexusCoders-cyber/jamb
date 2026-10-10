@@ -1,7 +1,7 @@
 /**
  * Offline-first device storage (browser only).
  *
- * Everything a student does in an exam is stored HERE first — attempts, the unfinished session, bookmarks and
+ * Everything a student does in an exam is stored HERE first — attempts, bookmarks and
  * small bookkeeping values — in IndexedDB, so the app works with no network and nothing is lost when the
  * connection drops. The cloud (Supabase) is only written to when the student asks for it (see lib/sync.ts).
  *
@@ -50,7 +50,11 @@ export type LocalAttempt = {
   syncedAt: string | null;
 };
 
-/** An exam in progress (one per user and mode) so a closed tab, dead battery or lost signal can be resumed. */
+/**
+ * A short-lived hand-over slot (one per user and mode). It holds a "Re-drill my mistakes" session on its way to the exam
+ * page, or an exam captured when the student left the screen, which is only restored if they are back within a minute.
+ * Exams are never kept for "continue later".
+ */
 export type LocalSession = {
   id: string; // `${userId}:${mode}`
   userId: string;

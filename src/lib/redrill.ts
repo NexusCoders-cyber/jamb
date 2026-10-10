@@ -1,7 +1,8 @@
 /**
  * Turn a student's wrong answers into a fresh practice session they can re-attempt.
- * The session is written in the same format the exam page uses for "resume unfinished exam", so the exam page
- * simply resumes it (/exam?mode=practice&resume=1) — no new exam code path, and everything stays on the device.
+ * The session is handed to the exam page through the device store in the exam's own saved format; the exam page
+ * reads it once and deletes it (/exam?mode=practice&resume=1) — no new exam code path, and everything stays on the device.
+ * It is a hand-over, not a "continue later": an exam that is left is ended, never kept.
  */
 import { newId, saveLocalSession } from "./localDb";
 import type { AttemptAnswer, QuestionSnapshot } from "./queries";

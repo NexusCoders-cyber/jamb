@@ -25,7 +25,7 @@ export default function PrivacyPage() {
       <section>
         <h2>What stays on your phone</h2>
         <p>
-          Practice and mock exams run from your device. Unfinished exams, results and bookmarks are saved locally and only sent
+          Practice and mock exams run from your device. Results and bookmarks are saved locally and only sent
           to our servers when you back up (Settings → Cloud backup), finish an exam while signed in, or sign in. Clearing your
           browser or app data removes the local copy.
         </p>

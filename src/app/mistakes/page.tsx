@@ -8,7 +8,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import { PaywallGate } from "@/components/Paywall";
 import { getWrongAnswers } from "@/lib/queries";
-import { getLocalSession } from "@/lib/localDb";
 import { pickMistakeQuestions, startMistakeRedrill } from "@/lib/redrill";
 import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
@@ -87,8 +86,6 @@ export default function MistakesPage() {
     if (picked.length === 0) return;
     setDrilling(true);
     try {
-      const existing = await getLocalSession(user.id, "practice");
-      if (existing && !window.confirm("You have an unfinished practice session. Starting this drill will replace it. Continue?")) return;
       await startMistakeRedrill(user.id, picked);
       router.push("/exam?mode=practice&resume=1");
     } finally {
