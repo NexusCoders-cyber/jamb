@@ -11,7 +11,8 @@
     "lint": "eslint",
     "bank:fill": "npx tsx scripts/fill-bank.ts",
     "bank:test": "npx tsx scripts/bank-first-test.ts",
-    "vapid": "node scripts/vapid.mjs"
+    "vapid": "node scripts/vapid.mjs",
+    "test": "node --test --experimental-strip-types \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

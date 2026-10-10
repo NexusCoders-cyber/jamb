@@ -209,3 +209,23 @@ button:active, a:active {
 .theme-transition *::after {
   transition: background-color 0.22s ease, color 0.22s ease, border-color 0.22s ease, fill 0.22s ease, stroke 0.22s ease !important;
 }
+
+/* Chart colours (analytics): one place, light and dark */
+:root {
+  --chart-grid: #e2e8f0;
+  --chart-axis: #8a94a6;
+  --chart-text: #475569;
+  --chart-line: #6557d9;
+  --chart-target: #d28a0b;
+  --chart-ring: #ffffff;
+  --chart-mock: #6557d9;
+}
+.dark {
+  --chart-grid: #2e2d4e;
+  --chart-axis: #8c89ae;
+  --chart-text: #d5d2ee;
+  --chart-line: #a79cff;
+  --chart-target: #f6c978;
+  --chart-ring: #1b1a31;
+  --chart-mock: #a79cff;
+}

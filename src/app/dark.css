@@ -2,7 +2,7 @@
    GENERATED FILE — do not edit by hand.
    Source: scripts/gen-dark-css.mjs   (runs automatically before `dev` and `build`)
    Dark-mode colour overrides for every Tailwind colour class used in src/.
-   196 rules.
+   197 rules.
    ────────────────────────────────────────────────────────────────────────────── */
 .dark .bg-\[\#e6f5ef\] { background-color: color-mix(in srgb, #e6f5ef 16%, #141327); }
 .dark .bg-\[\#e7f3f8\] { background-color: color-mix(in srgb, #e7f3f8 16%, #141327); }
@@ -92,6 +92,7 @@
 .dark .ring-emerald-100 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 26%, #141327); }
 .dark .ring-emerald-200 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 32%, #141327); }
 .dark .ring-emerald-300 { --tw-ring-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 40%, #141327); }
+.dark .ring-offset-slate-50 { --tw-ring-offset-color: #1d1c36; }
 .dark .ring-offset-white { --tw-ring-offset-color: #1b1a31; }
 .dark .ring-orange-200 { --tw-ring-color: color-mix(in srgb, var(--color-orange-500, #f97316) 32%, #141327); }
 .dark .ring-rose-100 { --tw-ring-color: color-mix(in srgb, var(--color-rose-500, #f43f5e) 26%, #141327); }

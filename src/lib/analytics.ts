@@ -229,32 +229,50 @@ export function totals(answers: AnswerLite[], attempts: ExamAttempt[]): Totals {
   return { answered: q, correct: c, unanswered: 0, accuracy: pct(c, q) };
 }
 
-export function insights(rows: SubjectRow[], t: Totals, attempts: ExamAttempt[], now = Date.now()): string[] {
-  const out: string[] = [];
+export type InsightItem = { text: string; /** where a one-tap action goes, when there is one */ href?: string; cta?: string };
+
+const studyHref = (subject: string) => `/exam?mode=study&subject=${encodeURIComponent(subject)}&count=20`;
+const shortName = (n: string) => n.replace(" Language", "");
+
+/** What to focus on, each with a one-tap action where one makes sense. */
+export function insightItems(rows: SubjectRow[], t: Totals, attempts: ExamAttempt[], now = Date.now()): InsightItem[] {
+  const out: InsightItem[] = [];
   const ranked = rows.filter((r) => r.answered >= MIN_ANSWERED && r.name !== "Unknown");
   if (ranked.length >= 2) {
     const best = ranked[ranked.length - 1];
     const worst = ranked[0];
-    if (best.accuracy >= STRONG_FROM) out.push(`Your strongest subject is ${best.name.replace(" Language", "")} at ${best.accuracy}%.`);
-    if (worst.accuracy < WEAK_BELOW) out.push(`${worst.name.replace(" Language", "")} needs the most work (${worst.accuracy}%). Practise it next.`);
+    if (best.accuracy >= STRONG_FROM) out.push({ text: `Your strongest subject is ${shortName(best.name)} at ${best.accuracy}%.` });
+    if (worst.accuracy < WEAK_BELOW)
+      out.push({ text: `${shortName(worst.name)} needs the most work (${worst.accuracy}%). Practise it next.`, href: studyHref(worst.name), cta: `Practise ${shortName(worst.name)}` });
   } else if (ranked.length === 1 && ranked[0].accuracy < WEAK_BELOW) {
-    out.push(`${ranked[0].name.replace(" Language", "")} is at ${ranked[0].accuracy}%. A few more practice sessions will lift it.`);
+    out.push({
+      text: `${shortName(ranked[0].name)} is at ${ranked[0].accuracy}%. A few more practice sessions will lift it.`,
+      href: studyHref(ranked[0].name),
+      cta: `Practise ${shortName(ranked[0].name)}`,
+    });
   }
   const improved = rows
     .filter((r) => r.trend !== null && r.trend >= 5 && r.name !== "Unknown")
     .sort((a, b) => (b.trend ?? 0) - (a.trend ?? 0))[0];
-  if (improved) out.push(`${improved.name.replace(" Language", "")} is improving: up ${improved.trend} points lately.`);
+  if (improved) out.push({ text: `${shortName(improved.name)} is improving: up ${improved.trend} points lately.` });
   const slipping = rows
     .filter((r) => r.trend !== null && r.trend <= -5 && r.name !== "Unknown")
     .sort((a, b) => (a.trend ?? 0) - (b.trend ?? 0))[0];
-  if (slipping) out.push(`${slipping.name.replace(" Language", "")} dropped ${Math.abs(slipping.trend ?? 0)} points lately. Revise it.`);
+  if (slipping)
+    out.push({ text: `${shortName(slipping.name)} dropped ${Math.abs(slipping.trend ?? 0)} points lately. Revise it.`, href: studyHref(slipping.name), cta: `Revise ${shortName(slipping.name)}` });
   const total = t.answered + t.unanswered;
   if (total >= 20 && t.unanswered / total >= 0.1) {
-    out.push(`You left ${Math.round((t.unanswered / total) * 100)}% of questions blank. UTME has no negative marking, so always pick an answer.`);
+    out.push({ text: `You left ${Math.round((t.unanswered / total) * 100)}% of questions blank. UTME has no negative marking, so always pick an answer.` });
   }
   const week = attempts.filter((a) => a.submitted_at && new Date(a.submitted_at).getTime() >= now - 7 * DAY).length;
-  if (attempts.length > 0 && week === 0) out.push("You have not practised in the last 7 days. A short session today keeps your streak alive.");
+  if (attempts.length > 0 && week === 0)
+    out.push({ text: "You have not practised in the last 7 days. A short session today keeps your streak alive.", href: "/practice", cta: "Start a session" });
   return out.slice(0, 4);
+}
+
+/** Plain-text version of insightItems (kept for callers that only need the sentences). */
+export function insights(rows: SubjectRow[], t: Totals, attempts: ExamAttempt[], now = Date.now()): string[] {
+  return insightItems(rows, t, attempts, now).map((i) => i.text);
 }
 
 export { accuracyToJamb };

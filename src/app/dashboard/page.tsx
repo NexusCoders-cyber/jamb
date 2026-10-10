@@ -15,6 +15,8 @@ import type { AttemptSubject } from "@/lib/analytics";
 import AppShell from "@/components/AppShell";
 import ExamCountdown from "@/components/ExamCountdown";
 import { useNewArticles } from "@/lib/useNewArticles";
+import { useDailyGoal } from "@/lib/dailyGoal";
+import { DAY_MS, lagosDayKey, lastDays } from "@/lib/trends";
 
 /** The three ways to study — big, with a sentence each, because these are what a student opens the app for. */
 const studyModes: { label: string; detail: string; href: string; tone: string; icon: LucideIcon }[] = [
@@ -33,17 +35,12 @@ const shortcuts: { label: string; href: string; tone: string; icon: LucideIcon }
 ];
 
 const JAMB_MAX = 400;
-const lagosDay = (d: Date) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-
 /** "Today", "Yesterday", "3 days ago", then a plain date — easier to scan than a bare "2 Oct". */
 function whenLabel(ts: string | null | undefined): string {
   if (!ts) return "";
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "";
-  const lagos = (x: Date) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit" }).format(x);
-  const days = Math.round((new Date(lagos(new Date())).getTime() - new Date(lagos(d)).getTime()) / 86_400_000);
+  const days = Math.round((Date.parse(lagosDayKey(new Date().getTime())) - Date.parse(lagosDayKey(d))) / DAY_MS);
   if (days <= 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
@@ -155,6 +152,7 @@ export default function DashboardPage() {
   const [dataLoading, setDataLoading] = useState(true);
   const [revisitSubjects, setRevisitSubjects] = useState<Map<string, AttemptSubject[]>>(new Map());
   const [promos, setPromos] = useState<Promo[]>([]);
+  const dailyGoal = useDailyGoal();
   const [slide, setSlide] = useState(0); // 0 = target card, 1..n = promos
 
   const [todayLabel] = useState(() =>
@@ -230,20 +228,13 @@ export default function DashboardPage() {
   const status = targetStatus(practiceLevel, targetScore);
 
   // Daily goal — counted in Lagos time so the day flips at Nigerian midnight
-  const todayStr = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
+  const todayKey = lagosDayKey(new Date().getTime());
   const todayAnswered = attempts
     .filter((a) => {
       const ts = a.submitted_at ?? a.started_at;
-      if (!ts) return false;
-      const d = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Africa/Lagos", year: "numeric", month: "2-digit", day: "2-digit",
-      }).format(new Date(ts));
-      return d === todayStr;
+      return !!ts && lagosDayKey(ts) === todayKey;
     })
-    .reduce((s, a) => s + a.question_count, 0);
-  const dailyGoal = 20;
+    .reduce((sum, a) => sum + a.question_count, 0);
   const dailyPct = Math.min(100, Math.round((todayAnswered / dailyGoal) * 100));
 
   // Weak sessions
@@ -271,17 +262,8 @@ export default function DashboardPage() {
   }, [weakIdsKey]);
 
   // Last seven days, Lagos time, for the week strip
-  const attemptDays = new Set(attempts.map((a) => (a.submitted_at ?? a.started_at) ? lagosDay(new Date((a.submitted_at ?? a.started_at) as string)) : ""));
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(new Date().getTime() - (6 - i) * 86_400_000);
-    const key = lagosDay(d);
-    return {
-      key,
-      label: new Intl.DateTimeFormat("en-NG", { timeZone: "Africa/Lagos", weekday: "narrow" }).format(d),
-      done: attemptDays.has(key),
-      today: i === 6,
-    };
-  });
+  const attemptDays = new Set(attempts.map((a) => ((a.submitted_at ?? a.started_at) ? lagosDayKey((a.submitted_at ?? a.started_at) as string) : "")));
+  const weekDays = lastDays(7).map((d) => ({ key: d.key, label: d.label.slice(0, 1), done: attemptDays.has(d.key), today: d.isToday }));
 
   // One clear next step: drill the weakest subject; otherwise start, or sit a mock
   const weakest = weakSubjects[0];

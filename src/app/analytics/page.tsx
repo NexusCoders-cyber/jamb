@@ -6,19 +6,20 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import ScoreChart from "@/components/analytics/ScoreChart";
+import WeekChart from "@/components/analytics/WeekChart";
+import { useDailyGoal } from "@/lib/dailyGoal";
 import { PaywallGate } from "@/components/Paywall";
 import { getAnalyticsData, getProfile } from "@/lib/queries";
 import type { AnswerLite, ExamAttempt } from "@/lib/queries";
-import { weightedJambEstimate, targetStatus, bestAttempt, scoreTrend, attemptJambScore, JAMB_TOTAL } from "@/lib/scoring";
+import { weightedJambEstimate, targetStatus, bestAttempt, scoreTrend, attemptJambScore } from "@/lib/scoring";
 import {
   RANGES,
-  activityDays,
   attemptLabel,
   attemptSubjects,
-  chartPoints,
   filterAnswers,
   filterAttempts,
-  insights as buildInsights,
+  insightItems as buildInsights,
   projectedJamb,
   subjectRows,
   totals as buildTotals,
@@ -44,6 +45,7 @@ export default function AnalyticsPage() {
   const [failed, setFailed] = useState(false);
   const [range, setRange] = useState<RangeKey>("all");
   const [shown, setShown] = useState(HISTORY_PAGE);
+  const dailyGoal = useDailyGoal();
 
   const load = useCallback(() => {
     if (!user) return;
@@ -86,8 +88,6 @@ export default function AnalyticsPage() {
       best: bestAttempt(inRange),
       trend: scoreTrend(inRange, 5),
       projection: projectedJamb(rows),
-      points: chartPoints(inRange, 10),
-      activity: activityDays(attempts, 7),
       perAttempt: attemptSubjects(answers),
       tips: buildInsights(rows, t, inRange),
     };
@@ -96,8 +96,6 @@ export default function AnalyticsPage() {
   const status = targetStatus(view.estimate, targetScore);
   const trendDelta = view.trend.length >= 2 ? view.trend[view.trend.length - 1] - view.trend[0] : 0;
   const weakCount = view.rows.filter((r) => r.level === "weak" && r.name !== "Unknown").length;
-  const targetPct = Math.min(100, Math.round((targetScore / JAMB_TOTAL) * 100));
-  const maxActivity = Math.max(1, ...view.activity.map((d) => d.questions));
   const empty = !loading && attempts.length === 0;
   const v = (text: string) => (loading ? "…" : text);
 
@@ -203,9 +201,16 @@ export default function AnalyticsPage() {
                 <h2 className="text-sm font-black uppercase tracking-[0.14em] text-amber-800">What to focus on</h2>
                 <ul className="mt-2 space-y-1.5">
                   {view.tips.map((tip) => (
-                    <li key={tip} className="flex gap-2 text-sm leading-6 text-amber-950">
-                      <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                      {tip}
+                    <li key={tip.text} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm leading-6 text-amber-950">
+                      <span className="flex min-w-0 flex-1 basis-56 gap-2">
+                        <span aria-hidden className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                        <span>{tip.text}</span>
+                      </span>
+                      {tip.href && tip.cta && (
+                        <Link href={tip.href} className="inline-flex min-h-9 shrink-0 items-center rounded-full bg-white px-3 text-xs font-black text-amber-900 ring-1 ring-amber-300 active:scale-[0.98]">
+                          {tip.cta}
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -305,80 +310,30 @@ export default function AnalyticsPage() {
 
             {/* Score over time + activity */}
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
-              <section className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
-                <h2 className="mb-1 text-xl font-black text-slate-900">Score over time</h2>
-                <p className="mb-3 text-xs text-slate-400">
-                  {view.points.length > 0 ? `Last ${view.points.length} exam${view.points.length === 1 ? "" : "s"}, percentage correct. Dashed line = your target.` : "Percentage correct per exam."}
-                </p>
+              <section className="min-w-0 rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
+                <h2 className="mb-0.5 text-xl font-black text-slate-900">Score over time</h2>
+                <p className="mb-4 text-xs text-slate-500">Each dot is a finished session, marked out of 400. Tap the chart to read one.</p>
                 {loading ? (
                   <div className="flex h-48 items-center justify-center text-sm text-slate-400">Loading…</div>
-                ) : view.points.length === 0 ? (
+                ) : view.attempts.length === 0 ? (
                   <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
-                    <p className="text-sm text-slate-400">{empty ? "No exams yet. Take a mock exam to start your trend line." : "No exams in this period."}</p>
+                    <p className="text-sm text-slate-500">{empty ? "No exams yet. Take a mock exam to start your trend line." : "No exams in this period."}</p>
                     <Link href="/exam" className="rounded-full bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-700">
                       Take a mock exam
                     </Link>
                   </div>
                 ) : (
-                  <>
-                    <div className="flex gap-2">
-                      {view.points.map((b) => (
-                        <span key={`v${b.id}`} className="min-w-0 flex-1 text-center text-[10px] font-black text-slate-500">
-                          {b.pct}%
-                        </span>
-                      ))}
-                    </div>
-                    <div className="relative mt-1 flex h-36 items-end gap-2">
-                      <div className="pointer-events-none absolute inset-x-0 border-t border-dashed border-amber-400" style={{ bottom: `${targetPct}%` }} aria-hidden />
-                      {view.points.map((bar) => (
-                        <div key={bar.id} className="flex h-full flex-1 items-end" title={`${bar.pct}% · ${bar.jamb}/400`}>
-                          <div className={`w-full rounded-t-xl transition-all ${levelBar(bar.pct)}`} style={{ height: `${Math.max(bar.pct, 4)}%` }} />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      {view.points.map((b) => (
-                        <span key={`l${b.id}`} className="min-w-0 flex-1 truncate text-center text-[10px] text-slate-400">
-                          {b.label}
-                        </span>
-                      ))}
-                    </div>
-                  </>
+                  <ScoreChart attempts={view.attempts} target={targetScore} />
                 )}
               </section>
 
-              <section className="rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
-                <h2 className="mb-1 text-xl font-black text-slate-900">This week</h2>
-                <p className="mb-3 text-xs text-slate-400">Questions you attempted each day.</p>
+              <section className="min-w-0 rounded-[28px] bg-slate-50 p-5 ring-1 ring-slate-200">
+                <h2 className="mb-0.5 text-xl font-black text-slate-900">This week</h2>
+                <p className="mb-4 text-xs text-slate-500">Questions you answered each day, against your daily goal.</p>
                 {loading ? (
                   <div className="flex h-48 items-center justify-center text-sm text-slate-400">Loading…</div>
                 ) : (
-                  <>
-                    <div className="flex gap-2">
-                      {view.activity.map((d) => (
-                        <span key={`n${d.key}`} className="min-w-0 flex-1 text-center text-[10px] font-black text-slate-500">
-                          {d.questions > 0 ? d.questions : ""}
-                        </span>
-                      ))}
-                    </div>
-                    <div className="mt-1 flex h-36 items-end gap-2">
-                      {view.activity.map((d) => (
-                        <div key={d.key} className="flex h-full flex-1 items-end">
-                          <div
-                            className={`w-full rounded-t-xl transition-all ${d.questions > 0 ? (d.isToday ? "bg-amber-400" : "bg-violet-400") : "bg-slate-200"}`}
-                            style={{ height: `${d.questions > 0 ? Math.max(Math.round((d.questions / maxActivity) * 100), 6) : 4}%` }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex gap-2">
-                      {view.activity.map((d) => (
-                        <span key={`d${d.key}`} className={`min-w-0 flex-1 truncate text-center text-[10px] ${d.isToday ? "font-black text-amber-600" : "text-slate-400"}`}>
-                          {d.isToday ? "Today" : d.label}
-                        </span>
-                      ))}
-                    </div>
-                  </>
+                  <WeekChart attempts={attempts} goal={dailyGoal} />
                 )}
               </section>
             </div>
