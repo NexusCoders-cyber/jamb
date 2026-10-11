@@ -5,6 +5,7 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
+import { PAID_STATUS } from "@/lib/paymentStatus";
 
 export const PLAN_DAYS: Record<string, number> = { weekly: 7, monthly: 30, biannual: 180 };
 const LIFETIME_DAYS = 100 * 365;
@@ -43,15 +44,15 @@ export async function finalizePayment(
     return (data as { premium_until: string | null } | null)?.premium_until ?? null;
   };
 
-  if (payment.status === "paid") return { status: "already", plan, premiumUntil: await currentUntil() };
+  if (payment.status === PAID_STATUS) return { status: "already", plan, premiumUntil: await currentUntil() };
   if (Number(paidKobo) < Number(payment.amount_kobo ?? 0)) return { status: "underpaid", plan };
 
   // Claim atomically: two things arriving at once (double tap, retry, webhook + browser) cannot both grant Pro.
   const { data: claimed } = await admin
     .from("payments")
-    .update({ status: "paid", paid_at: new Date().toISOString() })
+    .update({ status: PAID_STATUS, paid_at: new Date().toISOString() })
     .eq("id", payment.id)
-    .neq("status", "paid")
+    .neq("status", PAID_STATUS)
     .select("id");
   if (!claimed || claimed.length === 0) return { status: "already", plan, premiumUntil: await currentUntil() };
 
@@ -83,7 +84,7 @@ export async function finalizePayment(
     return { status: "granted", plan, premiumUntil };
   } catch (e) {
     // Pro was NOT granted — put the payment back so the next attempt (browser retry or Paystack's webhook retry) can finish the job
-    await admin.from("payments").update({ status: "pending", paid_at: null }).eq("id", payment.id).eq("status", "paid");
+    await admin.from("payments").update({ status: "pending", paid_at: null }).eq("id", payment.id).eq("status", PAID_STATUS);
     throw e;
   }
 }

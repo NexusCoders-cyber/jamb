@@ -16,3 +16,8 @@ Paystack dashboard → Settings → API Keys & Webhooks → set **Live Webhook U
 - Only honours references our own checkout created; plan and price come from our record, never from event metadata.
 - Amount paid must cover the price we quoted.
 - If anything fails halfway, the payment goes back to "pending" and Paystack's retry (or the app) finishes it.
+
+## Payment status
+A confirmed payment is stored with the status `success` (the admin page shows it as "paid"). This must match the database enum `payment_status` = pending, success, failed, refunded. An earlier version wrote `paid`, which the database refuses, so confirmed payments stayed "pending" and Pro was not granted. The word lives in one place, `src/lib/paymentStatus.ts`, and `tests/paymentStatus.test.ts` checks it against `supabase/schema_safe.sql`.
+
+Payments made before this fix and still "pending" are not changed automatically.

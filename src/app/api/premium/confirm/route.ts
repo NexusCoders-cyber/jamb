@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyPaystackTransaction } from "@/lib/services";
 import { getAdminClient, requireUser, HttpError, errorResponse, notify } from "@/lib/quiz-server";
 import { finalizePayment } from "@/lib/payment-finalize";
+import { PAID_STATUS } from "@/lib/paymentStatus";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     const payment = (paymentRow as unknown as PaymentRow) ?? null;
     if (!payment) throw new HttpError(404, "Payment not found");
     if (payment.user_id !== user.id) throw new HttpError(403, "This payment belongs to a different account");
-    if (payment.status === "paid") {
+    if (payment.status === PAID_STATUS) {
       return NextResponse.json({ ok: true, alreadyPaid: true, plan: payment.plan });
     }
 

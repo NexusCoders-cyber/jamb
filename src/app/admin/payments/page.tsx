@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { applyDiscount, checkNewCode, codeStatus, describeDiscount, type CodeStatus } from "@/lib/discount";
+import { PAID_STATUS } from "@/lib/paymentStatus";
 import { Eye, EyeOff, Loader2, Plus, Power, Tag, Trash2, Key, RefreshCw } from "lucide-react";
 
 type DiscountCode = {
@@ -663,11 +664,11 @@ export default function AdminPaymentsPage() {
                   </p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
-                  p.status === "paid"    ? "bg-emerald-500/10 text-emerald-400" :
+                  p.status === PAID_STATUS ? "bg-emerald-500/10 text-emerald-400" :
                   p.status === "pending" ? "bg-amber-500/10 text-amber-400" :
                   "bg-rose-500/10 text-rose-400"
                 }`}>
-                  {p.status}
+                  {p.status === PAID_STATUS ? "paid" : p.status}
                 </span>
               </div>
             ))}
