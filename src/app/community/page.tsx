@@ -13,6 +13,8 @@ import Avatar from "@/components/Avatar";
 import FriendButton from "@/components/FriendButton";
 import OnlineDot from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
+import { useDialogs } from "@/components/DialogProvider";
+import { deletePostCopy, formatReportReason, POST_REPORT_REASONS } from "@/lib/dialogCopy";
 import { Flag, Heart, Link2, MessageCircle, Pin, Send, ThumbsUp, Users, X } from "lucide-react";
 
 type Person = { id: string; full_name: string; avatar_url?: string | null; user_code?: string | null; streak_days?: number | null };
@@ -34,6 +36,7 @@ function PostCard({
   onLike: (postId: string) => void;
   onDeleted: (postId: string) => void;
 }) {
+  const dialogs = useDialogs();
   const [showComments, setShowComments] = useState(false);
   const [replies, setReplies] = useState<PostReply[]>([]);
   const [repliesLoaded, setRepliesLoaded] = useState(false);
@@ -69,15 +72,16 @@ function PostCard({
 
   async function reportPost() {
     setMenuOpen(false);
-    const reason = window.prompt("Why are you reporting this post?");
-    if (!reason?.trim()) return;
+    const picked = await dialogs.choose({ title: "Report this post", message: "What is wrong with it?", reasons: POST_REPORT_REASONS });
+    if (!picked) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("content_reports").insert({
       reporter_id: myId,
       post_id: post.id,
-      reason: reason.trim().slice(0, 300),
+      reason: formatReportReason(POST_REPORT_REASONS, picked.id, picked.note),
     });
-    if (!error) window.alert("Thanks — our moderators will review this post.");
+    if (!error) dialogs.notify("Thanks. Our moderators will review this post.");
+    else dialogs.notify("Could not send your report. Try again.");
   }
 
   function copyLink() {
@@ -134,7 +138,7 @@ function PostCard({
                 {isMine ? (
                   <button type="button" onClick={async () => {
                     setMenuOpen(false);
-                    if (!window.confirm("Delete this post?")) return;
+                    if (!(await dialogs.confirm(deletePostCopy))) return;
                     const supabase = createSupabaseBrowserClient();
                     const { error } = await supabase.from("posts").delete().eq("id", post.id);
                     if (!error) onDeleted(post.id);

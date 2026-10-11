@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { startTransition, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -11,6 +11,8 @@ import { usePro } from "@/lib/usePro";
 import { cacheKey as idbCacheKey } from "@/lib/questionCache";
 import { deviceHeaders } from "@/lib/device";
 import ReportQuestionButton from "@/components/ReportQuestionButton";
+import { useDialogs } from "@/components/DialogProvider";
+import { leaveExamCopy, leaveStudyCopy } from "@/lib/dialogCopy";
 import { buildSessionPool, markQuestionsSeen } from "@/lib/questionPool";
 import { applySupplements } from "@/lib/pictureSupplement";
 import { preloadImages } from "@/lib/imagePreload";
@@ -625,6 +627,8 @@ const HANDOFF_MAX_AGE_MS = 10 * 60 * 1000;
 
 function ExamPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const dialogs = useDialogs();
   const { user, loading: authLoading } = useUser();
   const { isPro, loading: proLoading } = usePro();
 
@@ -1715,11 +1719,15 @@ function ExamPageContent() {
             <Link href={setupHref}
               onClick={(e) => {
                 if (answeredCount === 0) return;
+                // Ask in-app first (the browser's own popup shows the site address). The link is held back
+                // and followed only once the student agrees.
+                e.preventDefault();
                 if (awayRule) {
                   // leaving a mock or practice exam ends it: the answers so far are submitted
-                  e.preventDefault();
-                  if (window.confirm("Leave this exam? Leaving ends it, and your answers so far will be submitted.")) void doSubmit();
-                } else if (!window.confirm("Leave this session? It will not be saved.")) e.preventDefault();
+                  void dialogs.confirm(leaveExamCopy(answeredCount)).then((ok) => { if (ok) void doSubmit(); });
+                } else {
+                  void dialogs.confirm(leaveStudyCopy(questions.length)).then((ok) => { if (ok) router.push(setupHref); });
+                }
               }}
               className="flex h-11 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700">Exit</Link>
 

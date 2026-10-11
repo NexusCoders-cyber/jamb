@@ -7,6 +7,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import LeaderboardPreview from "@/components/LeaderboardPreview";
 import AuthGuard from "@/components/AuthGuard";
+import { useDialogs } from "@/components/DialogProvider";
+import { leaveGameCopy } from "@/lib/dialogCopy";
 import Avatar from "@/components/Avatar";
 import OnlineDot, { useOnlineUsers } from "@/components/OnlineDot";
 import FriendButton from "@/components/FriendButton";
@@ -43,6 +45,7 @@ type ChatMsg = { id: string; user_id: string; name: string; text: string; at: st
 
 export default function ArenaPage() {
   const { user, loading: authLoading } = useUser();
+  const dialogs = useDialogs();
 
   // Setup
   const [subjects] = useState(ARENA_SUBJECTS);
@@ -482,12 +485,7 @@ export default function ArenaPage() {
   async function resign() {
     if (!match) return;
     const isLiveDuel = match.isDuel && match.status === "active";
-    const msg = isLiveDuel
-      ? "Leave this game? Your opponent wins immediately."
-      : match.isDuel
-        ? "Cancel this duel?"
-        : "Cancel this game?";
-    if (!window.confirm(msg)) return;
+    if (!(await dialogs.confirm(leaveGameCopy({ isDuel: match.isDuel, live: isLiveDuel })))) return;
     stopPolling();
     await fetch(`/api/quiz/match/${match.matchId}`, {
       method: "POST",

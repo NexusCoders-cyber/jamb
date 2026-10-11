@@ -14,6 +14,8 @@ import Avatar from "@/components/Avatar";
 import OnlineDot, { useOnlineUsers, OnlineStatusText } from "@/components/OnlineDot";
 import EmojiPicker from "@/components/EmojiPicker";
 import ReportDMDialog from "@/components/ReportDMDialog";
+import { useDialogs } from "@/components/DialogProvider";
+import { blockUserCopy, deleteMessageCopy } from "@/lib/dialogCopy";
 import { blockUser, isBlocked, unblockUser } from "@/lib/dmSafety";
 import { Ban, ChevronDown, Flag, Mail, MoreHorizontal, Reply, Copy, Swords, Trash2, X } from "lucide-react";
 
@@ -203,6 +205,7 @@ function MessageActionSheet({
 export default function DMConversationPage() {
   const { userId: partnerId } = useParams<{ userId: string }>();
   const { user, loading: authLoading } = useUser();
+  const dialogs = useDialogs();
 
   const [partnerName, setPartnerName] = useState("Student");
   const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
@@ -296,7 +299,7 @@ export default function DMConversationPage() {
   }
 
   async function handleDelete(msg: DirectMessage) {
-    if (!user || !window.confirm("Delete this message?")) return;
+    if (!user || !(await dialogs.confirm(deleteMessageCopy))) return;
     setSendError("");
     const supabase = createSupabaseBrowserClient();
     const ok = await deleteDM(supabase, msg.id);
@@ -311,7 +314,7 @@ export default function DMConversationPage() {
   async function handleBlock() {
     if (!user) return;
     setMenuOpen(false);
-    if (!window.confirm(`Block ${partnerName}? They won't be able to message you, and you won't see their messages. They won't be told.`)) return;
+    if (!(await dialogs.confirm(blockUserCopy(partnerName)))) return;
     const err = await blockUser(createSupabaseBrowserClient(), user.id, partnerId);
     if (err) { setSafetyMsg(err); return; }
     setBlocked(true); setMessages([]); setReplyTo(null); setReportTarget(null);

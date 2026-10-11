@@ -6,6 +6,8 @@ import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
+import { useDialogs } from "@/components/DialogProvider";
+import { signOutCopy } from "@/lib/dialogCopy";
 import { currentStreakFromDates, getProfile, getUserAttempts, getSocialStats, followUser, unfollowUser, type Profile, type SocialStats } from "@/lib/queries";
 import FriendButton from "@/components/FriendButton";
 import OnlineDot from "@/components/OnlineDot";
@@ -120,6 +122,7 @@ function StatCard({ label, value, Icon }: { label: string; value: string | numbe
  *  omit it for the signed-in user's own editable profile. */
 export default function ProfileView({ userId: routeUserId }: { userId?: string }) {
   const { user, loading: authLoading } = useUser();
+  const dialogs = useDialogs();
 
   const viewingOther = Boolean(routeUserId);
   const targetUserId = routeUserId ?? user?.id ?? null;
@@ -235,7 +238,7 @@ export default function ProfileView({ userId: routeUserId }: { userId?: string }
 
   async function handleSignOut() {
     if (signingOut) return;
-    if (!window.confirm("Sign out of Qubit Learn?")) return;
+    if (!(await dialogs.confirm(signOutCopy))) return;
     setSigningOut(true);
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();

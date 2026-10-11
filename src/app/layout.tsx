@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { OnlineProvider } from "@/components/OnlineDot";
 import OfflineBanner from "@/components/OfflineBanner";
+import { DialogProvider } from "@/components/DialogProvider";
 import PwaInstall from "@/components/PwaInstall";
 import PushResync from "@/components/PushResync";
 import AutoBackup from "@/components/AutoBackup";
@@ -83,7 +84,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeSync />
         <StorageGuard />
         <OnlineProvider>
-          {children}
+          <DialogProvider>
+            {children}
+          </DialogProvider>
           <PwaInstall />
           <PushResync />
           <AutoBackup />
