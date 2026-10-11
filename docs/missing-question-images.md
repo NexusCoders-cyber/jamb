@@ -1,18 +1,20 @@
 # Questions that need a picture ALOC did not send
 
 ALOC returns these questions with no image (`image` empty, `images` empty), so the app shows only the words.
-They are still served as normal; add the real picture below and it appears with the question.
+The app adds its own picture to these (`src/lib/pictureSupplement.ts`).
 Found in the question bank on 10 Oct 2026:
 
-| Subject | ALOC id | Year | Question text |
-|---|---|---|---|
-| Biology | 16 | 2003 | The structure can be found in the |
-| Biology | 17 | 2003 | The point marked I is referred to as |
-| Biology | 145 | 2006 | The variation illustrated is |
-| Biology | 146 | 2006 | The change in the length of the necks of the giraffes shown was brought about by |
-| Biology | 156 | 2007 | The part labeled IV is responsible for |
-| Geography | 257 | 2016 | The above diagram on which the contours are in meters shows a |
-| Mathematics | 371 | 2005 | The grades of 36 students in a test are shown in the pie chart above. How many students had excellent? |
+| Subject | ALOC id | Year | Question text | Picture now |
+|---|---|---|---|---|
+| Biology | 16 | 2003 | The structure can be found in the | biology-neuron.png |
+| Biology | 17 | 2003 | The point marked I is referred to as | biology-neuron.png |
+| Biology | 145 | 2006 | The variation illustrated is | biology-giraffes.png |
+| Biology | 146 | 2006 | The change in the length of the necks of the giraffes shown was brought about by | biology-giraffes.png |
+| Biology | 156 | 2007 | The part labeled IV is responsible for | biology-paramecium.png |
+| Geography | 257 | 2016 | The above diagram on which the contours are in meters shows a | geography-contour-knoll.png |
+| Mathematics | 371 | 2005 | The grades of 36 students in a test are shown in the pie chart above. How many students had excellent? | mathematics-pie-grades.png |
+
+All 7 now have their picture (cleaned from screenshots of the matching questions on myschool.ng, with a Qubit Learn background).
 
 The bank only holds the questions students have loaded so far, so more will turn up as it grows.
 

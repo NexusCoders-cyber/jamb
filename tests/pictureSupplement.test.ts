@@ -20,3 +20,18 @@ test("another subject or an empty table changes nothing", () => {
   assert.equal(applySupplements("physics", list, table)[0], list[0]);
   assert.equal(applySupplements("biology", list, []), list);
 });
+
+import { existsSync } from "node:fs";
+import { SUPPLEMENTS } from "../src/lib/pictureSupplement.ts";
+
+test("every picture in the table exists, and no question is listed twice", () => {
+  const seen = new Set<string>();
+  for (const s of SUPPLEMENTS) {
+    assert.ok(existsSync(new URL(`../public${s.image}`, import.meta.url)), `${s.image} is missing`);
+    const k = `${s.subject}|${s.id}|${s.year}`;
+    assert.ok(!seen.has(k), `${k} is listed twice`);
+    seen.add(k);
+    assert.equal(s.subject, s.subject.toLowerCase());
+  }
+  assert.equal(SUPPLEMENTS.length, 7);
+});

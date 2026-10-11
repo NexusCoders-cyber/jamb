@@ -12,6 +12,7 @@ import { cacheKey as idbCacheKey } from "@/lib/questionCache";
 import { deviceHeaders } from "@/lib/device";
 import ReportQuestionButton from "@/components/ReportQuestionButton";
 import { buildSessionPool, markQuestionsSeen } from "@/lib/questionPool";
+import { applySupplements } from "@/lib/pictureSupplement";
 import { preloadImages } from "@/lib/imagePreload";
 import {
   clearLocalSession,
@@ -767,7 +768,7 @@ function ExamPageContent() {
       async function fetchPool(name: string, want: number): Promise<ExamQuestion[]> {
         const yearKey = examYear === "random" ? undefined : examYear;
         const size = Math.min(200, Math.max(want, 60));
-        return buildSessionPool<ExamQuestion>({
+        const pool = await buildSessionPool<ExamQuestion>({
           subject: name,
           cacheKey: idbCacheKey(name, yearKey),
           fetchBatch: async () => {
@@ -780,6 +781,8 @@ function ExamPageContent() {
             throw new Error(res.error ?? `No questions for ${name}${examYear !== "random" ? ` (${examYear})` : ""}`);
           },
         });
+        // pictures we host ourselves: also applied here so questions saved on the phone before the picture existed get it too
+        return applySupplements(name, pool);
       }
 
       // English in Mock/Exam mode: a JAMB-style paper (whole comprehension/cloze passages,

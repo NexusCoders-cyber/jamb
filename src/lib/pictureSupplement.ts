@@ -19,8 +19,21 @@ export type Supplement = {
   image: string;
 };
 
-/** Nothing is listed yet: add real, correct pictures here as they are collected */
-export const SUPPLEMENTS: Supplement[] = [];
+/** Pictures we host. Add a line for each new one (see docs/missing-question-images.md). */
+export const SUPPLEMENTS: Supplement[] = [
+  // Nerve cell (neuron): two questions share one diagram
+  { subject: "biology", id: "16", year: "2003", image: "/question-images/biology-neuron.png" },
+  { subject: "biology", id: "17", year: "2003", image: "/question-images/biology-neuron.png" },
+  // Giraffe ancestors → new generation: two questions share one diagram
+  { subject: "biology", id: "145", year: "2006", image: "/question-images/biology-giraffes.png" },
+  { subject: "biology", id: "146", year: "2006", image: "/question-images/biology-giraffes.png" },
+  // Single-celled organism with parts I–IV
+  { subject: "biology", id: "156", year: "2007", image: "/question-images/biology-paramecium.png" },
+  // Contour map (a knoll)
+  { subject: "geography", id: "257", year: "2016", image: "/question-images/geography-contour-knoll.png" },
+  // Pie chart of 36 students' grades
+  { subject: "mathematics", id: "371", year: "2005", image: "/question-images/mathematics-pie-grades.png" },
+];
 
 type Pic = { id?: string | number | null; year?: string | number | null; image?: string | null };
 
