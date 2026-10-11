@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
 import { nameToSlug, slugToName, type NormalizedQuestion } from "@/lib/aloc";
+import { applySupplements } from "@/lib/pictureSupplement";
 
 let cached: SupabaseClient | null = null;
 function adminClient(): SupabaseClient | null {
@@ -254,8 +255,10 @@ export function forgetHiddenCache(): void {
 }
 
 /** Removes admin-hidden questions from a list about to be served. */
-export async function dropHidden<T extends Pick<NormalizedQuestion, "prompt" | "options">>(subject: string, list: T[]): Promise<T[]> {
+export async function dropHidden<T extends Pick<NormalizedQuestion, "prompt" | "options"> & { id?: string | number | null; year?: string | number | null; image?: string | null }>(subject: string, list: T[]): Promise<T[]> {
+  // our own hosted pictures (see src/lib/pictureSupplement.ts) go on questions ALOC sent without one
+  const withPictures = applySupplements(subject, list);
   const hidden = await getHiddenKeys();
-  if (hidden.size === 0) return list;
-  return list.filter((q) => !hidden.has(bankKey(subject, q)));
+  if (hidden.size === 0) return withPictures;
+  return withPictures.filter((q) => !hidden.has(bankKey(subject, q)));
 }
