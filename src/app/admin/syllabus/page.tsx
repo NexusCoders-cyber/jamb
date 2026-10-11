@@ -6,6 +6,8 @@
  * the student-facing subject page at /knowledge-hub/[subject].
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useAdminRole } from "@/lib/useAdminRole";
@@ -18,6 +20,7 @@ const SUBJECTS = ALOC_SUBJECTS.map((s) => s.name);
 const EMPTY = { subject: SUBJECTS[0] ?? "", title: "", body: "" };
 
 export default function AdminSyllabusPage() {
+  const dialogs = useDialogs();
   const { user } = useAdminRole();
   const [items, setItems] = useState<SyllabusItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +106,7 @@ export default function AdminSyllabusPage() {
   }
 
   async function remove(item: SyllabusItem) {
-    if (!window.confirm(`Delete "${item.title}" from ${item.subject}?`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this topic?", `"${item.title}" will be removed from ${item.subject}.`, "Delete topic")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("syllabus_items").delete().eq("id", item.id);
     if (!error) setItems((prev) => prev.filter((i) => i.id !== item.id));

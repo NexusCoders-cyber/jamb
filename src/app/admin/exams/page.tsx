@@ -5,6 +5,8 @@
  * scores, per-question review and deletion of bad data.
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -36,6 +38,7 @@ function correctLetter(ans: AnswerRow): string {
 }
 
 export default function AdminExamsPage() {
+  const dialogs = useDialogs();
   const searchParams = useSearchParams();
   const [attempts, setAttempts] = useState<AttemptRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +86,7 @@ export default function AdminExamsPage() {
   }
 
   async function deleteAttempt(attempt: AttemptRow) {
-    if (!window.confirm(`Delete this attempt by ${attempt.profiles?.full_name ?? "student"}? This also deletes its answers.`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this attempt?", `The attempt by ${attempt.profiles?.full_name ?? "this student"} and its answers will be deleted.`, "Delete attempt")))) return;
     setBusyId(attempt.id);
     setNotice(null);
     const supabase = createSupabaseBrowserClient();

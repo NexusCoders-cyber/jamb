@@ -105,6 +105,11 @@ export function leaveGameCopy(state: { isDuel: boolean; live: boolean }): Confir
   };
 }
 
+/** One-off confirmation used by the admin screens: a short question, what will happen, and a clear verb. */
+export function askCopy(title: string, message: string, confirmLabel: string, tone: DialogTone = "danger"): ConfirmCopy {
+  return { title, message, confirmLabel, cancelLabel: "Cancel", tone, primary: "confirm" };
+}
+
 export type ReportReason = { id: string; label: string };
 
 export const POST_REPORT_REASONS: readonly ReportReason[] = [

@@ -6,6 +6,8 @@
  * Unlocks are server-computed; this page only manages definitions.
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ImagePlus, Loader2, Pencil, Power, Trash2, Trophy } from "lucide-react";
@@ -22,6 +24,7 @@ type Achievement = {
 };
 
 export default function AdminAchievementsPage() {
+  const dialogs = useDialogs();
   const [items, setItems] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
@@ -92,7 +95,7 @@ export default function AdminAchievementsPage() {
   }
 
   async function remove(a: Achievement) {
-    if (!window.confirm(`Delete "${a.name}"? Students keep their unlocks.`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this achievement?", `"${a.name}" will be removed. Students keep their unlocks.`, "Delete achievement")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("achievements").delete().eq("id", a.id);
     setNotice(error ? error.message : "Achievement deleted.");

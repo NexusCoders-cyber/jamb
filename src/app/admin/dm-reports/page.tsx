@@ -2,6 +2,8 @@
 
 /** Admin — Message reports. Students report abusive direct messages; stop the sender from messaging, or dismiss. */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { Ban, CheckCircle2, Loader2, RotateCcw, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -18,6 +20,7 @@ type Status = "open" | "actioned" | "dismissed";
 const REASON: Record<string, string> = { harassment: "Harassment", inappropriate: "Inappropriate", scam: "Scam", spam: "Spam", other: "Other" };
 
 export default function AdminDmReportsPage() {
+  const dialogs = useDialogs();
   const [status, setStatus] = useState<Status>("open");
   const [reports, setReports] = useState<Report[] | null>(null);
   const [ready, setReady] = useState(true);
@@ -117,7 +120,7 @@ export default function AdminDmReportsPage() {
                     {r.reported.banned ? (
                       <button type="button" onClick={() => void ban(r, "unban")} className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-slate-200 ring-1 ring-slate-700 hover:bg-slate-700"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Allow messaging again</button>
                     ) : (
-                      <button type="button" onClick={() => { if (window.confirm(`Stop ${r.reported.name} from sending direct messages?`)) void ban(r, "ban"); }} className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 py-1.5 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/20"><Ban className="h-3.5 w-3.5" aria-hidden /> Stop them messaging</button>
+                      <button type="button" onClick={() => { void dialogs.confirm(askCopy(`Stop ${r.reported.name} messaging?`, "They will no longer be able to send direct messages.", "Stop messaging")).then((ok) => { if (ok) void ban(r, "ban"); }); }} className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 py-1.5 text-[11px] font-bold text-rose-300 ring-1 ring-rose-500/30 hover:bg-rose-500/20"><Ban className="h-3.5 w-3.5" aria-hidden /> Stop them messaging</button>
                     )}
                     {status === "open" && <button type="button" onClick={() => void setTo(r, "actioned")} className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700"><CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Mark handled</button>}
                     {status === "open" && <button type="button" onClick={() => void setTo(r, "dismissed")} className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-3 py-1.5 text-[11px] font-bold text-slate-300 ring-1 ring-slate-700 hover:bg-slate-700"><X className="h-3.5 w-3.5" aria-hidden /> Dismiss</button>}

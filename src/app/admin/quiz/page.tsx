@@ -6,6 +6,8 @@
  * reset day and force a reset now.
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Loader2, RotateCcw, Swords, Zap } from "lucide-react";
@@ -24,6 +26,7 @@ type MatchRow = {
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
 export default function AdminQuizPage() {
+  const dialogs = useDialogs();
   const [matches, setMatches] = useState<MatchRow[]>([]);
   const [resetDay, setResetDay] = useState("sunday");
   const [adjustEmail, setAdjustEmail] = useState("");
@@ -61,7 +64,7 @@ export default function AdminQuizPage() {
   }
 
   async function resetNow() {
-    if (!window.confirm("Reset the weekly leaderboard NOW? The current period restarts from this moment.")) return;
+    if (!(await dialogs.confirm(askCopy("Reset the weekly leaderboard now?", "The current period restarts from this moment.", "Reset now", "warning")))) return;
     setBusy(true);
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase

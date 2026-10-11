@@ -6,6 +6,8 @@
  * account deletion (via /api/admin/delete-user, service role).
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Avatar from "@/components/Avatar";
@@ -28,6 +30,7 @@ const isPro = (u: { premium_until?: string | null }) => !!u.premium_until && new
 type SortKey = "created_at" | "full_name" | "streak_days";
 
 export default function AdminUsersPage() {
+  const dialogs = useDialogs();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -124,7 +127,7 @@ export default function AdminUsersPage() {
   }
 
   async function deleteUser(user: UserRow) {
-    if (!window.confirm(`Delete ${user.full_name || user.email} permanently? Their exams, posts and messages will be removed.`)) return;
+    if (!(await dialogs.confirm(askCopy(`Delete ${user.full_name || user.email}?`, "This is permanent. Their exams, posts and messages will be removed.", "Delete student")))) return;
     setBusyId(user.id);
     setNotice(null);
     try {

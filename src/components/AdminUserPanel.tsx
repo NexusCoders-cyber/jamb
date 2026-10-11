@@ -2,6 +2,8 @@
 
 /** Admin: one student's Pro status and phones (licences). Talks to /api/admin/devices with the admin's token. */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { Crown, Loader2, Smartphone, X } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -19,6 +21,7 @@ export default function AdminUserPanel({
   onClose: () => void;
   onProChange: (premiumUntil: string | null) => void;
 }) {
+  const dialogs = useDialogs();
   const [info, setInfo] = useState<Info | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -51,7 +54,7 @@ export default function AdminUserPanel({
   }, [call]);
 
   async function act(body: Record<string, unknown>, done: string, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    if (confirmText && !(await dialogs.confirm(askCopy("Please confirm", confirmText, "Yes, continue", "warning")))) return;
     setBusy(true); setMsg(null);
     try {
       const res = await call("POST", body);

@@ -5,6 +5,8 @@
  * SEO-optimised with metadata + JSON-LD per post).
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -40,6 +42,7 @@ function slugify(s: string) {
 }
 
 export default function AdminBlogPage() {
+  const dialogs = useDialogs();
   const { user } = useAdminRole();
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +159,7 @@ export default function AdminBlogPage() {
   }
 
   async function remove(post: BlogPost) {
-    if (!window.confirm(`Delete "${post.title}"?`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this post?", `"${post.title}" will be removed from the blog.`, "Delete post")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("blog_posts").delete().eq("id", post.id);
     if (!error) setPosts((prev) => prev.filter((p) => p.id !== post.id));
@@ -334,8 +337,8 @@ export default function AdminBlogPage() {
                   <button type="button" disabled={notifying === p.id} aria-label={p.notified_at ? "Notify students again" : "Notify students"}
                     title={p.notified_at ? "Students were notified — send again" : "Notify students"}
                     onClick={() => {
-                      if (p.notified_at && !window.confirm("Students were already notified about this post. Send the notification again?")) return;
-                      void notify(p.id, !!p.notified_at);
+                      if (!p.notified_at) { void notify(p.id, false); return; }
+                      void dialogs.confirm(askCopy("Notify students again?", "Students were already notified about this post.", "Send again", "warning")).then((ok) => { if (ok) void notify(p.id, true); });
                     }}
                     className={`rounded-full p-2 ring-1 hover:bg-slate-700 disabled:opacity-50 ${p.notified_at ? "bg-slate-800 text-slate-400 ring-slate-700" : "bg-amber-500/15 text-amber-300 ring-amber-500/40"}`}>
                     {notifying === p.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <BellRing className="h-3.5 w-3.5" aria-hidden />}

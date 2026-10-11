@@ -6,6 +6,8 @@
  * admins, hand-picked users, or pasted email addresses.
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Bell, Loader2, Mail, Send } from "lucide-react";
@@ -15,6 +17,7 @@ type UserRow = { id: string; full_name: string; email: string | null; role: "stu
 type Audience = "all" | "students" | "admins" | "selected" | "pasted";
 
 export default function AdminMessagesPage() {
+  const dialogs = useDialogs();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [subject, setSubject] = useState("");
@@ -65,7 +68,7 @@ export default function AdminMessagesPage() {
       setNotice({ text: "Choose at least one channel (email or in-app).", ok: false });
       return;
     }
-    if (!window.confirm(`Send to ${recipientCount} recipient(s)${viaEmail ? " by email" : ""}${viaEmail && viaInApp ? " +" : ""}${viaInApp ? " in-app" : ""}?`)) return;
+    if (!(await dialogs.confirm(askCopy(`Send to ${recipientCount} ${recipientCount === 1 ? "student" : "students"}?`, `Delivery: ${[viaEmail && "email", viaInApp && "in-app"].filter(Boolean).join(" and ")}.`, "Send", "info")))) return;
 
     setSending(true);
     setNotice(null);

@@ -5,6 +5,8 @@
  * channels; browse every post with its reply count.
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Avatar from "@/components/Avatar";
@@ -39,6 +41,7 @@ type ReplyRow = {
 };
 
 export default function AdminCommunityPage() {
+  const dialogs = useDialogs();
   const [tab, setTab] = useState<"posts" | "replies" | "reports">("posts");
   const [posts, setPosts] = useState<PostRow[]>([]);
   const [replies, setReplies] = useState<ReplyRow[]>([]);
@@ -107,7 +110,7 @@ export default function AdminCommunityPage() {
   }
 
   async function deletePost(post: PostRow) {
-    if (!window.confirm(`Delete post "${post.title ?? post.body.slice(0, 40)}"? Its replies will be removed too.`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this post?", `"${post.title ?? post.body.slice(0, 40)}" and its replies will be removed.`, "Delete post")))) return;
     setBusyId(post.id);
     setNotice(null);
     const supabase = createSupabaseBrowserClient();
@@ -122,7 +125,7 @@ export default function AdminCommunityPage() {
   }
 
   async function deleteReply(reply: ReplyRow) {
-    if (!window.confirm("Delete this reply?")) return;
+    if (!(await dialogs.confirm(askCopy("Delete this reply?", "It will be removed for everyone.", "Delete reply")))) return;
     setBusyId(reply.id);
     setNotice(null);
     const supabase = createSupabaseBrowserClient();

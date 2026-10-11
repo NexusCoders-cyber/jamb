@@ -6,6 +6,8 @@
  * into promos when any are active).
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useAdminRole } from "@/lib/useAdminRole";
@@ -25,6 +27,7 @@ type PromoRow = {
 const EMPTY = { title: "", body: "", cta_label: "", cta_href: "" };
 
 export default function AdminPromosPage() {
+  const dialogs = useDialogs();
   const { user } = useAdminRole();
   const [promos, setPromos] = useState<PromoRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +101,7 @@ export default function AdminPromosPage() {
   }
 
   async function remove(promo: PromoRow) {
-    if (!window.confirm(`Delete promo "${promo.title}"?`)) return;
+    if (!(await dialogs.confirm(askCopy("Delete this promo?", `"${promo.title}" will be removed.`, "Delete promo")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("promos").delete().eq("id", promo.id);
     if (!error) setPromos((prev) => prev.filter((p) => p.id !== promo.id));

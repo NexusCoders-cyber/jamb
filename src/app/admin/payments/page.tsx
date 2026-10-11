@@ -11,6 +11,8 @@
  *  5. Pro subscribers list
  */
 
+import { useDialogs } from "@/components/DialogProvider";
+import { askCopy } from "@/lib/dialogCopy";
 import { useCallback, useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { applyDiscount, checkNewCode, codeStatus, describeDiscount, type CodeStatus } from "@/lib/discount";
@@ -62,6 +64,7 @@ const PLAN_KEYS = [
 ];
 
 export default function AdminPaymentsPage() {
+  const dialogs = useDialogs();
   // ── Paystack keys ──────────────────────────────────────────────────────────
   const [secretKey, setSecretKey]   = useState("");
   const [publicKey, setPublicKey]   = useState("");
@@ -274,7 +277,7 @@ export default function AdminPaymentsPage() {
   }
 
   async function deleteCode(c: DiscountCode) {
-    if (!window.confirm(`Delete code ${c.code}? This cannot be undone.${c.used_count > 0 ? ` It has been used ${c.used_count} time${c.used_count === 1 ? "" : "s"}; the payment records stay.` : ""}`)) return;
+    if (!(await dialogs.confirm(askCopy(`Delete code ${c.code}?`, `This cannot be undone.${c.used_count > 0 ? ` It was used ${c.used_count} time${c.used_count === 1 ? "" : "s"}; the payment records stay.` : ""}`, "Delete code")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase.from("discount_codes").delete().eq("id", c.id);
     flash(error ? `Could not delete ${c.code}: ${error.message}` : `${c.code} deleted.`, !error);
@@ -302,7 +305,7 @@ export default function AdminPaymentsPage() {
 
   // ── Revoke Pro ─────────────────────────────────────────────────────────────
   async function revokePro(userId: string, name: string) {
-    if (!window.confirm(`Revoke Pro from ${name}?`)) return;
+    if (!(await dialogs.confirm(askCopy(`Revoke Pro from ${name}?`, "They lose Pro access straight away.", "Revoke Pro")))) return;
     const supabase = createSupabaseBrowserClient();
     const { error } = await supabase
       .from("profiles")

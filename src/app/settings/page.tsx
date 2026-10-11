@@ -1,5 +1,7 @@
 "use client";
 
+import { useDialogs } from "@/components/DialogProvider";
+import { signOutCopy } from "@/lib/dialogCopy";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -23,6 +25,7 @@ const THEME_OPTIONS: { value: ThemePref; label: string; icon: typeof Sun; swatch
 ];
 
 export default function SettingsPage() {
+  const dialogs = useDialogs();
   const { user, loading: authLoading } = useUser();
   const router = useRouter();
 
@@ -99,6 +102,8 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
+    if (signingOut) return;
+    if (!(await dialogs.confirm(signOutCopy))) return;
     setSigningOut(true);
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
