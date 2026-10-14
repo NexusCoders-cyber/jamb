@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import { ALOC_SUBJECTS } from "@/lib/aloc";
 import AppShell from "@/components/AppShell";
+import TimerPicker from "@/components/TimerPicker";
+import { defaultTimer, type TimerChoice } from "@/lib/timer";
 import { usePro } from "@/lib/usePro";
 import { CURRENT_UTME_NOVEL } from "@/lib/setTexts";
 import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, Play, Loader2, Lock } from "lucide-react";
@@ -90,6 +92,7 @@ function YearRow({
   topicsData,
   onFetch,
   isPro,
+  timer,
 }: {
   year: string;
   subject: string;
@@ -99,12 +102,13 @@ function YearRow({
   topicsData: YearTopics | null;
   onFetch: (year: string) => void;
   isPro: boolean;
+  timer: TimerChoice;
 }) {
   const router = useRouter();
 
   function startYear(topic?: string) {
     if (!isPro) { router.push("/upgrade"); return; }
-    const href = `/exam?mode=${examMode}&subject=${encodeURIComponent(subject)}&year=${encodeURIComponent(year)}&count=40${topic ? `&topic=${encodeURIComponent(topic)}` : ""}`;
+    const href = `/exam?mode=${examMode}&subject=${encodeURIComponent(subject)}&year=${encodeURIComponent(year)}&count=40&timer=${encodeURIComponent(timer)}${topic ? `&topic=${encodeURIComponent(topic)}` : ""}`;
     router.push(href);
   }
 
@@ -200,6 +204,7 @@ export default function PracticeModePage() {
   const [year, setYear] = useState("All years");
   const [novel, setNovel] = useState(NOVEL_TITLES[0]);
   const [mounted, setMounted] = useState(false);
+  const [timer, setTimer] = useState<TimerChoice>(() => defaultTimer(mode === "mock-cbt"));
   const { isPro, loading: proLoading } = usePro();
 
   // Year browser state
@@ -288,11 +293,11 @@ export default function PracticeModePage() {
       return;
     }
     if (mode === "novel") {
-      const href = `/exam?mode=study&subject=${encodeURIComponent("English Language")}&count=${questionCount}${year !== "All years" ? `&year=${encodeURIComponent(year)}` : ""}&novel=${encodeURIComponent(novel)}`;
+      const href = `/exam?mode=study&subject=${encodeURIComponent("English Language")}&count=${questionCount}${year !== "All years" ? `&year=${encodeURIComponent(year)}` : ""}&novel=${encodeURIComponent(novel)}&timer=${encodeURIComponent(timer)}`;
       router.push(href);
       return;
     }
-    const href = `/exam?mode=${info.examMode}&subject=${encodeURIComponent(subject)}&count=${questionCount}${year !== "All years" ? `&year=${encodeURIComponent(year)}` : ""}`;
+    const href = `/exam?mode=${info.examMode}&subject=${encodeURIComponent(subject)}&count=${questionCount}${year !== "All years" ? `&year=${encodeURIComponent(year)}` : ""}&timer=${encodeURIComponent(timer)}`;
     router.push(href);
   }
 
@@ -359,6 +364,16 @@ export default function PracticeModePage() {
             </label>
           </div>
 
+          {mode === "mock-cbt" ? (
+            <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+              Time: 2 hours <span className="font-semibold text-slate-400">(JAMB standard — fixed)</span>
+            </p>
+          ) : (
+            <div className="mt-4">
+              <TimerPicker value={timer} onChange={setTimer} totalQuestions={questionCount} isExam={false} />
+            </div>
+          )}
+
           {/* Pro-gated start button */}
           {!proLoading && !isPro ? (
             <Link
@@ -406,6 +421,7 @@ export default function PracticeModePage() {
                   topicsData={yearData[yr] ?? null}
                   onFetch={fetchTopicsForYear}
                   isPro={isPro}
+                  timer={timer}
                 />
               ))}
             </div>

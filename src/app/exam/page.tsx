@@ -32,6 +32,8 @@ import RichText from "@/components/RichText";
 import QuestionImage from "@/components/QuestionImage";
 import ExplanationView from "@/components/ExplanationView";
 import CalculatorPad from "@/components/exam/CalculatorPad";
+import TimerPicker from "@/components/TimerPicker";
+import { parseTimerParam, timerMinutes, type TimerChoice } from "@/lib/timer";
 import { AWAY_ENDED_NOTE, AWAY_LIMIT_MS, AWAY_RULE, awayVerdict } from "@/lib/examAway";
 import { novelMatches, type NormalizedQuestion } from "@/lib/aloc";
 import { finalizeEnglishPaper } from "@/lib/englishPaper";
@@ -644,7 +646,9 @@ function ExamPageContent() {
 
   const urlSubject = searchParams.get("subject") ?? ENGLISH;
   const urlCount = Math.max(1, Math.min(Number(searchParams.get("count") ?? 40), 60));
-  const urlTimer = searchParams.get("timer") ?? "Recommended timer";
+  // Timer: "none" | "auto" | minutes. Mock exams default to the recommended time, practice/study to no timer —
+  // either can be changed on the setup screen before starting.
+  const urlTimer = searchParams.get("timer");
   const urlYear = searchParams.get("year") ?? "All years";
   // Novel study: only questions drawn from this set text
   const urlNovel = searchParams.get("novel") ?? "";
@@ -666,6 +670,7 @@ function ExamPageContent() {
   // Honour the year chosen on the setup page instead of asking again
   const [examYear, setExamYear] = useState(urlYear !== "All years" ? urlYear : "random");
 
+  const [timerChoice, setTimerChoice] = useState<TimerChoice>(() => parseTimerParam(urlTimer, isExamMode));
   const [studySubject, setStudySubject] = useState(urlSubject);
   const [studyCount, setStudyCount] = useState(urlCount);
 
@@ -742,7 +747,6 @@ function ExamPageContent() {
   }, [currentQuestion, started]);
 
   const planTotal = ENGLISH_COUNT + OTHER_COUNT * 3;
-  const autoMinutes = Math.max(15, Math.round((planTotal * 2) / 3));
 
   useEffect(() => {
     try {
@@ -886,13 +890,9 @@ function ExamPageContent() {
               : entries[0].name
             : urlTopic ? `${studySubject} · ${urlTopic}` : studySubject,
         );
-        if (isExamMode) {
-          const totalQ = combined.length;
-          const mins = urlTimer === "1 hour" ? 60 : urlTimer === "30 minutes" ? 30 : urlTimer === "15 minutes" ? 15 : Math.max(15, Math.round((totalQ * 2) / 3));
-          setTimeLeft(mins * 60);
-        } else {
-          setTimeLeft(null);
-        }
+        // The student chooses: no timer, the recommended JAMB pace, or their own number of minutes.
+        const mins = timerMinutes(timerChoice, combined.length, isExamMode);
+        setTimeLeft(mins === null ? null : mins * 60);
         setCurrentQuestion(0);
         startedAtMsRef.current = Date.now();
         setStarted(true);
@@ -1300,8 +1300,20 @@ function ExamPageContent() {
 
               <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
                 <span className="font-bold text-slate-700">Total time</span>
-                <span className="font-black text-slate-900">{autoMinutes} minutes <span className="font-semibold text-slate-400">(JAMB pace)</span></span>
+                <span className="font-black text-slate-900">2 hours <span className="font-semibold text-slate-400">(JAMB standard)</span></span>
               </div>
+            </div>
+          )}
+
+          {/* The mock exam is always 2 hours; only practice and study sessions let the student pick a timer. */}
+          {!isExamMode && (
+            <div className="mb-5 rounded-[24px] bg-white p-5 ring-1 ring-slate-200">
+              <TimerPicker
+                value={timerChoice}
+                onChange={setTimerChoice}
+                totalQuestions={studyCount}
+                isExam={false}
+              />
             </div>
           )}
 
