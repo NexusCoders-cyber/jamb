@@ -23,6 +23,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useUser } from "@/lib/useUser";
 import { deviceLabel, getDeviceId } from "@/lib/device";
 import { normalizeCache, offlineVerdict, trustedNow, type LicenseCache } from "@/lib/licensePolicy";
+import { isProActive, msUntilExpiryCheck } from "@/lib/premium";
 
 type ProStatus = {
   isPro: boolean;
@@ -130,7 +131,7 @@ export function usePro(): ProStatus {
     }
 
     // "Now" never moves backwards, so setting the phone's clock back can't stretch an expired plan
-    const active = until !== null && new Date(until).getTime() > trustedNow();
+    const active = isProActive(until, trustedNow());
 
     // Every student's phone is recorded from their first sign-in; only a paid/trial plan needs the licence answer.
     let licensed = true;
@@ -179,6 +180,31 @@ export function usePro(): ProStatus {
     void fetchStatus(user.id);
     return () => { mountedRef.current = false; };
   }, [user, authLoading, fetchStatus]);
+
+  // Pro ends the moment premium_until passes, even if the app has been left open: re-check at that time (a student on
+  // a long-open tab or a paused exam would otherwise keep Pro screens until the next reload). A very distant end date
+  // is simply re-armed each time the timer fires.
+  const [recheck, setRecheck] = useState(0);
+  useEffect(() => {
+    if (!user || !isPro) return;
+    const wait = msUntilExpiryCheck(premiumUntil, trustedNow());
+    if (wait === null) return;
+    const timer = setTimeout(() => {
+      void fetchStatus(user.id);
+      setRecheck((n) => n + 1);
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [user, isPro, premiumUntil, recheck, fetchStatus]);
+
+  // Coming back to the app (phone woken, tab refocused): if the plan ran out meanwhile, drop Pro now
+  useEffect(() => {
+    if (!user) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && isPro && !isProActive(premiumUntil, trustedNow())) void fetchStatus(user.id);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [user, isPro, premiumUntil, fetchStatus]);
 
   // Back online: settle the licence at once (a phone that was waiting to re-confirm its plan unlocks by itself)
   useEffect(() => {

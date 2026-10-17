@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-server";
 import { DEVICE_ID_RE, getMaxDevices } from "@/lib/device-server";
+import { extendedUntil } from "@/lib/premium";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -70,9 +71,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "days must be a whole number from 1 to 3650" }, { status: 400 });
     }
     const { data: p } = await ctx.admin.from("profiles").select("premium_until").eq("id", userId).maybeSingle();
-    const current = p?.premium_until ? new Date(p.premium_until).getTime() : 0;
-    const from = Math.max(Date.now(), current);
-    const until = new Date(from + days * 86_400_000).toISOString();
+    const until = extendedUntil(p?.premium_until, days);
     const { error } = await ctx.admin.from("profiles").update({ premium_until: until }).eq("id", userId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, premiumUntil: until });

@@ -6,9 +6,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { claimDevice, cleanLabel, DEVICE_ID_RE } from "@/lib/device-server";
 import { PAID_STATUS } from "@/lib/paymentStatus";
+import { extendedUntil, LIFETIME_DAYS, PLAN_DAYS, planDays } from "@/lib/premium";
 
-export const PLAN_DAYS: Record<string, number> = { weekly: 7, monthly: 30, biannual: 180 };
-const LIFETIME_DAYS = 100 * 365;
+export { PLAN_DAYS, LIFETIME_DAYS };
 const PLAN_LABEL: Record<string, string> = { weekly: "7-day", monthly: "30-day", biannual: "6-month", lifetime: "lifetime" };
 
 export type PaymentRow = {
@@ -37,7 +37,11 @@ export async function finalizePayment(
   paidKobo: number,
   opts: { deviceId?: string | null; label?: string | null } = {},
 ): Promise<FinalizeResult> {
-  const plan = payment.plan ?? "lifetime";
+  // The plan is OUR record (payments.plan, or the copy checkout saved in metadata). An unknown or empty plan is never
+  // guessed at — it used to default to "lifetime", which would have turned a mislabelled row into 100 years of Pro.
+  const metaPlan = typeof payment.metadata?.plan === "string" ? payment.metadata.plan : null;
+  const plan = payment.plan ?? metaPlan ?? "";
+  const days = planDays(plan);
 
   const currentUntil = async (): Promise<string | null> => {
     const { data } = await admin.from("profiles").select("premium_until").eq("id", payment.user_id).maybeSingle();
@@ -45,8 +49,27 @@ export async function finalizePayment(
   };
 
   if (payment.status === PAID_STATUS) return { status: "already", plan, premiumUntil: await currentUntil() };
-  if (Number(paidKobo) < Number(payment.amount_kobo ?? 0)) return { status: "underpaid", plan };
+  // An unreadable amount (NaN, missing) counts as unpaid: a comparison with NaN is always false and would let it through.
+  if (!Number.isFinite(Number(paidKobo)) || Number(paidKobo) < Number(payment.amount_kobo ?? 0)) return { status: "underpaid", plan };
+  if (days === null) {
+    // Paid, but we cannot tell what was bought. Fail loudly and leave the payment pending: Paystack's webhook retries,
+    // and the problem shows up in the logs for a person to fix, instead of granting the wrong amount of Pro.
+    throw new Error(`Payment ${payment.reference} has no valid plan ("${plan}"), so no Pro was granted`);
+  }
 
+  // 1. Preferred: one database transaction claims the payment AND extends Pro (supabase/atomic_pro_grant.sql).
+  //    Nothing can be half done, and two payments confirmed at the same moment both add their days.
+  const atomic = await admin.rpc("grant_pro_for_payment", { p_payment: payment.id, p_paid_kobo: Math.floor(Number(paidKobo)), p_days: days });
+  if (!atomic.error) {
+    const granted = typeof atomic.data === "string" ? atomic.data : null;
+    if (!granted) return { status: "already", plan, premiumUntil: await currentUntil() };
+    await afterGrant(admin, payment, plan, opts);
+    return { status: "granted", plan, premiumUntil: new Date(granted).toISOString() };
+  }
+  // Any error other than "that function is not installed yet" is real: stop, so the retry can finish the job.
+  if (!isMissingFunction(atomic.error)) throw new Error(atomic.error.message);
+
+  // 2. Fallback (the SQL above has not been run yet): the older two-step grant.
   // Claim atomically: two things arriving at once (double tap, retry, webhook + browser) cannot both grant Pro.
   const { data: claimed } = await admin
     .from("payments")
@@ -58,14 +81,36 @@ export async function finalizePayment(
 
   try {
     // Extend from today, or from the current end date if Pro is still running
-    const days = plan === "lifetime" ? LIFETIME_DAYS : (PLAN_DAYS[plan] ?? 30);
-    const existing = await currentUntil();
-    const base = existing && new Date(existing).getTime() > Date.now() ? new Date(existing) : new Date();
-    const premiumUntil = new Date(base.getTime() + days * 24 * 3600 * 1000).toISOString();
+    const premiumUntil = extendedUntil(await currentUntil(), days);
     const { error: upErr } = await admin.from("profiles").update({ premium_until: premiumUntil, updated_at: new Date().toISOString() }).eq("id", payment.user_id);
     if (upErr) throw new Error(upErr.message);
 
-    // Everything below is best effort: Pro is already granted, none of it may undo that.
+    await afterGrant(admin, payment, plan, opts);
+    return { status: "granted", plan, premiumUntil };
+  } catch (e) {
+    // Pro was NOT granted — put the payment back so the next attempt (browser retry or Paystack's webhook retry) can finish the job
+    await admin.from("payments").update({ status: "pending", paid_at: null }).eq("id", payment.id).eq("status", PAID_STATUS);
+    throw e;
+  }
+}
+
+/** True when Postgres/PostgREST says the function simply does not exist (the SQL file was not run yet). */
+function isMissingFunction(err: { code?: string; message?: string }): boolean {
+  return err.code === "PGRST202" || err.code === "42883" || /could not find the function|does not exist/i.test(err.message ?? "");
+}
+
+/**
+ * Everything that happens after Pro is granted. All best effort: Pro is already granted, none of it may undo that.
+ */
+async function afterGrant(
+  admin: SupabaseClient,
+  payment: PaymentRow,
+  plan: string,
+  opts: { deviceId?: string | null; label?: string | null },
+): Promise<void> {
+  // Nothing in here may throw: if it did, the caller would put a payment back to "pending" AFTER Pro was granted,
+  // and the retry would grant the same payment a second time.
+  try {
     await recordDiscount(admin, payment).catch(() => undefined);
 
     // The phone that paid holds the Pro licence (an older phone on the same account goes back to free)
@@ -80,12 +125,8 @@ export async function finalizePayment(
       title: "⭐ You are now Pro!",
       body: `Your ${PLAN_LABEL[plan] ?? plan} Pro subscription is active. Enjoy unlimited access to all features!`,
     }).then(undefined, () => undefined);
-
-    return { status: "granted", plan, premiumUntil };
   } catch (e) {
-    // Pro was NOT granted — put the payment back so the next attempt (browser retry or Paystack's webhook retry) can finish the job
-    await admin.from("payments").update({ status: "pending", paid_at: null }).eq("id", payment.id).eq("status", PAID_STATUS);
-    throw e;
+    console.warn("[finalizePayment] Pro was granted; a follow-up step failed:", e instanceof Error ? e.message : e);
   }
 }
 

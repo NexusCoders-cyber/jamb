@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { errorResponse, getAdminClient, requireUser } from "@/lib/quiz-server";
 import { claimDevice, cleanLabel, DEVICE_ID_RE, getMaxDevices } from "@/lib/device-server";
+import { isProActive } from "@/lib/premium";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
       .eq("id", user.id)
       .maybeSingle();
 
-    const pro = !!profile?.premium_until && new Date(profile.premium_until as string) > new Date();
+    const pro = isProActive(profile?.premium_until as string | null | undefined);
     const isAdmin = profile?.role === "admin";
 
     if (!pro || isAdmin) {

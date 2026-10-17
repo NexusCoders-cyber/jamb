@@ -23,6 +23,21 @@
 `/api/aloc` (questions, english-paper, questions-count above 10) and `/api/topics/questions` refuse free accounts (HTTP 402) and,
 when the app names its phone (`x-device-id`), phones that don't hold the licence.
 
+## When Pro ends (expiry rules)
+- **One source of truth:** `profiles.premium_until`. A student is Pro while it is in the future. The rule lives in `lib/premium.ts`
+  (`isProActive`) and every server route plus the app uses it. No date, an unreadable date or a past date = free.
+- **Buying more stacks:** a new plan adds its days to the current end date while Pro is still running (weekly + monthly = 37 days).
+- **Granting is atomic** (`supabase/atomic_pro_grant.sql`, function `grant_pro_for_payment`): the payment is marked paid and Pro is
+  extended in ONE database transaction. A crash half-way saves nothing, so the payment stays pending and the retry grants it; two
+  payments confirmed at once both add their days. Without the SQL the app uses the older two-step grant.
+- **Plans are never guessed:** a paid row whose plan is not weekly / monthly / biannual / lifetime is refused (logged, left pending),
+  not defaulted to 30 days or lifetime. An unreadable paid amount counts as unpaid.
+- **Free trial:** length is clamped to 1–30 days, and the write itself only changes an account that never had a trial and is not Pro,
+  so two taps at once cannot both claim it.
+- **An open app drops Pro on time:** the app re-checks at the moment `premium_until` passes (and when it is brought back to the
+  foreground), instead of waiting for the next reload.
+- **Server vs outage:** a database error never locks a paying student out, but an account with no profile row gets the free rules.
+
 ## Database
-`supabase/user_devices.sql`, `supabase/question_bank.sql`, `supabase/security_hardening.sql` — run each once in the SQL Editor.
+`supabase/user_devices.sql`, `supabase/question_bank.sql`, `supabase/security_hardening.sql`, `supabase/atomic_pro_grant.sql` — run each once in the SQL Editor.
 `security_hardening.sql` stops students editing their own `role` / `premium_until` (important), and creates `question_reports`.

@@ -5,10 +5,12 @@
  *   admin                                  → yes
  *   free plan                              → no (except small samples such as the 10-question daily challenge)
  *   paid/trial plan, licence is on ANOTHER phone (the request names this phone) → no
- *   anything else, or the database can't answer → yes (never lock a paying student out because of our own outage)
+ *   anything else → yes. A database ERROR also → yes (never lock a paying student out because of our own outage);
+ *   an account with no profile row is not an outage, it simply has no plan → free rules
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { DEVICE_ID_RE, getMaxDevices } from "@/lib/device-server";
+import { isProActive } from "@/lib/premium";
 
 export type QuestionAccess =
   | { allowed: true }
@@ -24,10 +26,11 @@ export async function questionAccess(
 ): Promise<QuestionAccess> {
   try {
     const { data: profile, error } = await admin.from("profiles").select("role, premium_until").eq("id", userId).maybeSingle();
-    if (error || !profile) return { allowed: true };
-    if (profile.role === "admin") return { allowed: true };
+    if (error) return { allowed: true }; // our database is having trouble: never lock a paying student out of it
+    // No profile row at all is not an outage — it is an account with no plan, so the free rules apply
+    if (profile?.role === "admin") return { allowed: true };
 
-    const pro = !!profile.premium_until && new Date(profile.premium_until as string).getTime() > Date.now();
+    const pro = isProActive(profile?.premium_until as string | null | undefined);
     if (!pro) {
       if (opts.freeSample) return { allowed: true };
       return { allowed: false, code: "pro_required", message: "Pro is required for this. Upgrade to continue." };

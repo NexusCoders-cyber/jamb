@@ -14,6 +14,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { getSupabaseAdminEnv } from "@/lib/env";
+import { clampTrialDays, isProActive } from "@/lib/premium";
 
 function adminClient() {
   const { url, serviceRoleKey } = getSupabaseAdminEnv();
@@ -48,7 +49,7 @@ export async function POST() {
       );
     }
 
-    const trialDays = Math.max(1, parseInt(map.free_trial_days ?? "1", 10));
+    const trialDays = clampTrialDays(map.free_trial_days);
 
     // ── Check profile ─────────────────────────────────────────────────────────
     const { data: profile } = await admin
@@ -58,7 +59,7 @@ export async function POST() {
       .maybeSingle();
 
     // Already Pro
-    if (profile?.premium_until && new Date(profile.premium_until) > new Date()) {
+    if (isProActive(profile?.premium_until)) {
       return NextResponse.json(
         { error: "You already have an active Pro subscription." },
         { status: 409 },
@@ -78,18 +79,28 @@ export async function POST() {
       Date.now() + trialDays * 24 * 3600 * 1000,
     ).toISOString();
 
-    const { error: updateError } = await admin
+    // The checks above and this write are separate steps, so two taps (or two phones) at the same moment could both pass
+    // them. Repeat the rules inside the write itself: it only changes a row that has never had a trial and is not
+    // Pro right now, and says how many rows it changed.
+    const nowIso = new Date().toISOString();
+    const { data: changed, error: updateError } = await admin
       .from("profiles")
       .update({
         premium_until: premiumUntil,
-        trial_used_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        trial_used_at: nowIso,
+        updated_at: nowIso,
       })
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .is("trial_used_at", null)
+      .or(`premium_until.is.null,premium_until.lte.${nowIso}`)
+      .select("id");
 
     if (updateError) {
       console.error("[trial]", updateError.message);
       return NextResponse.json({ error: "Could not activate trial. Try again." }, { status: 500 });
+    }
+    if (!changed || changed.length === 0) {
+      return NextResponse.json({ error: "Your free trial is not available (already used or Pro is active)." }, { status: 409 });
     }
 
     // ── Notification ──────────────────────────────────────────────────────────
