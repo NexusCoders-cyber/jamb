@@ -9,7 +9,89 @@ import { useEffect, useState, type FormEvent } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useAdminRole } from "@/lib/useAdminRole";
 import { sendAnnouncement } from "@/lib/queries";
-import { Megaphone, Send, Loader2 } from "lucide-react";
+import { Megaphone, Send, Loader2, Rocket } from "lucide-react";
+import { MAX_NOTES, MAX_NOTE_CHARS } from "@/lib/appUpdate";
+
+/**
+ * "What's new" lines for the in-app "Update available" card. The card itself appears on its own whenever a new version
+ * is published; these lines are the optional extra text under it. They stop showing 21 days after saving.
+ */
+function UpdateNotesCard() {
+  const [text, setText] = useState("");
+  const [showing, setShowing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+
+  async function token(): Promise<string> {
+    const { data } = await createSupabaseBrowserClient().auth.getSession();
+    return data.session?.access_token ?? "";
+  }
+
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const r = await fetch("/api/admin/update-notes", { headers: { Authorization: `Bearer ${await token()}` } });
+        const j = (await r.json().catch(() => ({}))) as { notes?: string; showing?: boolean };
+        if (alive && r.ok) { setText(j.notes ?? ""); setShowing(!!j.showing); }
+      } catch { /* the form still works */ }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  async function save(clear = false) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await fetch("/api/admin/update-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ notes: clear ? "" : text }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { error?: string; cleared?: boolean; saved?: number };
+      if (!r.ok) throw new Error(j.error ?? "Could not save.");
+      if (clear || j.cleared) { setText(""); setShowing(false); setMsg({ text: "Cleared. The update card will show without extra lines.", ok: true }); }
+      else { setShowing(true); setMsg({ text: `Saved ${j.saved ?? 0} line(s). They show under the next update card.`, ok: true }); }
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : "Could not save.", ok: false });
+    }
+    setBusy(false);
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl bg-slate-900 p-5 ring-1 ring-slate-800">
+      <div className="flex items-start gap-3">
+        <Rocket className="mt-0.5 h-5 w-5 shrink-0 text-violet-400" aria-hidden />
+        <div>
+          <h2 className="text-sm font-black text-white">App update card — “What&apos;s new”</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            When you publish a new version, every student who opens the app sees an “Update available” card. Add up to {MAX_NOTES} short
+            lines (one per line, {MAX_NOTE_CHARS} characters each) to tell them what changed. Leave it empty for the plain card.
+          </p>
+        </div>
+      </div>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} maxLength={MAX_NOTES * (MAX_NOTE_CHARS + 1)}
+        placeholder={"New Chemistry past questions 2010–2018\nFaster loading on slow networks"}
+        className="mt-3 w-full resize-y rounded-xl border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-white placeholder-slate-500 outline-none focus:border-violet-500" />
+      {msg && (
+        <p className={`mt-3 rounded-xl px-4 py-2.5 text-sm font-semibold ${msg.ok ? "bg-emerald-500/10 text-emerald-300" : "bg-rose-500/10 text-rose-300"}`}>{msg.text}</p>
+      )}
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <p className="text-[11px] text-slate-500">{showing ? "Currently showing under the update card." : "Nothing saved — the card shows without extra lines."}</p>
+        <div className="flex gap-2">
+          {showing && (
+            <button type="button" disabled={busy} onClick={() => void save(true)}
+              className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-700 disabled:opacity-50">Clear</button>
+          )}
+          <button type="button" disabled={busy} onClick={() => void save(false)}
+            className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-50">
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />} Save lines
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 type SentItem = { title: string; body: string; at: string };
 
@@ -135,6 +217,8 @@ export default function AdminAnnouncementsPage() {
           </button>
         </div>
       </form>
+
+      <UpdateNotesCard />
 
       {history.length > 0 && (
         <section className="mt-6">

@@ -1,7 +1,29 @@
 import type { NextConfig } from "next";
+import { execSync } from "node:child_process";
+
+/**
+ * Which build of the app is this? Baked into the app at build time (and read back by /api/version) so a phone that is
+ * still running an older copy can tell a newer one has been published and offer the "Update available" card.
+ * The git commit is used when it is known (the same commit always gives the same id); a timestamp is the fallback.
+ */
+function buildId(): string {
+  const fromHost = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA;
+  if (fromHost) return fromHost.slice(0, 12);
+  try {
+    return execSync("git rev-parse --short=12 HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim() || Date.now().toString(36);
+  } catch {
+    return Date.now().toString(36);
+  }
+}
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+
+  env: {
+    NEXT_PUBLIC_BUILD_ID: buildId(),
+    // When this build was made; the card only offers builds NEWER than the one running (never a rollback)
+    NEXT_PUBLIC_BUILD_TIME: String(Date.now()),
+  },
 
   images: {
     remotePatterns: [

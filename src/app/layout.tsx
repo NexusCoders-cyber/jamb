@@ -4,6 +4,7 @@ import { OnlineProvider } from "@/components/OnlineDot";
 import OfflineBanner from "@/components/OfflineBanner";
 import { DialogProvider } from "@/components/DialogProvider";
 import PwaInstall from "@/components/PwaInstall";
+import UpdateCard from "@/components/UpdateCard";
 import PushResync from "@/components/PushResync";
 import AutoBackup from "@/components/AutoBackup";
 import ThemeSync from "@/components/ThemeSync";
@@ -88,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </DialogProvider>
           <PwaInstall />
+          <UpdateCard />
           <PushResync />
           <AutoBackup />
           <OfflineBanner />

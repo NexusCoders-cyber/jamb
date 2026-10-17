@@ -53,7 +53,10 @@ export function subscribeInstall(cb: () => void): () => void {
   return () => listeners.delete(cb);
 }
 export const getInstallState = (): InstallState => snapshot;
-export const getServerInstallState = (): InstallState => ({ canPrompt: false, installed: false });
+// One shared object: React compares snapshots by identity, and a fresh object on every call logged
+// "getServerSnapshot should be cached to avoid an infinite loop" on every page.
+const SERVER_STATE: InstallState = { canPrompt: false, installed: false };
+export const getServerInstallState = (): InstallState => SERVER_STATE;
 
 /** Shows the browser's install dialog. "unavailable" = this browser has not offered one (use the manual steps). */
 export async function promptInstall(): Promise<"accepted" | "dismissed" | "unavailable"> {
