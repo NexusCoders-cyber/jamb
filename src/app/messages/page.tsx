@@ -4,29 +4,24 @@
  * Messages — two separate navigation spaces (Facebook/WhatsApp style):
  *
  *   Chats     — your conversations + a link to People you may know (/people).
- *   Students  — directory with search by name, course or institution interests,
- *               so you can find friends aspiring to the same course.
+ *   Students  — directory (components/StudentsTab.tsx) with search by name, course or subject,
+ *               so you can find friends aiming for the same course.
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useUser } from "@/lib/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AppShell from "@/components/AppShell";
 import AuthGuard from "@/components/AuthGuard";
 import Avatar from "@/components/Avatar";
 import OnlineDot from "@/components/OnlineDot";
+import StudentsTab from "@/components/StudentsTab";
 import { getDMInbox, type DMThread } from "@/lib/queries";
-import { Search, Users, MessageSquare, Sparkles, GraduationCap } from "lucide-react";
+import { DIRECTORY_FETCH_LIMIT, withoutHidden, type Student } from "@/lib/studentDirectory";
+import { Search, Users, MessageSquare, Sparkles } from "lucide-react";
 
-type Student = {
-  id: string;
-  full_name: string;
-  avatar_url?: string | null;
-  course?: string;
-  interests?: string[] | null;
-  streak_days?: number;
-};
+const STUDENT_COLUMNS = "id, full_name, avatar_url, course, interests, streak_days";
 
 function timeAgo(iso: string) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -36,16 +31,6 @@ function timeAgo(iso: string) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-/** Similarity score between me and another student (higher = more in common). */
-function affinity(me: Student | null, other: Student): number {
-  if (!me) return 0;
-  let score = 0;
-  if (me.course && other.course && me.course.trim().toLowerCase() === other.course.trim().toLowerCase()) score += 5;
-  const mine = new Set((me.interests ?? []).map((i) => i.toLowerCase()));
-  for (const i of other.interests ?? []) if (mine.has(i.toLowerCase())) score += 2;
-  return score;
-}
-
 export default function MessagesPage() {
   const { user, loading: authLoading } = useUser();
   const [tab, setTab] = useState<"chats" | "students">("chats");
@@ -53,70 +38,54 @@ export default function MessagesPage() {
   const [threads, setThreads] = useState<DMThread[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // My profile (course + interests power the Students tab)
+  // My profile (course + subjects decide who is listed first in the Students tab) and the student directory
   const [me, setMe] = useState<Student | null>(null);
-  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [rawStudents, setRawStudents] = useState<Student[]>([]);
+  const [blocked, setBlocked] = useState<ReadonlySet<string>>(() => new Set());
+  const [studentsError, setStudentsError] = useState(false);
 
   // Chats search
   const [chatQuery, setChatQuery] = useState("");
 
-  // Students directory search — name, course, or institution/interest
-  const [studentQuery, setStudentQuery] = useState("");
-  const [courseFilter, setCourseFilter] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [remoteResults, setRemoteResults] = useState<Student[] | null>(null);
-
-  // ── Load my profile, inbox, the student directory and mutual-based suggestions ─
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) { setLoading(false); return; }
+  const load = useCallback(async (uid: string) => {
     const supabase = createSupabaseBrowserClient();
-    Promise.all([
-      getDMInbox(supabase, user.id),
-      supabase
+    try {
+      // Most recently active first, so a big school's directory shows the people who are actually around
+      let students = await supabase
         .from("profiles")
-        .select("id, full_name, avatar_url, course, interests, streak_days")
-        .eq("id", user.id)
-        .single(),
-      supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url, course, interests, streak_days")
-        .neq("id", user.id)
-        .order("full_name")
-        .limit(200),
-    ])
-      .then(([inbox, profileRes, studentsRes]) => {
-        setThreads(inbox);
-        setMe((profileRes.data ?? null) as Student | null);
-        setAllStudents((studentsRes.data ?? []) as Student[]);
-      })
-      .finally(() => setLoading(false));
-  }, [user, authLoading]);
+        .select(STUDENT_COLUMNS)
+        .neq("id", uid)
+        .order("last_seen_at", { ascending: false, nullsFirst: false })
+        .limit(DIRECTORY_FETCH_LIMIT);
+      if (students.error) {
+        // last_seen_at not added to this database yet: fall back to A–Z
+        students = await supabase.from("profiles").select(STUDENT_COLUMNS).neq("id", uid).order("full_name").limit(DIRECTORY_FETCH_LIMIT);
+      }
+      const [inbox, profileRes, blockRes] = await Promise.all([
+        getDMInbox(supabase, uid),
+        supabase.from("profiles").select(STUDENT_COLUMNS).eq("id", uid).maybeSingle(),
+        supabase.from("user_blocks").select("blocked_id").eq("blocker_id", uid),
+      ]);
+      setThreads(inbox);
+      setMe((profileRes.data ?? null) as Student | null);
+      setBlocked(new Set(((blockRes.data ?? []) as { blocked_id: string }[]).map((r) => r.blocked_id)));
+      if (students.error) setStudentsError(true);
+      else setRawStudents((students.data ?? []) as Student[]);
+    } catch {
+      setStudentsError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // ── Remote name search (students tab) when the local directory is exhausted ─
   useEffect(() => {
-    if (!user) return;
-    const q = studentQuery.trim();
-    if (q.length < 2) { setRemoteResults(null); setSearching(false); return; }
-    // Only hit the server for name-like queries; course/interest filtering is local
-    const looksLikeName = !courseFilter;
-    if (!looksLikeName) { setRemoteResults(null); return; }
-    let mounted = true;
-    setSearching(true);
-    const t = setTimeout(() => {
-      const supabase = createSupabaseBrowserClient();
-      supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url, course, interests, streak_days")
-        .ilike("full_name", `%${q}%`)
-        .neq("id", user.id)
-        .limit(20)
-        .then(({ data }) => {
-          if (mounted) { setRemoteResults((data ?? []) as Student[]); setSearching(false); }
-        });
-    }, 300);
-    return () => { mounted = false; clearTimeout(t); };
-  }, [studentQuery, courseFilter, user]);
+    // Signed-out visitors get the sign-in prompt from AuthGuard, so there is nothing to load for them
+    if (authLoading || !user) return;
+    const t = window.setTimeout(() => void load(user.id), 0);
+    return () => window.clearTimeout(t);
+  }, [user, authLoading, load]);
+
+  const directory = useMemo(() => withoutHidden(rawStudents, user?.id, blocked), [rawStudents, user?.id, blocked]);
 
   // ── Chats tab filtering ────────────────────────────────────────────────────
   const visibleThreads = threads.filter((t) => {
@@ -124,36 +93,6 @@ export default function MessagesPage() {
     const q = chatQuery.trim().toLowerCase();
     return t.partner_name.toLowerCase().includes(q) || t.last_message.toLowerCase().includes(q);
   });
-
-  // ── Students tab filtering: name OR course OR institution interest ────────
-  const visibleStudents = useMemo(() => {
-    const q = studentQuery.trim().toLowerCase();
-    const cf = courseFilter.trim().toLowerCase();
-    let list = remoteResults ?? allStudents;
-    if (remoteResults && (cf || (q && !remoteResults.some((s) => s.full_name.toLowerCase().includes(q))))) {
-      // merge remote + local for course filtering over remote results
-      list = [...remoteResults, ...allStudents.filter((s) => !remoteResults.some((r) => r.id === s.id))];
-    }
-    return list.filter((s) => {
-      if (cf && !(s.course ?? "").toLowerCase().includes(cf)) return false;
-      if (!q) return true;
-      return (
-        s.full_name.toLowerCase().includes(q) ||
-        (s.course ?? "").toLowerCase().includes(q) ||
-        (s.interests ?? []).some((i) => i.toLowerCase().includes(q))
-      );
-    });
-  }, [allStudents, remoteResults, studentQuery, courseFilter]);
-
-  // Distinct courses for quick-filter chips (students tab)
-  const courseChips = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const s of allStudents) {
-      const c = (s.course ?? "").trim();
-      if (c.length > 1) counts.set(c, (counts.get(c) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-  }, [allStudents]);
 
   const totalUnread = threads.reduce((s, t) => s + t.unread, 0);
 
@@ -197,7 +136,7 @@ export default function MessagesPage() {
               >
                 <Users className="h-4 w-4" aria-hidden />
                 Students
-                <span className="text-[10px] font-bold text-slate-400">{allStudents.length}</span>
+                {directory.length > 0 && <span className="text-[10px] font-bold text-slate-400">{directory.length}</span>}
               </button>
             </div>
 
@@ -284,90 +223,16 @@ export default function MessagesPage() {
             )}
 
             {/* ══ STUDENTS TAB ══ */}
-            {tab === "students" && (
-              <>
-                <div className="relative mb-3">
-                  <Search className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-slate-400" aria-hidden />
-                  <input
-                    type="search"
-                    placeholder="Search by name, course or institution…"
-                    value={studentQuery}
-                    onChange={(e) => setStudentQuery(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none focus:border-violet-400"
-                  />
-                  {searching && <span className="absolute right-3 top-3.5 text-xs text-slate-400">Searching…</span>}
-                </div>
-
-                <div className="relative mb-3">
-                  <GraduationCap className="pointer-events-none absolute left-4 top-3.5 h-4 w-4 text-slate-400" aria-hidden />
-                  <input
-                    type="search"
-                    placeholder="Filter by aspiring course (e.g. Medicine)…"
-                    value={courseFilter}
-                    onChange={(e) => setCourseFilter(e.target.value)}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 text-sm outline-none focus:border-violet-400"
-                  />
-                </div>
-
-                {courseChips.length > 0 && (
-                  <div className="mb-4 flex flex-wrap gap-1.5">
-                    {courseChips.map(([course, count]) => (
-                      <button key={course} type="button"
-                        onClick={() => setCourseFilter(courseFilter === course ? "" : course)}
-                        className={`rounded-full px-3 py-1.5 text-[11px] font-bold transition ${
-                          courseFilter === course ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100"
-                        }`}>
-                        {course} · {count}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {!loading && visibleStudents.length === 0 ? (
-                  <div className="rounded-[24px] bg-slate-50 p-8 text-center ring-1 ring-slate-200">
-                    <p className="text-lg font-black text-slate-900">No students found</p>
-                    <p className="mt-2 text-sm text-slate-500">Try a different name, course or subject.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {visibleStudents.map((s) => {
-                      const score = affinity(me, s);
-                      return (
-                        <div key={s.id} className="flex items-center gap-3 rounded-xl px-2 py-2.5 transition hover:bg-violet-50">
-                          <Link href={`/profile/${s.id}`} className="shrink-0" aria-label={`View ${s.full_name}'s profile`}>
-                            <Avatar user={s} size="lg" />
-                          </Link>
-                          <Link href={`/profile/${s.id}`} className="min-w-0 flex-1">
-                            <p className="flex items-center gap-2 truncate text-sm font-bold text-slate-900">
-                              {s.full_name}
-                              {score >= 5 && (
-                                <span className="shrink-0 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-700">SAME COURSE</span>
-                              )}
-                            </p>
-                            <div className="mt-0.5 flex flex-wrap items-center gap-1">
-                              {s.course && (
-                                <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">{s.course}</span>
-                              )}
-                              {(s.interests ?? []).slice(0, 3).map((i) => (
-                                <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{i.replace(" Language", "")}</span>
-                              ))}
-                              {typeof s.streak_days === "number" && s.streak_days > 0 && (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">{s.streak_days}d streak</span>
-                              )}
-                            </div>
-                          </Link>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            <Link href={`/messages/${s.id}`}
-                              className="rounded-full bg-violet-600 px-3 py-1.5 text-[10px] font-bold text-white">Message</Link>
-                            <Link href={`/profile/${s.id}`}
-                              className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-[10px] font-bold text-violet-700" aria-label={`View ${s.full_name}'s profile`}>Profile</Link>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
+            {tab === "students" && user && (
+              <StudentsTab
+                myId={user.id}
+                me={me}
+                directory={directory}
+                blocked={blocked}
+                loading={loading}
+                loadError={studentsError}
+                onRetry={() => { setStudentsError(false); setLoading(true); void load(user.id); }}
+              />
             )}
           </>
         </AuthGuard>
